@@ -1,0 +1,41 @@
+name: Feature Request
+description: Propose a new capability or product improvement.
+title: "Feature: "
+labels:
+  - "type: feature"
+  - "status: needs-triage"
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or project problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed behavior
+      description: What should TouchPilot do?
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: User workflow
+      description: Describe the intended user flow.
+  - type: textarea
+    id: local-first
+    attributes:
+      label: Local-first impact
+      description: How does this support local-first Android AI?
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and security considerations
+      description: Include approval, policy, privacy, local data, or Android permission concerns.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional alternatives or tradeoffs.

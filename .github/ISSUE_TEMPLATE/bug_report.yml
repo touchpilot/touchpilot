@@ -1,0 +1,77 @@
+name: Bug Report
+description: Report broken or unexpected TouchPilot behavior.
+title: "Bug: "
+labels:
+  - "type: bug"
+  - "status: needs-triage"
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start emulator/device
+        2. Open TouchPilot
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Device or emulator
+      placeholder: "TouchPilot_API_35, Pixel 8, etc."
+    validations:
+      required: true
+  - type: input
+    id: android-version
+    attributes:
+      label: Android version
+      placeholder: "15 / API 35"
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: TouchPilot commit
+      placeholder: "git rev-parse --short HEAD"
+  - type: dropdown
+    id: accessibility
+    attributes:
+      label: Accessibility service enabled?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+  - type: checkboxes
+    id: involved
+    attributes:
+      label: Areas involved
+      options:
+        - label: Android control
+        - label: Agent loop
+        - label: Local router / local inference
+        - label: Skills
+        - label: MCP
+        - label: Security / approvals
+        - label: UI
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or traces
+      description: Add relevant screenshots, exported debug traces, logcat lines, or UI dumps.

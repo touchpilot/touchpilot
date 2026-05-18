@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Roadmap
+    url: https://github.com/touchpilot/touchpilot/blob/main/docs/ROADMAP.md
+    about: Check current phases and milestone direction before opening broad planning issues.
