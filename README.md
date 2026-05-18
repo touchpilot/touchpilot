@@ -8,7 +8,6 @@ explicit, permissioned, inspectable tools.
 
 <img width="1536" height="1024" alt="touchpilot" src="https://github.com/user-attachments/assets/4099bf82-1504-4443-9b42-cc2d18e92b02" />
 
-
 ## Goals
 
 - Run as a native Android app, not only as a desktop companion.
