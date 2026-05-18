@@ -24,7 +24,9 @@ explicit, permissioned, inspectable tools.
 The first milestone is a local Android app that can:
 
 - show a chat interface,
-- connect to an OpenAI-compatible model endpoint,
+- run simple actions through the default local router without an API key,
+- optionally connect to an OpenAI-compatible model endpoint as an experimental
+  fallback,
 - observe the current screen through AccessibilityService,
 - tap, type, scroll, open apps, and press back/home through approved tools,
 - record every model decision and tool execution in local logs.
@@ -47,10 +49,11 @@ During early development, the release build is signed with the local Android
 debug key so it can be installed on emulators such as LDPlayer. Replace this
 with a real release signing key before publishing.
 
-The current agent MVP accepts an OpenAI-compatible chat completions URL, model
-name, and API key inside the app. Provider URL and model are stored in app
-preferences. API keys are encrypted with an Android Keystore-backed key before
-being stored.
+The current agent MVP defaults to the local router for simple Android actions.
+An experimental cloud fallback can be configured with an OpenAI-compatible chat
+completions URL, model name, and API key. Fallback URL and model are stored in
+app preferences. API keys are encrypted with an Android Keystore-backed key
+before being stored.
 
 When the model selects a medium- or high-risk Android tool, TouchPilot asks the
 user for approval before executing it. Low-risk observation and wait tools can
@@ -99,9 +102,11 @@ selectors, action retries, post-action verification, debug trace export, and
 Phase 3 Markdown skills with prompt loading and per-skill tool allowlists.
 Phase 4 adds an in-app MCP HTTP JSON-RPC client for initializing external MCP
 servers, listing tools, and calling tools with JSON arguments.
-Phase 5 adds a local agent-provider seam, an offline conservative local router
-for simple tool calls, and a runtime evaluation for ExecuTorch, LiteRT, and
-llama.cpp before embedding a full local model runtime. Phase 6 completes live
-emulator validation for the Android debug app, including accessibility
+Phase 5 adds a local command-provider boundary, an offline conservative local
+router for simple tool calls, and a runtime evaluation for ExecuTorch, LiteRT,
+and llama.cpp before embedding a full local model runtime. Phase 6 completes
+live emulator validation for the Android debug app, including accessibility
 connection, core Android tools, local-router selection, MCP UI reachability,
-debug trace export, and stable UI IDs for repeatable device checks.
+debug trace export, and stable UI IDs for repeatable device checks. Phase 8
+makes local router mode the default and moves cloud provider support into an
+experimental fallback role.

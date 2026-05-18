@@ -45,17 +45,35 @@ Tradeoffs:
 - Android integration is more native-build heavy.
 - Device RAM, thermals, and token speed will strongly constrain UX.
 
-## Phase 5 MVP
+## Local-First Runtime Modes
 
-The Android app now has two agent provider modes:
+The Android app now has two runtime modes:
 
-- Cloud provider: existing OpenAI-compatible chat completions.
-- Local router: offline deterministic routing for simple commands such as
-  observe, back, home, scroll, open app, and tap text.
+- Local router: default offline deterministic routing for simple commands such
+  as observe, back, home, scroll, open app, and tap text.
+- Experimental cloud fallback: optional OpenAI-compatible chat completions for
+  development and complex tasks.
 
 The local router is intentionally conservative. It is useful for validating the
-agent-provider boundary, tool policy path, skill allowlists, approvals, and
-cloud fallback behavior without shipping a large model runtime prematurely.
+command-provider boundary, tool policy path, skill allowlists, approvals, and
+fallback behavior without shipping a large model runtime prematurely.
+
+Cloud fallback support remains available, but basic Android control should not
+require a provider URL, model name, or API key.
+
+## Runtime Boundary
+
+Local inference work should keep one stable contract: command providers emit a
+structured JSON command or a final answer, and Android tool execution remains
+behind validation, skill allowlists, approval policy, and local logs.
+
+- Deterministic local router: current default and fallback when no model asset
+  is available.
+- Small local routing model: first real local model target for command
+  classification and structured argument extraction.
+- Local LLM runtime: future broader reasoning path for multi-step workflows.
+- Experimental cloud fallback: optional secondary path, not the primary product
+  direction.
 
 ## Recommended Next Runtime
 

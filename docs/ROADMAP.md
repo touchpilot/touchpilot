@@ -97,11 +97,11 @@ Open discussion before implementation:
 
 ## Phase 8: Local-First Architecture Cleanup
 
-- [ ] Make local router the default agent mode.
-- [ ] Move cloud/OpenAI-compatible provider into experimental fallback flow.
-- [ ] Rename provider/cloud-centric wording where appropriate.
-- [ ] Document the local-first runtime architecture.
-- [ ] Define the boundary for local command router, small model router, and future local LLM.
+- [x] Make local router the default agent mode.
+- [x] Move cloud/OpenAI-compatible provider into experimental fallback flow.
+- [x] Rename provider/cloud-centric wording where appropriate.
+- [x] Document the local-first runtime architecture.
+- [x] Define the boundary for local command router, small model router, and future local LLM.
 
 ## Phase 9: Product UI Redesign
 

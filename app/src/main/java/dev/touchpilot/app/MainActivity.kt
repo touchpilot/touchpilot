@@ -225,14 +225,46 @@ class MainActivity : Activity() {
         }
 
         val agentTitle = TextView(this).apply {
-            text = "Agent MVP"
+            text = "Local Agent"
             textSize = 18f
             setPadding(0, 36, 0, 8)
         }
 
+        val providerModeTitle = TextView(this).apply {
+            text = "Agent Runtime"
+            textSize = 16f
+            setPadding(0, 20, 0, 4)
+        }
+
+        val providerModeSpinner = Spinner(this).apply {
+            id = R.id.agent_provider_spinner
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                ProviderModeLabels
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            val savedMode = preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name)
+            setSelection(providerModeIndex(savedMode))
+        }
+
+        val taskInput = EditText(this).apply {
+            id = R.id.agent_task_input
+            hint = "Agent task, e.g. open Settings"
+            setSingleLine(false)
+            minLines = 2
+        }
+
+        val cloudFallbackTitle = TextView(this).apply {
+            text = "Experimental Cloud Fallback"
+            textSize = 16f
+            setPadding(0, 24, 0, 4)
+        }
+
         val providerUrlInput = EditText(this).apply {
             id = R.id.agent_provider_url_input
-            hint = "OpenAI-compatible chat completions URL"
+            hint = "Cloud fallback chat completions URL"
             setSingleLine(true)
             setText(
                 preferences.getString(
@@ -252,9 +284,9 @@ class MainActivity : Activity() {
         val apiKeyInput = EditText(this).apply {
             id = R.id.agent_api_key_input
             hint = if (secretStore.hasApiKey()) {
-                "API key stored; leave blank to keep it"
+                "Cloud API key stored; leave blank to keep it"
             } else {
-                "API key"
+                "Cloud API key"
             }
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
@@ -280,39 +312,18 @@ class MainActivity : Activity() {
             setSelection(if (savedIndex >= 0) savedIndex + 1 else 0)
         }
 
-        val providerModeTitle = TextView(this).apply {
-            text = "Agent Provider"
-            textSize = 16f
-            setPadding(0, 20, 0, 4)
-        }
-
-        val providerModeSpinner = Spinner(this).apply {
-            id = R.id.agent_provider_spinner
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_item,
-                ProviderModeLabels
-            ).apply {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            val savedMode = preferences.getString("agent_provider_mode", AgentProviderMode.CLOUD.name)
-            setSelection(providerModeIndex(savedMode))
-        }
-
-        val taskInput = EditText(this).apply {
-            id = R.id.agent_task_input
-            hint = "Agent task, e.g. observe the current screen"
-            setSingleLine(false)
-            minLines = 2
-        }
-
         val runAgentButton = Button(this).apply {
             id = R.id.run_agent_button
             text = "Run Agent Step Loop"
             setOnClickListener {
                 hideKeyboard(taskInput)
                 taskInput.clearFocus()
-                val apiKey = resolveApiKey(apiKeyInput, secretStore)
+                val providerMode = selectedProviderMode(providerModeSpinner)
+                val apiKey = if (providerMode == AgentProviderMode.CLOUD) {
+                    resolveApiKey(apiKeyInput, secretStore)
+                } else {
+                    ""
+                }
                 val providerConfig = ProviderConfig(
                     baseUrl = providerUrlInput.text.toString(),
                     apiKey = apiKey,
@@ -320,7 +331,6 @@ class MainActivity : Activity() {
                 )
                 val task = taskInput.text.toString()
                 val selectedSkill = selectedSkill(skillSpinner, skills)
-                val providerMode = selectedProviderMode(providerModeSpinner)
 
                 preferences.edit()
                     .putString("provider_url", providerConfig.baseUrl)
@@ -493,15 +503,16 @@ class MainActivity : Activity() {
         root.addView(waitInput)
         root.addView(waitButton)
         root.addView(agentTitle)
+        root.addView(providerModeTitle)
+        root.addView(providerModeSpinner)
+        root.addView(skillTitle)
+        root.addView(skillSpinner)
+        root.addView(taskInput)
+        root.addView(runAgentButton)
+        root.addView(cloudFallbackTitle)
         root.addView(providerUrlInput)
         root.addView(modelInput)
         root.addView(apiKeyInput)
-        root.addView(skillTitle)
-        root.addView(skillSpinner)
-        root.addView(providerModeTitle)
-        root.addView(providerModeSpinner)
-        root.addView(taskInput)
-        root.addView(runAgentButton)
         root.addView(mcpTitle)
         root.addView(mcpEndpointInput)
         root.addView(mcpButtonRow)
@@ -562,19 +573,19 @@ class MainActivity : Activity() {
 
     private fun selectedProviderMode(providerModeSpinner: Spinner): AgentProviderMode {
         return if (providerModeSpinner.selectedItemPosition == 1) {
-            AgentProviderMode.LOCAL_ROUTER
-        } else {
             AgentProviderMode.CLOUD
+        } else {
+            AgentProviderMode.LOCAL_ROUTER
         }
     }
 
     private fun providerModeIndex(savedMode: String?): Int {
-        return if (savedMode == AgentProviderMode.LOCAL_ROUTER.name) 1 else 0
+        return if (savedMode == AgentProviderMode.CLOUD.name) 1 else 0
     }
 
     private fun AgentProviderMode.label(): String {
         return when (this) {
-            AgentProviderMode.CLOUD -> "cloud agent"
+            AgentProviderMode.CLOUD -> "experimental cloud fallback"
             AgentProviderMode.LOCAL_ROUTER -> "local router"
         }
     }
@@ -587,7 +598,7 @@ class MainActivity : Activity() {
         if (enteredApiKey.isNotBlank()) {
             secretStore.saveApiKey(enteredApiKey)
             apiKeyInput.text.clear()
-            apiKeyInput.hint = "API key stored; leave blank to keep it"
+            apiKeyInput.hint = "Cloud API key stored; leave blank to keep it"
             return enteredApiKey
         }
 
@@ -668,6 +679,6 @@ class MainActivity : Activity() {
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
-        val ProviderModeLabels = listOf("Cloud provider", "Local router")
+        val ProviderModeLabels = listOf("Local router", "Experimental cloud fallback")
     }
 }
