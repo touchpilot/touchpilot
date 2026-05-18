@@ -1,0 +1,81 @@
+name: Labeler
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to label
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  label:
+    name: Apply PR Labels
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "number=$INPUT_PR_NUMBER" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=$EVENT_PR_NUMBER" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out base repository
+        uses: actions/checkout@v4
+
+      - name: Ensure labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create "type: bug" --color d73a4a --description "Broken or unexpected behavior." --force
+          gh label create "type: feature" --color a2eeef --description "New capability or product behavior." --force
+          gh label create "type: docs" --color 0075ca --description "Documentation-only or documentation-focused work." --force
+          gh label create "type: refactor" --color cfd3d7 --description "Internal code change without intended behavior change." --force
+          gh label create "type: test" --color bfe5bf --description "Test coverage, fixtures, or validation work." --force
+          gh label create "type: chore" --color ededed --description "Maintenance, dependencies, or repository upkeep." --force
+          gh label create "area: android-control" --color 5319e7 --description "AccessibilityService, Android actions, UI observation, or tool execution." --force
+          gh label create "area: agent" --color 5319e7 --description "Agent loop, prompts, provider routing, or command parsing." --force
+          gh label create "area: local-inference" --color 5319e7 --description "Local router, LiteRT, ExecuTorch, llama.cpp, or model runtime work." --force
+          gh label create "area: skills" --color 5319e7 --description "Markdown skills, skill loading, or tool allowlists." --force
+          gh label create "area: mcp" --color 5319e7 --description "MCP client/server interoperability." --force
+          gh label create "area: security" --color 5319e7 --description "Approvals, policy, secrets, privacy, or sensitive workflows." --force
+          gh label create "area: ui" --color 5319e7 --description "Android app UI and UX." --force
+          gh label create "area: ci" --color 5319e7 --description "GitHub Actions, lint, build, and repository automation." --force
+          gh label create "area: docs" --color 5319e7 --description "Roadmap, architecture, examples, or documentation." --force
+          gh label create "status: needs-triage" --color fbca04 --description "Needs initial review and labeling." --force
+          gh label create "status: needs-design" --color fbca04 --description "Needs design, policy, or architecture discussion." --force
+          gh label create "status: blocked" --color b60205 --description "Blocked by another decision, issue, or dependency." --force
+          gh label create "status: ready" --color 0e8a16 --description "Ready for implementation." --force
+          gh label create "status: in-progress" --color 1d76db --description "Actively being worked on." --force
+
+      - name: Add triage status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh pr edit "${{ steps.pr.outputs.number }}" --add-label "status: needs-triage"
+
+      - name: Apply labels from changed files
+        uses: actions/labeler@v5
+        with:
+          repo-token: ${{ github.token }}
+          configuration-path: .github/labeler.yml
+          pr-number: ${{ steps.pr.outputs.number }}
