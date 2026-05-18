@@ -1,6 +1,6 @@
 # TouchPilot
 
-Android-native AI agent runtime for safe, observable phone control.
+Local-first Android AI agent runtime for safe, observable phone control.
 
 TouchPilot is inspired by OpenClaw and PicoClaw, but it is scoped around one
 hard problem first: letting an AI agent operate an Android device through
@@ -13,9 +13,10 @@ explicit, permissioned, inspectable tools.
 - Run as a native Android app, not only as a desktop companion.
 - Expose Android actions through typed tools with clear risk levels.
 - Use AccessibilityService for semantic UI observation and control.
-- Support OpenAI-compatible model providers first.
-- Add local model inference later through mobile runtimes such as ExecuTorch or
-  llama.cpp.
+- Prefer local-first routing and inference.
+- Keep OpenAI-compatible model providers available as an experimental fallback.
+- Add local model inference through mobile runtimes such as LiteRT, ExecuTorch,
+  or llama.cpp.
 - Keep user approval and audit logs central to the runtime.
 
 ## Early Scope
@@ -100,4 +101,6 @@ Phase 4 adds an in-app MCP HTTP JSON-RPC client for initializing external MCP
 servers, listing tools, and calling tools with JSON arguments.
 Phase 5 adds a local agent-provider seam, an offline conservative local router
 for simple tool calls, and a runtime evaluation for ExecuTorch, LiteRT, and
-llama.cpp before embedding a full local model runtime.
+llama.cpp before embedding a full local model runtime. Milestone 1 now covers
+Phase 1 through Phase 11, with Phase 6 focused on live emulator/device
+validation.
