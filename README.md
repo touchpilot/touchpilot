@@ -92,21 +92,3 @@ skills/           Markdown skills for task-specific behavior
 docs/             Architecture, security, and tool documentation
 examples/         Provider and MCP integration examples
 ```
-
-## Status
-
-Phase 1 Agent MVP: Android control spike, OpenAI-compatible command loop,
-manual approval for medium/high-risk tools, Keystore-backed API key storage,
-basic tool argument validation, and Phase 2 reliability features for stable
-selectors, action retries, post-action verification, debug trace export, and
-Phase 3 Markdown skills with prompt loading and per-skill tool allowlists.
-Phase 4 adds an in-app MCP HTTP JSON-RPC client for initializing external MCP
-servers, listing tools, and calling tools with JSON arguments.
-Phase 5 adds a local command-provider boundary, an offline conservative local
-router for simple tool calls, and a runtime evaluation for ExecuTorch, LiteRT,
-and llama.cpp before embedding a full local model runtime. Phase 6 completes
-live emulator validation for the Android debug app, including accessibility
-connection, core Android tools, local-router selection, MCP UI reachability,
-debug trace export, and stable UI IDs for repeatable device checks. Phase 8
-makes local router mode the default and moves cloud provider support into an
-experimental fallback role.
