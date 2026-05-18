@@ -1,4 +1,4 @@
-name: Android
+name: Android Verification
 
 on:
   pull_request:
@@ -7,9 +7,34 @@ on:
       - main
 
 jobs:
-  build-test-lint:
-    name: Build, Test, Lint
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Run Android lint
+        run: ./gradlew lintDebug
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs:
+      - lint
 
     steps:
       - name: Check out repository
@@ -33,8 +58,27 @@ jobs:
       - name: Build release APK
         run: ./gradlew assembleRelease
 
+  unit-test:
+    name: Unit Test
+    runs-on: ubuntu-latest
+    needs:
+      - build
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
-
-      - name: Run Android lint
-        run: ./gradlew lintDebug

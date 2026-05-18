@@ -1,0 +1,76 @@
+"type: docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "examples/**"
+
+"type: test":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*Test.kt"
+          - "**/*Test.java"
+          - "**/*Test.cpp"
+
+"type: chore":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "gradle/**"
+          - "gradlew"
+          - "gradlew.bat"
+
+"area: android-control":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/src/main/java/**/androidcontrol/**"
+          - "app/src/main/java/**/tools/**"
+
+"area: agent":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/src/main/java/**/agent/**"
+
+"area: local-inference":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/LOCAL_INFERENCE.md"
+          - "app/src/main/java/**/agent/AgentCommandProvider.kt"
+
+"area: skills":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/src/main/assets/skills/**"
+          - "app/src/main/java/**/memory/Skill*"
+
+"area: mcp":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/src/main/java/**/mcp/**"
+          - "docs/MCP.md"
+          - "examples/mcp-bridge.md"
+
+"area: security":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/src/main/java/**/security/**"
+
+"area: ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/src/main/java/dev/touchpilot/app/MainActivity.kt"
+          - "app/src/main/res/**"
+
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/labeler.yml"
+          - ".github/labels.yml"
+
+"area: docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "examples/**"
