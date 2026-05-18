@@ -11,7 +11,8 @@ data class ToolSpec(
     val name: String,
     val description: String,
     val risk: ToolRisk,
-    val arguments: Map<String, String>
+    val arguments: Map<String, String>,
+    val requiredArguments: Set<String> = arguments.keys
 )
 
 data class ToolResult(
@@ -71,7 +72,12 @@ object AndroidToolCatalog {
             arguments = mapOf(
                 "text" to "Expected visible text.",
                 "timeout_ms" to "Maximum wait time in milliseconds."
-            )
+            ),
+            requiredArguments = setOf("text")
         )
     )
+
+    fun find(name: String): ToolSpec? {
+        return initialTools.firstOrNull { it.name == name }
+    }
 }

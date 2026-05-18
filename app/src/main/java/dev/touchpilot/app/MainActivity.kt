@@ -1,9 +1,11 @@
 package dev.touchpilot.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -13,8 +15,14 @@ import android.widget.TextView
 import dev.touchpilot.app.agent.AgentRunner
 import dev.touchpilot.app.agent.ProviderConfig
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.security.ProviderSecretStore
+import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
+import dev.touchpilot.app.tools.ToolSpec
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
     private lateinit var statusView: TextView
@@ -26,6 +34,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         toolExecutor = AndroidToolExecutor(this)
         val preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
+        val secretStore = ProviderSecretStore(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -193,7 +202,12 @@ class MainActivity : Activity() {
         }
 
         val apiKeyInput = EditText(this).apply {
-            hint = "API key"
+            hint = if (secretStore.hasApiKey()) {
+                "API key stored; leave blank to keep it"
+            } else {
+                "API key"
+            }
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
         }
 
@@ -206,9 +220,10 @@ class MainActivity : Activity() {
         val runAgentButton = Button(this).apply {
             text = "Run Agent Step Loop"
             setOnClickListener {
+                val apiKey = resolveApiKey(apiKeyInput, secretStore)
                 val providerConfig = ProviderConfig(
                     baseUrl = providerUrlInput.text.toString(),
-                    apiKey = apiKeyInput.text.toString(),
+                    apiKey = apiKey,
                     model = modelInput.text.toString()
                 )
                 val task = taskInput.text.toString()
@@ -221,7 +236,12 @@ class MainActivity : Activity() {
                 outputView.text = "Running agent..."
                 Thread {
                     val resultText = runCatching {
-                        AgentRunner(toolExecutor).run(task, providerConfig).transcript
+                        AgentRunner(
+                            toolExecutor = toolExecutor,
+                            approvalProvider = ToolApprovalProvider { tool, args ->
+                                approveAgentTool(tool, args)
+                            }
+                        ).run(task, providerConfig).transcript
                     }.getOrElse { error ->
                         "Agent failed: ${error.message}"
                     }
@@ -311,5 +331,73 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.WRAP_CONTENT,
             1f
         )
+    }
+
+    private fun resolveApiKey(
+        apiKeyInput: EditText,
+        secretStore: ProviderSecretStore
+    ): String {
+        val enteredApiKey = apiKeyInput.text.toString()
+        if (enteredApiKey.isNotBlank()) {
+            secretStore.saveApiKey(enteredApiKey)
+            apiKeyInput.text.clear()
+            apiKeyInput.hint = "API key stored; leave blank to keep it"
+            return enteredApiKey
+        }
+
+        return runCatching { secretStore.loadApiKey().orEmpty() }
+            .getOrElse {
+                secretStore.clearApiKey()
+                ""
+            }
+    }
+
+    private fun approveAgentTool(tool: ToolSpec, args: Map<String, String>): Boolean {
+        val latch = CountDownLatch(1)
+        val approved = AtomicBoolean(false)
+
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("Approve ${tool.name}?")
+                .setMessage(buildApprovalMessage(tool, args))
+                .setPositiveButton("Approve") { _, _ ->
+                    approved.set(true)
+                    latch.countDown()
+                }
+                .setNegativeButton("Deny") { _, _ ->
+                    approved.set(false)
+                    latch.countDown()
+                }
+                .setOnCancelListener {
+                    approved.set(false)
+                    latch.countDown()
+                }
+                .show()
+        }
+
+        return latch.await(ApprovalTimeoutMs, TimeUnit.MILLISECONDS) && approved.get()
+    }
+
+    private fun buildApprovalMessage(tool: ToolSpec, args: Map<String, String>): String {
+        val argsText = if (args.isEmpty()) {
+            "none"
+        } else {
+            args.entries.joinToString(separator = "\n") { entry ->
+                "${entry.key}: ${entry.value.take(MaxApprovalArgLength)}"
+            }
+        }
+
+        return """
+            Risk: ${tool.risk}
+            Description: ${tool.description}
+
+            Arguments:
+            $argsText
+        """.trimIndent()
+    }
+
+    private companion object {
+        const val ApprovalTimeoutMs = 5 * 60 * 1000L
+        const val MaxApprovalArgLength = 500
     }
 }

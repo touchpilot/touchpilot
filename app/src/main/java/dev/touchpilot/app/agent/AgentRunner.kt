@@ -1,9 +1,14 @@
 package dev.touchpilot.app.agent
 
+import dev.touchpilot.app.security.ToolApprovalProvider
+import dev.touchpilot.app.security.requiresManualApproval
+import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.AndroidToolExecutor
+import dev.touchpilot.app.tools.ToolExecutionLog
 
 class AgentRunner(
-    private val toolExecutor: AndroidToolExecutor
+    private val toolExecutor: AndroidToolExecutor,
+    private val approvalProvider: ToolApprovalProvider
 ) {
     fun run(task: String, config: ProviderConfig, maxSteps: Int = 4): AgentRunResult {
         val client = OpenAiCompatibleClient(config)
@@ -25,6 +30,26 @@ class AgentRunner(
             if (toolName == null) {
                 transcript.appendLine("No tool or final answer returned.")
                 return AgentRunResult(transcript.toString(), null)
+            }
+
+            val validationError = toolExecutor.validate(toolName, command.args)
+            val spec = AndroidToolCatalog.find(toolName)
+            if (validationError != null) {
+                transcript.appendLine("Tool validation failed: $validationError")
+            } else if (spec != null && spec.requiresManualApproval()) {
+                transcript.appendLine("Approval requested for $toolName (${spec.risk}).")
+                val approved = approvalProvider.approve(spec, command.args)
+                if (!approved) {
+                    transcript.appendLine("Tool denied by user: $toolName")
+                    ToolExecutionLog.record(
+                        name = toolName,
+                        args = "risk=${spec.risk}",
+                        ok = false,
+                        message = "denied by user"
+                    )
+                    return AgentRunResult(transcript.toString(), null)
+                }
+                transcript.appendLine("Tool approved by user: $toolName")
             }
 
             val result = toolExecutor.execute(toolName, command.args)

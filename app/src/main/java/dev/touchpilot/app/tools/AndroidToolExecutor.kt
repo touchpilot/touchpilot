@@ -9,6 +9,17 @@ class AndroidToolExecutor(
     private val context: Context
 ) {
     fun execute(name: String, args: Map<String, String>): ToolResult {
+        val validationError = validate(name, args)
+        if (validationError != null) {
+            val argsForLog = if (validationError.startsWith("Unknown tool")) {
+                "args=${args.keys.joinToString()}"
+            } else {
+                "invalid args"
+            }
+            record(name, argsForLog, false, validationError)
+            return ToolResult(false, validationError)
+        }
+
         return when (name) {
             "observe_screen" -> {
                 val snapshot = observeScreen()
@@ -61,10 +72,15 @@ class AndroidToolExecutor(
                 ToolResult(ok, "waitForText")
             }
             else -> {
-                record(name, args.toString(), false, "unknown tool")
-                ToolResult(false, "Unknown tool: $name")
+                record(name, args.toString(), false, "unhandled tool")
+                ToolResult(false, "Unhandled tool: $name")
             }
         }
+    }
+
+    fun validate(name: String, args: Map<String, String>): String? {
+        val spec = AndroidToolCatalog.find(name) ?: return "Unknown tool: $name"
+        return validateArgs(spec, args)
     }
 
     fun observeScreen(): String {
@@ -98,6 +114,34 @@ class AndroidToolExecutor(
 
     private fun ResolveInfo.launcherLabel(): String {
         return loadLabel(context.packageManager)?.toString().orEmpty()
+    }
+
+    private fun validateArgs(spec: ToolSpec, args: Map<String, String>): String? {
+        val unknownArgs = args.keys - spec.arguments.keys
+        if (unknownArgs.isNotEmpty()) {
+            return "Unknown argument(s) for ${spec.name}: ${unknownArgs.joinToString()}"
+        }
+
+        val missingArgs = spec.requiredArguments.filter { args[it].isNullOrBlank() }
+        if (missingArgs.isNotEmpty()) {
+            return "Missing required argument(s) for ${spec.name}: ${missingArgs.joinToString()}"
+        }
+
+        if (spec.name == "scroll") {
+            val direction = args["direction"].orEmpty()
+            if (!direction.equals("forward", ignoreCase = true) &&
+                !direction.equals("backward", ignoreCase = true)
+            ) {
+                return "Invalid scroll direction: $direction"
+            }
+        }
+
+        val timeout = args["timeout_ms"]
+        if (timeout != null && timeout.toLongOrNull() == null) {
+            return "timeout_ms must be a number"
+        }
+
+        return null
     }
 
     private fun record(name: String, args: String, ok: Boolean, message: String) {

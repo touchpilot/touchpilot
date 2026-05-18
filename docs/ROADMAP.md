@@ -18,8 +18,9 @@
 - [x] Add structured JSON command loop.
 - [x] Route model-selected tools through the local tool executor.
 - [x] Add tool-call timeline and local logs.
-- [ ] Add manual approval for medium/high risk tools.
-- [ ] Add Keystore-backed API key storage.
+- [x] Add manual approval for medium/high risk tools.
+- [x] Add Keystore-backed API key storage.
+- [x] Add basic tool argument validation.
 
 ## Phase 2: Reliability
 
