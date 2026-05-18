@@ -20,6 +20,10 @@ import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.tools.ToolSpec
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -271,6 +275,14 @@ class MainActivity : Activity() {
             textSize = 13f
         }
 
+        val exportTraceButton = Button(this).apply {
+            text = "Export Debug Trace"
+            setOnClickListener {
+                val file = exportDebugTrace()
+                outputView.text = "Debug trace exported: ${file.absolutePath}"
+            }
+        }
+
         root.addView(titleView)
         root.addView(statusView)
         root.addView(enableButton)
@@ -293,6 +305,7 @@ class MainActivity : Activity() {
         root.addView(runAgentButton)
         root.addView(outputView)
         root.addView(executionLogTitle)
+        root.addView(exportTraceButton)
         root.addView(executionLogView)
 
         setContentView(ScrollView(this).apply {
@@ -394,6 +407,29 @@ class MainActivity : Activity() {
             Arguments:
             $argsText
         """.trimIndent()
+    }
+
+    private fun exportDebugTrace(): File {
+        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
+            mkdirs()
+        }
+        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val file = File(directory, "touchpilot-trace-$timestamp.txt")
+        file.writeText(
+            buildString {
+                appendLine("TouchPilot debug trace")
+                appendLine("timestamp=$timestamp")
+                appendLine()
+                appendLine("Accessibility connected=${AccessibilityBridge.isConnected()}")
+                appendLine()
+                appendLine("Tool executions")
+                appendLine(ToolExecutionLog.renderChronological())
+                appendLine()
+                appendLine("Current screen")
+                appendLine(toolExecutor.observeScreen())
+            }
+        )
+        return file
     }
 
     private companion object {

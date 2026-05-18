@@ -25,6 +25,16 @@ object AccessibilityBridge {
         return service?.tapByText(text) ?: false
     }
 
+    fun tapByNodeId(nodeId: String): Boolean {
+        if (nodeId.isBlank()) return false
+        return service?.tapByNodeId(nodeId) ?: false
+    }
+
+    fun tapByBounds(bounds: String): Boolean {
+        if (bounds.isBlank()) return false
+        return service?.tapByBounds(bounds) ?: false
+    }
+
     fun typeIntoFocusedField(text: String): Boolean {
         if (text.isBlank()) return false
         return service?.typeIntoFocusedField(text) ?: false
@@ -49,5 +59,9 @@ object AccessibilityBridge {
     fun waitForText(text: String, timeoutMs: Long): Boolean {
         if (text.isBlank()) return false
         return service?.waitForText(text, timeoutMs) ?: false
+    }
+
+    fun waitForIdle(timeoutMs: Long): Boolean {
+        return service?.waitForIdle(timeoutMs) ?: false
     }
 }

@@ -24,11 +24,11 @@
 
 ## Phase 2: Reliability
 
-- Stable UI selectors.
-- Retry and wait policies.
-- Better error recovery.
-- Task verification after actions.
-- Exportable debug traces.
+- [x] Stable UI selectors.
+- [x] Retry and wait policies.
+- [x] Better error recovery.
+- [x] Task verification after actions.
+- [x] Exportable debug traces.
 
 ## Phase 3: Skills
 

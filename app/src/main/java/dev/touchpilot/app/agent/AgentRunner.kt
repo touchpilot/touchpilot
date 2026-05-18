@@ -17,10 +17,20 @@ class AgentRunner(
 
         repeat(maxSteps) { step ->
             transcript.appendLine("Step ${step + 1}")
-            val raw = client.complete(AgentPrompts.systemPrompt(), context)
+            val raw = runCatching {
+                client.complete(AgentPrompts.systemPrompt(), context)
+            }.getOrElse { error ->
+                transcript.appendLine("Provider error: ${error.message}")
+                return AgentRunResult(transcript.toString(), null)
+            }
             transcript.appendLine("Model: $raw")
 
-            val command = AgentCommandParser.parse(raw)
+            val command = runCatching {
+                AgentCommandParser.parse(raw)
+            }.getOrElse { error ->
+                transcript.appendLine("Command parse error: ${error.message}")
+                return AgentRunResult(transcript.toString(), null)
+            }
             if (command.finalAnswer != null) {
                 transcript.appendLine("Final: ${command.finalAnswer}")
                 return AgentRunResult(transcript.toString(), command.finalAnswer)
@@ -52,18 +62,45 @@ class AgentRunner(
                 transcript.appendLine("Tool approved by user: $toolName")
             }
 
-            val result = toolExecutor.execute(toolName, command.args)
+            val result = runCatching {
+                toolExecutor.execute(toolName, command.args)
+            }.getOrElse { error ->
+                transcript.appendLine("Tool execution error: ${error.message}")
+                context = recoveryContext(task, transcript.toString())
+                return@repeat
+            }
             transcript.appendLine("Tool result: ${result.ok} ${result.message}")
+            if (result.data.isNotEmpty()) {
+                transcript.appendLine("Tool data: ${result.data}")
+            }
+
+            val verificationScreen = if (toolName == "observe_screen") {
+                result.message
+            } else {
+                toolExecutor.observeScreen()
+            }
+            transcript.appendLine("Verification screen length: ${verificationScreen.length}")
 
             context = buildString {
                 appendLine("User task: $task")
                 appendLine("Previous transcript:")
                 appendLine(transcript.toString())
-                appendLine("Current screen:")
-                appendLine(toolExecutor.observeScreen())
+                appendLine("Verification screen:")
+                appendLine(verificationScreen)
             }
         }
 
         return AgentRunResult(transcript.toString(), null)
+    }
+
+    private fun recoveryContext(task: String, transcript: String): String {
+        return buildString {
+            appendLine("User task: $task")
+            appendLine("Previous transcript:")
+            appendLine(transcript)
+            appendLine("Current screen:")
+            appendLine(toolExecutor.observeScreen())
+            appendLine("Recover from the last error or return a final answer if recovery is unsafe.")
+        }
     }
 }

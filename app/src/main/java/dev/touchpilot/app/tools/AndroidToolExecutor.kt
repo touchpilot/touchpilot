@@ -20,6 +20,34 @@ class AndroidToolExecutor(
             return ToolResult(false, validationError)
         }
 
+        val result = executeWithRetry(name, args)
+        if (result.ok && name !in setOf("observe_screen", "wait_for_ui")) {
+            AccessibilityBridge.waitForIdle(ActionIdleTimeoutMs)
+        }
+        return result
+    }
+
+    private fun executeWithRetry(name: String, args: Map<String, String>): ToolResult {
+        var lastResult: ToolResult? = null
+
+        repeat(retryCountFor(name)) { attempt ->
+            val result = executeOnce(name, args)
+            if (result.ok || !shouldRetry(name)) {
+                return result.withAttemptData(attempt + 1)
+            }
+
+            lastResult = result
+            Thread.sleep(RetryDelayMs)
+        }
+
+        val failed = lastResult ?: ToolResult(false, "Tool did not run")
+        return failed.copy(
+            message = "${failed.message} after ${retryCountFor(name)} attempt(s)",
+            data = failed.data + ("attempts" to retryCountFor(name).toString())
+        )
+    }
+
+    private fun executeOnce(name: String, args: Map<String, String>): ToolResult {
         return when (name) {
             "observe_screen" -> {
                 val snapshot = observeScreen()
@@ -34,9 +62,20 @@ class AndroidToolExecutor(
             }
             "tap" -> {
                 val text = args["text"].orEmpty()
-                val ok = AccessibilityBridge.tapByText(text)
-                record(name, "text=\"$text\"", ok, "tapByText")
-                ToolResult(ok, "tapByText")
+                val nodeId = args["node_id"].orEmpty()
+                val bounds = args["bounds"].orEmpty()
+                val ok = when {
+                    nodeId.isNotBlank() -> AccessibilityBridge.tapByNodeId(nodeId)
+                    bounds.isNotBlank() -> AccessibilityBridge.tapByBounds(bounds)
+                    else -> AccessibilityBridge.tapByText(text)
+                }
+                val selector = when {
+                    nodeId.isNotBlank() -> "node_id=\"$nodeId\""
+                    bounds.isNotBlank() -> "bounds=\"$bounds\""
+                    else -> "text=\"$text\""
+                }
+                record(name, selector, ok, "tap")
+                ToolResult(ok, "tap", mapOf("selector" to selector))
             }
             "type_text" -> {
                 val text = args["text"].orEmpty()
@@ -127,6 +166,14 @@ class AndroidToolExecutor(
             return "Missing required argument(s) for ${spec.name}: ${missingArgs.joinToString()}"
         }
 
+        if (spec.name == "tap") {
+            val selectors = listOf("text", "node_id", "bounds")
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.size != 1) {
+                return "tap requires exactly one selector: text, node_id, or bounds"
+            }
+        }
+
         if (spec.name == "scroll") {
             val direction = args["direction"].orEmpty()
             if (!direction.equals("forward", ignoreCase = true) &&
@@ -144,7 +191,29 @@ class AndroidToolExecutor(
         return null
     }
 
+    private fun shouldRetry(name: String): Boolean {
+        return name in setOf("open_app", "tap", "type_text", "scroll", "press_back", "press_home", "wait_for_ui")
+    }
+
+    private fun retryCountFor(name: String): Int {
+        return if (shouldRetry(name)) ActionRetryCount else 1
+    }
+
+    private fun ToolResult.withAttemptData(attempts: Int): ToolResult {
+        return if (attempts <= 1) {
+            this
+        } else {
+            copy(data = data + ("attempts" to attempts.toString()))
+        }
+    }
+
     private fun record(name: String, args: String, ok: Boolean, message: String) {
         ToolExecutionLog.record(name, args, ok, message)
+    }
+
+    private companion object {
+        const val ActionRetryCount = 3
+        const val RetryDelayMs = 250L
+        const val ActionIdleTimeoutMs = 1_500L
     }
 }

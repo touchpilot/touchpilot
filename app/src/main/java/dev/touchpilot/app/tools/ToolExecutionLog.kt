@@ -42,4 +42,14 @@ object ToolExecutionLog {
             "[${entry.timestamp}] ${entry.name}(${entry.args}) -> $status: ${entry.message}"
         }
     }
+
+    @Synchronized
+    fun renderChronological(): String {
+        if (entries.isEmpty()) return "No tool executions yet."
+
+        return entries.joinToString(separator = "\n") { entry ->
+            val status = if (entry.ok) "ok" else "fail"
+            "[${entry.timestamp}] ${entry.name}(${entry.args}) -> $status: ${entry.message}"
+        }
+    }
 }

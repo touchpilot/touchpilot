@@ -37,9 +37,14 @@ object AndroidToolCatalog {
         ),
         ToolSpec(
             name = "tap",
-            description = "Tap a visible UI target by semantic text.",
+            description = "Tap a visible UI target by semantic text, node_id, or bounds.",
             risk = ToolRisk.MEDIUM,
-            arguments = mapOf("text" to "Visible text or content description to tap.")
+            arguments = mapOf(
+                "text" to "Visible text or content description to tap.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "bounds" to "Bounds from observe_screen as left,top,right,bottom."
+            ),
+            requiredArguments = emptySet()
         ),
         ToolSpec(
             name = "type_text",

@@ -23,7 +23,9 @@ object AgentPrompts {
 
             Constraints:
             - Use observe_screen when you need current UI state.
-            - Prefer semantic visible text over coordinates.
+            - Prefer stable node_id selectors from observe_screen when tapping exact UI nodes.
+            - Use bounds only when text and node_id are not reliable enough.
+            - After each action, inspect the verification screen before deciding the next step.
             - Do not send messages, buy things, enter passwords, or change sensitive settings.
             - Use one tool call at a time.
         """.trimIndent()

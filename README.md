@@ -93,4 +93,5 @@ examples/         Provider and MCP integration examples
 
 Phase 1 Agent MVP: Android control spike, OpenAI-compatible command loop,
 manual approval for medium/high-risk tools, Keystore-backed API key storage,
-and basic tool argument validation.
+basic tool argument validation, and Phase 2 reliability features for stable
+selectors, action retries, post-action verification, and debug trace export.

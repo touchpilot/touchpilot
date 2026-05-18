@@ -20,7 +20,7 @@ Tools are the only way an agent may affect the Android device.
 
 - `observe_screen`: serialize the current accessibility tree.
 - `open_app`: launch an installed app by package name or label.
-- `tap`: tap a semantic target.
+- `tap`: tap a semantic target by visible text, stable `node_id`, or bounds.
 - `type_text`: type text into the focused field or selected target.
 - `scroll`: scroll the current view.
 - `press_back`: send Android back.
@@ -40,6 +40,11 @@ at a time:
   "args": {}
 }
 ```
+
+Screen snapshots include `node_id` and `bounds` fields for each serialized
+accessibility node. Prefer `node_id` for exact taps after `observe_screen`.
+Bounds use `left,top,right,bottom` format and are intended as a fallback when a
+semantic selector is not reliable.
 
 Final answers use:
 
