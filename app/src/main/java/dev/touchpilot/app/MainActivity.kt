@@ -1,7 +1,6 @@
 package dev.touchpilot.app
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
@@ -251,11 +250,7 @@ class MainActivity : Activity() {
         val timelineEvents = conversation.drop(introEvents.size)
 
         introEvents.forEach { event ->
-            when (event) {
-                is ChatEvent.User -> contentRoot.addView(userBubble(event.text))
-                is ChatEvent.Agent -> contentRoot.addView(agentBubble(event.text, event.detail))
-                is ChatEvent.Timeline -> contentRoot.addView(timelineCard(event.title, event.body))
-            }
+            contentRoot.addView(renderChatEvent(event))
         }
 
         val inputRow = LinearLayout(this).apply {
@@ -301,12 +296,89 @@ class MainActivity : Activity() {
         contentRoot.addView(inputRow)
 
         timelineEvents.forEach { event ->
-            when (event) {
-                is ChatEvent.User -> contentRoot.addView(userBubble(event.text))
-                is ChatEvent.Agent -> contentRoot.addView(agentBubble(event.text, event.detail))
-                is ChatEvent.Timeline -> contentRoot.addView(timelineCard(event.title, event.body))
-            }
+            contentRoot.addView(renderChatEvent(event))
         }
+    }
+
+    private fun renderChatEvent(event: ChatEvent): View {
+        return when (event) {
+            is ChatEvent.User -> userBubble(event.text)
+            is ChatEvent.Agent -> agentBubble(event.text, event.detail)
+            is ChatEvent.Timeline -> timelineCard(event.title, event.body)
+            is ChatEvent.ApprovalPrompt -> approvalCard(event)
+        }
+    }
+
+    private fun approvalCard(event: ChatEvent.ApprovalPrompt): View {
+        val request = event.request
+        val tool = request.tool
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = when (event.state) {
+                ApprovalState.PENDING -> Theme.Accent
+                ApprovalState.APPROVED -> Theme.Accent
+                ApprovalState.REJECTED -> Theme.StrokeDark
+            }
+            strokeWidth = 2
+            radius = 18f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20, 18, 20, 18)
+        }
+
+        val statusLabel = when (event.state) {
+            ApprovalState.PENDING -> "Approval requested"
+            ApprovalState.APPROVED -> "Approved"
+            ApprovalState.REJECTED -> "Rejected"
+        }
+        content.addView(
+            TextView(this).apply {
+                text = "$statusLabel — ${tool.name}"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            }
+        )
+        content.addView(
+            TextView(this).apply {
+                text = buildApprovalMessage(request)
+                textSize = 12.5f
+                setTextColor(Theme.BodyText)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+
+        if (event.state == ApprovalState.PENDING) {
+            val buttonRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, 14, 0, 0)
+            }
+            buttonRow.addView(
+                primaryButton("Approve") {
+                    resolveApproval(event, true)
+                }.apply { id = R.id.approval_approve_button },
+                rowButtonParams()
+            )
+            buttonRow.addView(
+                secondaryButton("Reject") {
+                    resolveApproval(event, false)
+                }.apply { id = R.id.approval_reject_button },
+                rowButtonParams()
+            )
+            content.addView(buttonRow)
+        }
+
+        card.addView(content)
+        return card.withMargins(top = 10, right = 42, bottom = 10)
+    }
+
+    private fun resolveApproval(event: ChatEvent.ApprovalPrompt, approved: Boolean) {
+        if (event.state != ApprovalState.PENDING) return
+        event.state = if (approved) ApprovalState.APPROVED else ApprovalState.REJECTED
+        event.onDecision(approved)
+        showSection(Section.CHAT)
     }
 
     private fun runAgentFromChat(task: String) {
@@ -975,33 +1047,17 @@ class MainActivity : Activity() {
     private fun approveAgentTool(request: ToolApprovalRequest): Boolean {
         val latch = CountDownLatch(1)
         val approved = AtomicBoolean(false)
-        val tool = request.tool
 
         runOnUiThread {
-            conversation += ChatEvent.Timeline(
-                "Approval requested",
-                buildApprovalMessage(request)
+            val prompt = ChatEvent.ApprovalPrompt(
+                request = request,
+                onDecision = { decision ->
+                    approved.set(decision)
+                    latch.countDown()
+                }
             )
+            conversation += prompt
             showSection(Section.CHAT)
-            AlertDialog.Builder(this)
-                .setTitle("Approve ${tool.name}?")
-                .setMessage(buildApprovalMessage(request))
-                .setPositiveButton("Approve") { _, _ ->
-                    approved.set(true)
-                    conversation += ChatEvent.Timeline("Approval", "Approved ${tool.name}.")
-                    latch.countDown()
-                }
-                .setNegativeButton("Deny") { _, _ ->
-                    approved.set(false)
-                    conversation += ChatEvent.Timeline("Approval", "Denied ${tool.name}.")
-                    latch.countDown()
-                }
-                .setOnCancelListener {
-                    approved.set(false)
-                    conversation += ChatEvent.Timeline("Approval", "Approval cancelled for ${tool.name}.")
-                    latch.countDown()
-                }
-                .show()
         }
 
         return latch.await(ApprovalTimeoutMs, TimeUnit.MILLISECONDS) && approved.get()
@@ -1057,7 +1113,15 @@ class MainActivity : Activity() {
         data class User(val text: String) : ChatEvent()
         data class Agent(val text: String, val detail: String) : ChatEvent()
         data class Timeline(val title: String, val body: String) : ChatEvent()
+        class ApprovalPrompt(
+            val request: ToolApprovalRequest,
+            val onDecision: (Boolean) -> Unit
+        ) : ChatEvent() {
+            var state: ApprovalState = ApprovalState.PENDING
+        }
     }
+
+    private enum class ApprovalState { PENDING, APPROVED, REJECTED }
 
     private enum class Section(val label: String) {
         CHAT("Chat"),

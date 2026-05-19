@@ -30,4 +30,6 @@
     <item name="output_view" type="id" />
     <item name="export_debug_trace_button" type="id" />
     <item name="execution_log_view" type="id" />
+    <item name="approval_approve_button" type="id" />
+    <item name="approval_reject_button" type="id" />
 </resources>
