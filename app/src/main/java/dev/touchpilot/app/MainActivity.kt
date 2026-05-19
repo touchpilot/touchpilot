@@ -35,10 +35,12 @@ import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.security.ProviderSecretStore
+import dev.touchpilot.app.security.SensitiveTextRedactor
+import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolApprovalProvider
+import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
-import dev.touchpilot.app.tools.ToolSpec
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -322,14 +324,18 @@ class MainActivity : Activity() {
             val transcript = runCatching {
                 AgentRunner(
                     toolExecutor = toolExecutor,
-                    approvalProvider = ToolApprovalProvider { tool, args ->
-                        approveAgentTool(tool, args)
+                    approvalProvider = ToolApprovalProvider { request ->
+                        approveAgentTool(request)
                     },
                     commandProvider = when (providerMode) {
                         AgentProviderMode.CLOUD -> OpenAiAgentCommandProvider(providerConfig)
                         AgentProviderMode.LOCAL_ROUTER -> LocalRouterCommandProvider(task, selectedSkill)
                     },
-                    skill = selectedSkill
+                    skill = selectedSkill,
+                    source = when (providerMode) {
+                        AgentProviderMode.CLOUD -> ToolSource.CLOUD_FALLBACK
+                        AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
+                    }
                 ).run(task).transcript
             }.getOrElse { error ->
                 "Agent failed: ${error.message}"
@@ -522,10 +528,11 @@ class MainActivity : Activity() {
                 Thread {
                     val result = toolExecutor.execute(
                         "wait_for_ui",
-                        mapOf("text" to expected, "timeout_ms" to "5000")
+                        mapOf("text" to expected, "timeout_ms" to "5000"),
+                        ToolSource.DIRECT_DEBUG
                     )
                     runOnUiThread {
-                        outputText = "wait_for_ui -> ${result.ok}: ${result.message}"
+                        outputText = SensitiveTextRedactor.redact("wait_for_ui -> ${result.ok}: ${result.message}")
                         refreshExecutionLog()
                         showSection(Section.TOOLS)
                     }
@@ -682,8 +689,8 @@ class MainActivity : Activity() {
     private var outputText: String = "No result yet."
 
     private fun executeAndRender(name: String, args: Map<String, String>) {
-        val result = toolExecutor.execute(name, args)
-        outputText = "$name($args) -> ${result.ok}: ${result.message}"
+        val result = toolExecutor.execute(name, args, ToolSource.DIRECT_DEBUG)
+        outputText = SensitiveTextRedactor.redact("$name($args) -> ${result.ok}: ${result.message}")
         refreshExecutionLog()
     }
 
@@ -918,19 +925,20 @@ class MainActivity : Activity() {
             }
     }
 
-    private fun approveAgentTool(tool: ToolSpec, args: Map<String, String>): Boolean {
+    private fun approveAgentTool(request: ToolApprovalRequest): Boolean {
         val latch = CountDownLatch(1)
         val approved = AtomicBoolean(false)
+        val tool = request.tool
 
         runOnUiThread {
             conversation += ChatEvent.Timeline(
                 "Approval requested",
-                buildApprovalMessage(tool, args)
+                buildApprovalMessage(request)
             )
             showSection(Section.CHAT)
             AlertDialog.Builder(this)
                 .setTitle("Approve ${tool.name}?")
-                .setMessage(buildApprovalMessage(tool, args))
+                .setMessage(buildApprovalMessage(request))
                 .setPositiveButton("Approve") { _, _ ->
                     approved.set(true)
                     conversation += ChatEvent.Timeline("Approval", "Approved ${tool.name}.")
@@ -952,18 +960,23 @@ class MainActivity : Activity() {
         return latch.await(ApprovalTimeoutMs, TimeUnit.MILLISECONDS) && approved.get()
     }
 
-    private fun buildApprovalMessage(tool: ToolSpec, args: Map<String, String>): String {
-        val argsText = if (args.isEmpty()) {
+    private fun buildApprovalMessage(request: ToolApprovalRequest): String {
+        val redactedArgs = SensitiveTextRedactor.redact(request.args)
+        val argsText = if (redactedArgs.isEmpty()) {
             "none"
         } else {
-            args.entries.joinToString(separator = "\n") { entry ->
+            redactedArgs.entries.joinToString(separator = "\n") { entry ->
                 "${entry.key}: ${entry.value.take(MaxApprovalArgLength)}"
             }
         }
 
         return """
-            Risk: ${tool.risk}
-            Description: ${tool.description}
+            Risk: ${request.tool.risk}
+            Tool: ${request.tool.name}
+            Description: ${request.tool.description}
+            Why approval is needed: ${request.policy.reason}
+            Data affected: ${request.policy.dataAffected}
+            If approved: ${request.policy.ifApproved}
 
             Arguments:
             $argsText
@@ -987,7 +1000,7 @@ class MainActivity : Activity() {
                 appendLine(ToolExecutionLog.renderChronological())
                 appendLine()
                 appendLine("Current screen")
-                appendLine(toolExecutor.observeScreen())
+                appendLine(SensitiveTextRedactor.redact(toolExecutor.observeScreen()))
             }
         )
         return file

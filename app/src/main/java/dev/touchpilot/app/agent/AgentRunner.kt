@@ -1,8 +1,14 @@
 package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.security.ActionPolicy
+import dev.touchpilot.app.security.DefaultActionPolicy
+import dev.touchpilot.app.security.PolicyDecision
+import dev.touchpilot.app.security.SensitiveTextRedactor
+import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolApprovalProvider
-import dev.touchpilot.app.security.requiresManualApproval
+import dev.touchpilot.app.security.ToolPolicyRequest
+import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
@@ -11,11 +17,13 @@ class AgentRunner(
     private val toolExecutor: AndroidToolExecutor,
     private val approvalProvider: ToolApprovalProvider,
     private val commandProvider: AgentCommandProvider,
-    private val skill: Skill? = null
+    private val skill: Skill? = null,
+    private val source: ToolSource = ToolSource.LOCAL_ROUTER,
+    private val policy: ActionPolicy = DefaultActionPolicy()
 ) {
     fun run(task: String, maxSteps: Int = 4): AgentRunResult {
         val transcript = StringBuilder()
-        var context = "User task: $task\n\nCurrent screen:\n${toolExecutor.observeScreen()}"
+        var context = "User task: $task\n\nCurrent screen:\n${SensitiveTextRedactor.redact(toolExecutor.observeScreen())}"
 
         repeat(maxSteps) { step ->
             transcript.appendLine("Step ${step + 1}")
@@ -58,32 +66,58 @@ class AgentRunner(
                 return AgentRunResult(transcript.toString(), null)
             } else if (validationError != null) {
                 transcript.appendLine("Tool validation failed: $validationError")
-            } else if (spec != null && spec.requiresManualApproval()) {
-                transcript.appendLine("Approval requested for $toolName (${spec.risk}).")
-                val approved = approvalProvider.approve(spec, command.args)
-                if (!approved) {
-                    transcript.appendLine("Tool denied by user: $toolName")
-                    ToolExecutionLog.record(
-                        name = toolName,
-                        args = "risk=${spec.risk}",
-                        ok = false,
-                        message = "denied by user"
+            } else if (spec != null) {
+                val decision = policy.evaluate(
+                    ToolPolicyRequest(
+                        tool = spec,
+                        args = command.args,
+                        source = source,
+                        activeScreen = toolExecutor.observeScreen(),
+                        activeSkillId = skill?.id
                     )
-                    return AgentRunResult(transcript.toString(), null)
+                )
+                when (decision) {
+                    is PolicyDecision.Allow -> {
+                        transcript.appendLine("Policy allowed $toolName: ${decision.reason}")
+                    }
+                    is PolicyDecision.RequireApproval -> {
+                        transcript.appendLine("Approval requested for $toolName: ${decision.reason}")
+                        val approved = approvalProvider.approve(ToolApprovalRequest(spec, command.args, decision))
+                        if (!approved) {
+                            transcript.appendLine("Tool denied by user: $toolName")
+                            ToolExecutionLog.record(
+                                name = toolName,
+                                args = "risk=${spec.risk}",
+                                ok = false,
+                                message = "denied by user: ${decision.reason}"
+                            )
+                            return AgentRunResult(transcript.toString(), null)
+                        }
+                        transcript.appendLine("Tool approved by user: $toolName")
+                    }
+                    is PolicyDecision.Deny -> {
+                        transcript.appendLine("Policy denied $toolName: ${decision.reason}")
+                        ToolExecutionLog.record(toolName, "policy=deny", false, decision.userMessage)
+                        return AgentRunResult(transcript.toString(), null)
+                    }
+                    is PolicyDecision.Block -> {
+                        transcript.appendLine("Policy blocked $toolName: ${decision.reason}")
+                        ToolExecutionLog.record(toolName, "policy=block", false, decision.userMessage)
+                        return AgentRunResult(transcript.toString(), null)
+                    }
                 }
-                transcript.appendLine("Tool approved by user: $toolName")
             }
 
             val result = runCatching {
-                toolExecutor.execute(toolName, command.args)
+                toolExecutor.execute(toolName, command.args, source)
             }.getOrElse { error ->
                 transcript.appendLine("Tool execution error: ${error.message}")
                 context = recoveryContext(task, transcript.toString())
                 return@repeat
             }
-            transcript.appendLine("Tool result: ${result.ok} ${result.message}")
+            transcript.appendLine("Tool result: ${result.ok} ${SensitiveTextRedactor.redact(result.message)}")
             if (result.data.isNotEmpty()) {
-                transcript.appendLine("Tool data: ${result.data}")
+                transcript.appendLine("Tool data: ${SensitiveTextRedactor.redact(result.data)}")
             }
 
             val verificationScreen = if (toolName == "observe_screen") {
@@ -98,7 +132,7 @@ class AgentRunner(
                 appendLine("Previous transcript:")
                 appendLine(transcript.toString())
                 appendLine("Verification screen:")
-                appendLine(verificationScreen)
+                appendLine(SensitiveTextRedactor.redact(verificationScreen))
             }
         }
 
@@ -111,7 +145,7 @@ class AgentRunner(
             appendLine("Previous transcript:")
             appendLine(transcript)
             appendLine("Current screen:")
-            appendLine(toolExecutor.observeScreen())
+            appendLine(SensitiveTextRedactor.redact(toolExecutor.observeScreen()))
             appendLine("Recover from the last error or return a final answer if recovery is unsafe.")
         }
     }
