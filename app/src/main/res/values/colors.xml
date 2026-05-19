@@ -1,0 +1,11 @@
+<resources>
+    <color name="touchpilot_background">#080D10</color>
+    <color name="touchpilot_surface">#121C24</color>
+    <color name="touchpilot_card">#111921</color>
+    <color name="touchpilot_stroke">#202D37</color>
+    <color name="touchpilot_accent">#2FDC69</color>
+    <color name="touchpilot_on_accent">#041C0C</color>
+    <color name="touchpilot_body_text">#D6DFE7</color>
+    <color name="touchpilot_muted_text">#8997A4</color>
+    <color name="touchpilot_nav_text">#9CA8B2</color>
+</resources>

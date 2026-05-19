@@ -2,6 +2,7 @@ package dev.touchpilot.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -16,12 +17,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
-import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunner
 import dev.touchpilot.app.agent.LocalRouterCommandProvider
@@ -53,7 +56,7 @@ class MainActivity : Activity() {
     private lateinit var contentRoot: LinearLayout
     private lateinit var statusView: TextView
     private lateinit var executionLogView: TextView
-    private val bottomNavItems = mutableMapOf<Section, TextView>()
+    private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
     private var selectedSkillId: String? = null
@@ -158,35 +161,50 @@ class MainActivity : Activity() {
     }
 
     private fun buildBottomNav(): View {
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(10, 8, 10, 34)
+        return TabLayout(this).apply {
+            bottomNav = this
             setBackgroundColor(Theme.Background)
-        }
+            setPadding(0, 6, 0, 30)
+            tabMode = TabLayout.MODE_FIXED
+            tabGravity = TabLayout.GRAVITY_FILL
+            setSelectedTabIndicatorColor(Theme.Accent)
+            setTabTextColors(Theme.NavText, Theme.Accent)
+            setSelectedTabIndicatorHeight(6)
 
-        Section.values().forEach { section ->
-            nav.addView(
-                TextView(this).apply {
-                    text = section.label
-                    textSize = 10.5f
-                    typeface = Typeface.DEFAULT_BOLD
-                    gravity = Gravity.CENTER
-                    setSingleLine(true)
-                    setPadding(2, 12, 2, 12)
-                    setOnClickListener { showSection(section) }
-                    bottomNavItems[section] = this
-                },
-                LinearLayout.LayoutParams(0, 62, 1f).apply {
-                    leftMargin = 2
-                    rightMargin = 2
+            Section.values().forEach { section ->
+                addTab(
+                    newTab()
+                        .setCustomView(bottomNavLabel(section))
+                        .setTag(section),
+                    section == activeSection
+                )
+            }
+
+            addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(tab: TabLayout.Tab) {
+                    (tab.tag as? Section)?.let { section ->
+                        if (section != activeSection) {
+                            showSection(section)
+                        }
+                    }
                 }
-            )
+
+                override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+                override fun onTabReselected(tab: TabLayout.Tab) = Unit
+            })
+        }.withMargins()
+    }
+
+    private fun bottomNavLabel(section: Section): TextView {
+        return TextView(this).apply {
+            text = section.label
+            gravity = Gravity.CENTER
+            setSingleLine(true)
+            textSize = 9.5f
+            typeface = Typeface.DEFAULT_BOLD
+            minWidth = 0
+            setPadding(0, 10, 0, 10)
         }
-
-        updateBottomNav()
-
-        return nav
     }
 
     private fun showSection(section: Section) {
@@ -205,14 +223,14 @@ class MainActivity : Activity() {
     }
 
     private fun updateBottomNav() {
-        bottomNavItems.forEach { (section, view) ->
-            val selected = section == activeSection
-            view.setTextColor(if (selected) Theme.OnAccent else Theme.NavText)
-            view.background = if (selected) {
-                rounded(Theme.Accent, 24, Theme.Accent)
-            } else {
-                rounded(Color.TRANSPARENT, 24, Color.TRANSPARENT)
-            }
+        val nav = bottomNav ?: return
+        val index = Section.values().indexOf(activeSection)
+        if (index >= 0 && nav.selectedTabPosition != index) {
+            nav.getTabAt(index)?.select()
+        }
+        Section.values().forEachIndexed { tabIndex, section ->
+            val label = nav.getTabAt(tabIndex)?.customView as? TextView
+            label?.setTextColor(if (section == activeSection) Theme.Accent else Theme.NavText)
         }
     }
 
@@ -747,13 +765,17 @@ class MainActivity : Activity() {
     }
 
     private fun primaryButton(text: String, onClick: () -> Unit): TextView {
-        return TextView(this).apply {
+        return MaterialButton(this).apply {
             setText(text)
             gravity = Gravity.CENTER
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(5, 26, 12))
-            background = rounded(Theme.Accent, 20, Theme.Accent)
+            isAllCaps = false
+            setTextColor(Theme.OnAccent)
+            backgroundTintList = ColorStateList.valueOf(Theme.Accent)
+            strokeColor = ColorStateList.valueOf(Theme.Accent)
+            strokeWidth = 1
+            cornerRadius = 20
             layoutParams = controlParams()
             minHeight = 52
             setPadding(18, 14, 18, 14)
@@ -762,12 +784,16 @@ class MainActivity : Activity() {
     }
 
     private fun secondaryButton(text: String, onClick: () -> Unit): TextView {
-        return TextView(this).apply {
+        return MaterialButton(this).apply {
             setText(text)
             gravity = Gravity.CENTER
             textSize = 13f
+            isAllCaps = false
             setTextColor(Theme.BodyText)
-            background = rounded(Theme.SurfaceRaised, 18, Theme.StrokeDark)
+            backgroundTintList = ColorStateList.valueOf(Theme.SurfaceRaised)
+            strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
+            strokeWidth = 1
+            cornerRadius = 18
             layoutParams = controlParams()
             minHeight = 50
             setPadding(14, 13, 14, 13)
@@ -801,12 +827,19 @@ class MainActivity : Activity() {
     }
 
     private fun timelineCard(title: String, body: String): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = rounded(Theme.Card, 18, Theme.StrokeDark)
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = Theme.StrokeDark
+            strokeWidth = 1
+            radius = 18f
+            cardElevation = 0f
             setPadding(18, 16, 18, 16)
         }
-        card.addView(
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 16, 18, 16)
+        }
+        content.addView(
             TextView(this).apply {
                 text = title
                 textSize = 13f
@@ -814,7 +847,7 @@ class MainActivity : Activity() {
                 setTextColor(Color.WHITE)
             }
         )
-        card.addView(
+        content.addView(
             TextView(this).apply {
                 text = body
                 textSize = 12.5f
@@ -822,6 +855,7 @@ class MainActivity : Activity() {
                 setPadding(0, 8, 0, 0)
             }
         )
+        card.addView(content)
         return card.withMargins(top = 10, right = 42, bottom = 10)
     }
 

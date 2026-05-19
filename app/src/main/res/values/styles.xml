@@ -1,3 +1,22 @@
 <resources>
-    <style name="Theme.TouchPilot" parent="android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.TouchPilot" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/touchpilot_accent</item>
+        <item name="android:navigationBarColor">@color/touchpilot_background</item>
+        <item name="android:statusBarColor">@color/touchpilot_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorPrimary">@color/touchpilot_accent</item>
+        <item name="colorOnPrimary">@color/touchpilot_on_accent</item>
+        <item name="colorSurface">@color/touchpilot_surface</item>
+        <item name="colorOnSurface">@color/touchpilot_body_text</item>
+        <item name="colorSurfaceVariant">@color/touchpilot_card</item>
+        <item name="colorOnSurfaceVariant">@color/touchpilot_muted_text</item>
+        <item name="colorOutline">@color/touchpilot_stroke</item>
+        <item name="materialButtonStyle">@style/Widget.TouchPilot.MaterialButton</item>
+    </style>
+
+    <style name="Widget.TouchPilot.MaterialButton" parent="Widget.Material3.Button">
+        <item name="cornerRadius">20dp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
 </resources>
