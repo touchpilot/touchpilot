@@ -1,6 +1,6 @@
-name: Labeler
+name: PR Labeler
 
-on:
+"on":
   pull_request_target:
     types:
       - opened
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   label:
-    name: Apply PR Labels
+    name: Apply PR labels
     runs-on: ubuntu-latest
 
     steps:
@@ -71,7 +71,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh pr edit "${{ steps.pr.outputs.number }}" --add-label "status: needs-triage"
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" \
+            --field labels[]="status: needs-triage"
 
       - name: Apply labels from changed files
         uses: actions/labeler@v5
