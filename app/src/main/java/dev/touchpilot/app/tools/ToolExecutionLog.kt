@@ -1,5 +1,6 @@
 package dev.touchpilot.app.tools
 
+import dev.touchpilot.app.security.SensitiveTextRedactor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -26,9 +27,9 @@ object ToolExecutionLog {
             ToolLogEntry(
                 timestamp = dateFormat.format(Date()),
                 name = name,
-                args = args,
+                args = SensitiveTextRedactor.redact(args),
                 ok = ok,
-                message = message
+                message = SensitiveTextRedactor.redact(message)
             )
         )
     }

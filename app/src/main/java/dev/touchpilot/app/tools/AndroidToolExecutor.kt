@@ -4,11 +4,21 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.security.DefaultActionPolicy
+import dev.touchpilot.app.security.PolicyDecision
+import dev.touchpilot.app.security.SensitiveTextRedactor
+import dev.touchpilot.app.security.ToolPolicyRequest
+import dev.touchpilot.app.security.ToolSource
 
 class AndroidToolExecutor(
-    private val context: Context
+    private val context: Context,
+    private val policy: DefaultActionPolicy = DefaultActionPolicy()
 ) {
-    fun execute(name: String, args: Map<String, String>): ToolResult {
+    fun execute(
+        name: String,
+        args: Map<String, String>,
+        source: ToolSource = ToolSource.DIRECT_DEBUG
+    ): ToolResult {
         val validationError = validate(name, args)
         if (validationError != null) {
             val argsForLog = if (validationError.startsWith("Unknown tool")) {
@@ -18,6 +28,22 @@ class AndroidToolExecutor(
             }
             record(name, argsForLog, false, validationError)
             return ToolResult(false, validationError)
+        }
+
+        val spec = AndroidToolCatalog.find(name)
+        if (spec != null) {
+            when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
+                is PolicyDecision.Block -> {
+                    record(name, "policy=block", false, decision.userMessage)
+                    return ToolResult(false, decision.userMessage)
+                }
+                is PolicyDecision.Deny -> {
+                    record(name, "policy=deny", false, decision.userMessage)
+                    return ToolResult(false, decision.userMessage)
+                }
+                is PolicyDecision.Allow,
+                is PolicyDecision.RequireApproval -> Unit
+            }
         }
 
         val result = executeWithRetry(name, args)
@@ -52,7 +78,7 @@ class AndroidToolExecutor(
             "observe_screen" -> {
                 val snapshot = observeScreen()
                 record(name, "", AccessibilityBridge.isConnected(), "snapshot length=${snapshot.length}")
-                ToolResult(AccessibilityBridge.isConnected(), snapshot)
+                ToolResult(AccessibilityBridge.isConnected(), SensitiveTextRedactor.redact(snapshot))
             }
             "open_app" -> {
                 val target = args["target"].orEmpty()
