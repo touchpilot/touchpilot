@@ -13,6 +13,9 @@ Milestone 1 includes Phase 1 through Phase 11. The target is a validated
 Android agent runtime that can run locally first, control Android through safe
 tools, expose maintainable project workflow, and provide a real product UI.
 
+Status: complete for the local-first foundation scope. Remaining work below is
+tracked as post-Milestone 1 follow-up, not as a blocker for the foundation.
+
 ## Phase 0: Android Control Spike
 
 - [x] Create native Android app shell.
@@ -53,7 +56,7 @@ tools, expose maintainable project workflow, and provide a real product UI.
 ## Phase 4: MCP
 
 - [x] Add MCP client support.
-- [ ] Optionally expose Android tools as an MCP server.
+- [ ] Post-Milestone 1: optionally expose Android tools as an MCP server.
 - [x] Provide examples for desktop agents calling TouchPilot.
 
 ## Phase 5: Local Inference
@@ -61,14 +64,14 @@ tools, expose maintainable project workflow, and provide a real product UI.
 - [x] Evaluate ExecuTorch, llama.cpp, and LiteRT.
 - [x] Start with local routing for simple tool calls.
 - [x] Keep cloud/provider fallback available for complex tasks.
-- [ ] Integrate a real on-device model runtime.
+- [x] Integrate a real on-device LiteRT command-routing runtime.
 
 ## Phase 6: Live Validation
 
 - [x] Add live emulator/device test checklist.
 - [x] Validate AccessibilityService connection.
 - [x] Validate observe, tap, type, scroll, open app, back, and home.
-- [x] Validate approval dialog behavior.
+- [x] Validate approval prompt behavior.
 - [x] Validate skill allowlist behavior.
 - [x] Validate local router mode.
 - [x] Validate MCP client UI.
@@ -80,20 +83,16 @@ and current live-test results.
 
 ## Phase 7: Repo Quality and Workflow
 
-- [ ] Add GitHub Actions CI for debug and release builds.
-- [ ] Add Android lint checking.
-- [ ] Add unit-test task to CI.
-- [ ] Add issue templates.
-- [ ] Add pull request template.
-- [ ] Define issue and PR label taxonomy.
-- [ ] Define milestone naming convention.
+- [x] Add GitHub Actions CI for debug and release builds.
+- [x] Add Android lint checking.
+- [x] Add unit-test task to CI.
+- [x] Add issue templates.
+- [x] Add pull request template.
+- [x] Define issue and PR label taxonomy.
+- [x] Define milestone naming convention.
 
-Open discussion before implementation:
-
-- exact label set,
-- issue template types,
-- PR checklist contents,
-- whether CI starts as required or informational.
+Milestones use GitHub milestones for phase and milestone tracking. Labels stay
+focused on type, area, and status.
 
 ## Phase 8: Local-First Architecture Cleanup
 
@@ -105,33 +104,46 @@ Open discussion before implementation:
 
 ## Phase 9: Product UI Redesign
 
-- [ ] Replace the single debug screen with app sections.
-- [ ] Add primary Agent screen.
-- [ ] Add Skills screen.
-- [ ] Add Local Runtime screen.
-- [ ] Add Android Tools debug screen.
-- [ ] Add MCP screen.
-- [ ] Add Logs and Debug Trace screen.
-- [ ] Add Settings screen.
-- [ ] Make local-first mode prominent.
-- [ ] Keep cloud/API fallback secondary.
+- [x] Replace the single debug screen with app sections.
+- [x] Add primary Agent screen.
+- [x] Add Skills screen.
+- [x] Add Local Runtime screen.
+- [x] Add Android Tools debug screen.
+- [x] Add MCP screen.
+- [x] Add Logs and Debug Trace screen.
+- [x] Add Settings screen.
+- [x] Make local-first mode prominent.
+- [x] Keep cloud/API fallback secondary.
 
 ## Phase 10: Safety and Policy
 
-- [ ] Create a policy layer separate from UI and tool execution.
-- [ ] Block sensitive workflows by default.
-- [ ] Add app-specific restrictions.
-- [ ] Add sensitive text redaction in logs and traces.
-- [ ] Add clearer approval reasons.
-- [ ] Add risk-specific approval UI.
-- [ ] Define MCP trust boundaries.
+- [x] Create a policy layer separate from UI and tool execution.
+- [x] Block sensitive workflows by default.
+- [x] Add app-specific restrictions for sensitive workflow classes.
+- [x] Add sensitive text redaction in logs and traces.
+- [x] Add clearer approval reasons.
+- [x] Add risk-specific approval UI.
+- [x] Define MCP trust boundaries.
 
 ## Phase 11: Real Local Model Runtime
 
-- [ ] Integrate LiteRT command-routing model path.
-- [ ] Add model asset loading.
-- [ ] Add local model status UI.
-- [ ] Emit local inference results through the existing JSON command loop.
-- [ ] Keep deterministic local router as fallback.
-- [ ] Keep cloud provider optional and experimental.
-- [ ] Document future ExecuTorch and llama.cpp experiments.
+- [x] Integrate LiteRT command-routing model path.
+- [x] Add model asset loading.
+- [x] Add local model status UI.
+- [x] Emit local inference results through the existing JSON command loop.
+- [x] Keep deterministic local router as fallback.
+- [x] Keep cloud provider optional and experimental.
+- [x] Document future ExecuTorch and llama.cpp experiments.
+
+The bundled `tiny-router-1` model is intentionally small. It proves the real
+LiteRT runtime path, asset loading, status reporting, and JSON command contract.
+A trained local model can replace the asset behind the same boundary later.
+
+## Post-Milestone 1 Follow-Up
+
+- Train or select a stronger command-routing model with structured argument
+  extraction.
+- Add an Android-tools MCP server only after defining server permissions,
+  authentication, and foreground-service behavior.
+- Add a prompt file or prompt-builder layer for richer local assistant behavior.
+- Add deeper live-test automation for MCP and approval flows.

@@ -176,7 +176,6 @@ class MainActivity : Activity() {
             tabGravity = TabLayout.GRAVITY_FILL
             setSelectedTabIndicatorColor(Theme.Accent)
             setTabTextColors(Theme.NavText, Theme.Accent)
-            setSelectedTabIndicatorHeight(6)
 
             Section.values().forEach { section ->
                 addTab(
@@ -335,7 +334,7 @@ class MainActivity : Activity() {
         }
         content.addView(
             TextView(this).apply {
-                text = "$statusLabel — ${tool.name}"
+                text = "$statusLabel - ${tool.name}"
                 textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
@@ -427,7 +426,7 @@ class MainActivity : Activity() {
                     skill = selectedSkill,
                     source = when (providerMode) {
                         AgentProviderMode.CLOUD -> ToolSource.CLOUD_FALLBACK
-                        AgentProviderMode.LOCAL_MODEL -> ToolSource.FUTURE_LOCAL_MODEL
+                        AgentProviderMode.LOCAL_MODEL -> ToolSource.LOCAL_MODEL
                         AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
                     }
                 ).run(task).transcript

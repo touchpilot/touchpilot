@@ -15,8 +15,8 @@ explicit, permissioned, inspectable tools.
 - Use AccessibilityService for semantic UI observation and control.
 - Prefer local-first routing and inference.
 - Keep OpenAI-compatible model providers available as an experimental fallback.
-- Add local model inference through mobile runtimes such as LiteRT, ExecuTorch,
-  or llama.cpp.
+- Run the first local LiteRT command-routing model, with ExecuTorch and
+  llama.cpp documented as future runtime paths.
 - Keep user approval and audit logs central to the runtime.
 
 ## Early Scope
@@ -49,15 +49,15 @@ During early development, the release build is signed with the local Android
 debug key so it can be installed on emulators such as LDPlayer. Replace this
 with a real release signing key before publishing.
 
-The current agent MVP defaults to the local router for simple Android actions.
-An experimental cloud fallback can be configured with an OpenAI-compatible chat
-completions URL, model name, and API key. Fallback URL and model are stored in
-app preferences. API keys are encrypted with an Android Keystore-backed key
-before being stored.
+The current agent MVP defaults to the local router for simple Android actions
+and includes a LiteRT local model mode for command routing. An experimental
+cloud fallback can be configured with an OpenAI-compatible chat completions URL,
+model name, and API key. Fallback URL and model are stored in app preferences.
+API keys are encrypted with an Android Keystore-backed key before being stored.
 
 When the model selects a medium- or high-risk Android tool, TouchPilot asks the
-user for approval before executing it. Low-risk observation and wait tools can
-run without a prompt.
+user for approval in the chat before executing it. Low-risk observation and wait
+tools can run without a prompt.
 
 If building outside Android Studio, make sure either `ANDROID_HOME` is set or
 `local.properties` contains the local Android SDK path:

@@ -27,12 +27,11 @@ Tools are the only way an agent may affect the Android device.
 - `press_home`: return to launcher.
 - `wait_for_ui`: wait for a screen change or expected text.
 
-The first Android spike implements `observe_screen`, `open_app`, `tap`,
-`type_text`, `scroll`, `press_back`, `press_home`, and `wait_for_ui` from the
-debug screen and the first LLM agent loop.
+The app implements `observe_screen`, `open_app`, `tap`, `type_text`, `scroll`,
+`press_back`, `press_home`, and `wait_for_ui` from the Android Tools screen and
+the agent command-provider loop.
 
-The initial agent loop asks OpenAI-compatible models to return one JSON command
-at a time:
+All command providers return one JSON command at a time:
 
 ```json
 {

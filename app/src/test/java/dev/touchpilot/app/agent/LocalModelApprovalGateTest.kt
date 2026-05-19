@@ -35,7 +35,7 @@ class LocalModelApprovalGateTest {
             ToolPolicyRequest(
                 tool = spec,
                 args = command.args,
-                source = ToolSource.FUTURE_LOCAL_MODEL
+                source = ToolSource.LOCAL_MODEL
             )
         )
 
@@ -57,7 +57,7 @@ class LocalModelApprovalGateTest {
             ToolPolicyRequest(
                 tool = spec,
                 args = command.args,
-                source = ToolSource.FUTURE_LOCAL_MODEL
+                source = ToolSource.LOCAL_MODEL
             )
         )
 

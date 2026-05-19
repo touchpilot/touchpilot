@@ -98,6 +98,9 @@ Use labels to describe the work:
 - `status: in-progress`
 
 Use GitHub milestones for phase and milestone tracking instead of phase labels.
+Milestones should use clear names such as `Milestone 1: Local-First Agent
+Foundation`; individual issues and PRs should rely on type, area, and status
+labels rather than phase labels.
 
 ## Code Style
 

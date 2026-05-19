@@ -10,7 +10,7 @@ User
   -> Agent Runtime
   -> Agent Command Provider
       -> Local Router (default)
-      -> Future Local Routing Model
+      -> Local LiteRT Routing Model
       -> Future Local LLM Runtime
       -> Experimental Cloud Fallback
   -> Tool Router
@@ -26,13 +26,13 @@ MCP Client
 
 - `app`: Android UI, navigation, settings, permissions.
 - `agent`: session loop, local routing, fallback provider clients, prompt
-  building, retries.
+  building, conversational gating, and retries.
 - `tools`: tool specifications, routing, validation, execution results.
 - `androidcontrol`: AccessibilityService integration and action execution.
 - `memory`: local sessions, tool logs, skills, and audit storage.
 - `security`: approvals, policy checks, risk classification, secret storage.
 - `mcp`: HTTP JSON-RPC client for external MCP tool servers.
-- `agent`: local-first and fallback command-provider implementations.
+- `localinference`: LiteRT command-router runtime and local-model fallback.
 
 ## Local-First Execution Loop
 
@@ -52,9 +52,9 @@ TouchPilot separates command production from tool execution:
 - Deterministic local router: the current default. It maps simple commands such
   as observe, back, home, scroll, open app, and tap text to structured tool
   calls without network access.
-- Small local routing model: the next local inference target. It should replace
-  brittle string matching for command classification while still emitting the
-  same structured JSON command format.
+- Small local routing model: the current LiteRT path. It emits route logits for
+  simple commands, keeps deterministic Kotlin argument extraction for now, and
+  still emits the same structured JSON command format.
 - Local LLM runtime: future on-device reasoning path for richer multi-step
   tasks. It should use the same tool validation, approval, skill allowlist, and
   logging pipeline as the router.

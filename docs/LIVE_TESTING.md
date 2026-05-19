@@ -43,7 +43,7 @@ Launch TouchPilot:
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
 - [x] `Back` and `Home` work.
-- [x] Medium-risk model-selected tools show approval prompts.
+- [x] Medium-risk model-selected tools show inline approval prompts.
 - [x] Denied approvals stop execution and log the denial.
 - [x] Active skill allowlists deny disallowed tools.
 - [x] Local router mode handles simple commands such as `open settings`, `back`, `home`, and `scroll`.
@@ -100,9 +100,10 @@ Dump visible UI text:
 /home/ubuntu/Android/Sdk/platform-tools/adb shell cat /sdcard/window.xml
 ```
 
-## Known Follow-Up Areas
+## Known Post-Milestone Follow-Up Areas
 
 - Manual accessibility enablement should be tested, not only adb settings.
 - MCP needs a local test server fixture.
-- Approval UI needs more detailed policy reasons in Phase 10.
-- Product UI issues should feed Phase 9.
+- Approval UI should gain automated instrumentation coverage.
+- Product UI should continue to receive emulator screenshots or recordings for
+  material UX changes.
