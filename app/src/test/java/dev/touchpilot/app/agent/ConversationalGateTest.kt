@@ -6,6 +6,9 @@ import kotlin.test.assertNull
 
 class ConversationalGateTest {
     private val greetingReply = "Hello, I am TouchPilot, how can I help you?"
+    private val helpReply =
+        "I can help you control Android apps, open settings, tap visible text, scroll, " +
+            "go back or home, and use approved skills. What would you like to do?"
 
     @Test
     fun respondsToHello() {
@@ -49,5 +52,41 @@ class ConversationalGateTest {
     fun doesNotMatchBlankInput() {
         assertNull(ConversationalGate.respond(""))
         assertNull(ConversationalGate.respond("   "))
+    }
+
+    @Test
+    fun respondsToHelp() {
+        assertEquals(helpReply, ConversationalGate.respond("help")?.message)
+    }
+
+    @Test
+    fun respondsToHelpCaseInsensitiveAndPunctuated() {
+        assertEquals(helpReply, ConversationalGate.respond("Help")?.message)
+        assertEquals(helpReply, ConversationalGate.respond("HELP!")?.message)
+        assertEquals(helpReply, ConversationalGate.respond("help.")?.message)
+    }
+
+    @Test
+    fun respondsToWhatCanYouDo() {
+        assertEquals(helpReply, ConversationalGate.respond("what can you do")?.message)
+        assertEquals(helpReply, ConversationalGate.respond("What can you do?")?.message)
+    }
+
+    @Test
+    fun respondsToHowCanYouHelp() {
+        assertEquals(helpReply, ConversationalGate.respond("how can you help")?.message)
+        assertEquals(helpReply, ConversationalGate.respond("How can you help?")?.message)
+    }
+
+    @Test
+    fun doesNotMatchHelpFollowedByTask() {
+        assertNull(ConversationalGate.respond("help me open Settings"))
+        assertNull(ConversationalGate.respond("help me tap OK"))
+    }
+
+    @Test
+    fun doesNotMatchHelpEmbeddedInTask() {
+        assertNull(ConversationalGate.respond("open the help page"))
+        assertNull(ConversationalGate.respond("scroll to help section"))
     }
 }
