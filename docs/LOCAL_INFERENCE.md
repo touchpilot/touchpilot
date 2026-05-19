@@ -1,7 +1,9 @@
 # Local Inference
 
-Phase 5 introduces a local command-provider seam and a deterministic on-device
-router for simple safe actions. It does not yet bundle a full local LLM runtime.
+TouchPilot has a local command-provider boundary, a deterministic on-device
+router for simple safe actions, and a LiteRT command model runtime path. The
+first bundled model is a tiny route-logit model that verifies on-device LiteRT
+execution before larger trained routing models are added.
 
 ## Runtime Evaluation
 
@@ -47,10 +49,13 @@ Tradeoffs:
 
 ## Local-First Runtime Modes
 
-The Android app now has two runtime modes:
+The Android app now has three runtime modes:
 
 - Local router: default offline deterministic routing for simple commands such
   as observe, back, home, scroll, open app, and tap text.
+- Local model: LiteRT command-routing runtime. If the model cannot be loaded,
+  it falls back to the deterministic local router and reports that fallback in
+  the runtime UI.
 - Experimental cloud fallback: optional OpenAI-compatible chat completions for
   development and complex tasks.
 
@@ -67,13 +72,70 @@ Local inference work should keep one stable contract: command providers emit a
 structured JSON command or a final answer, and Android tool execution remains
 behind validation, skill allowlists, approval policy, and local logs.
 
-- Deterministic local router: current default and fallback when no model asset
-  is available.
-- Small local routing model: first real local model target for command
-  classification and structured argument extraction.
+- Deterministic local router: current default and fallback when the LiteRT model
+  cannot be loaded.
+- Small local routing model: current LiteRT path for command route logits and
+  future target for richer classification and structured argument extraction.
 - Local LLM runtime: future broader reasoning path for multi-step workflows.
 - Experimental cloud fallback: optional secondary path, not the primary product
   direction.
+
+## LiteRT Command Router Asset Contract
+
+The first local model target is a small command router, not a general chat
+model. The Android app currently bundles a tiny LiteRT model to exercise real
+on-device inference and looks for:
+
+- `app/src/main/assets/models/command_router/manifest.json`
+- `app/src/main/assets/models/command_router/model.tflite`
+
+The manifest describes the runtime and model asset:
+
+```json
+{
+  "runtime": "LiteRT",
+  "model_asset": "models/command_router/model.tflite",
+  "tokenizer_asset": null,
+  "version": "tiny-router-1"
+}
+```
+
+The bundled `tiny-router-1` model accepts compact task features and emits route
+logits for these commands:
+
+- `press_back`
+- `press_home`
+- `scroll` backward
+- `scroll` forward
+- `open_app`
+- `tap`
+
+This first model intentionally keeps argument extraction in Kotlin. Larger
+trained command-routing models can replace `model.tflite` behind the same JSON
+command contract.
+
+The model runtime must emit the existing command-provider JSON contract:
+
+```json
+{
+  "tool": "open_app",
+  "args": {
+    "target": "Settings"
+  }
+}
+```
+
+or:
+
+```json
+{
+  "final": "I cannot do that safely."
+}
+```
+
+Every model output is treated as untrusted. It still passes through JSON
+parsing, tool validation, skill allowlists, safety policy, approval flow, and
+redacted logs/traces.
 
 ## Recommended Next Runtime
 

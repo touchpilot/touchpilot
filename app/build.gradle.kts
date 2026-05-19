@@ -34,6 +34,8 @@ android {
 
 dependencies {
     implementation("com.google.android.material:material:1.14.0")
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
+    testImplementation("org.json:json:20250517")
     testImplementation(kotlin("test"))
 }
 

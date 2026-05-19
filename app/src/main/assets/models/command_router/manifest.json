@@ -1,0 +1,6 @@
+{
+  "runtime": "LiteRT",
+  "model_asset": "models/command_router/model.tflite",
+  "tokenizer_asset": null,
+  "version": "tiny-router-1"
+}

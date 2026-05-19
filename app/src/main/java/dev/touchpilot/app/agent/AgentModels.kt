@@ -8,6 +8,7 @@ data class ProviderConfig(
 
 enum class AgentProviderMode {
     CLOUD,
+    LOCAL_MODEL,
     LOCAL_ROUTER
 }
 

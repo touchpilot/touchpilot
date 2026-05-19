@@ -31,6 +31,9 @@ import dev.touchpilot.app.agent.LocalRouterCommandProvider
 import dev.touchpilot.app.agent.OpenAiAgentCommandProvider
 import dev.touchpilot.app.agent.ProviderConfig
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
+import dev.touchpilot.app.localinference.LocalModelCommandProvider
+import dev.touchpilot.app.localinference.LocalModelStatus
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
@@ -55,6 +58,7 @@ class MainActivity : Activity() {
     private lateinit var secretStore: ProviderSecretStore
     private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
+    private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var contentRoot: LinearLayout
     private lateinit var statusView: TextView
     private lateinit var executionLogView: TextView
@@ -71,6 +75,7 @@ class MainActivity : Activity() {
         secretStore = ProviderSecretStore(this)
         skills = SkillStore(this).loadSkills()
         toolExecutor = AndroidToolExecutor(this)
+        localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
 
         if (conversation.isEmpty()) {
@@ -322,6 +327,7 @@ class MainActivity : Activity() {
             )
 
             val transcript = runCatching {
+                val localRouter = LocalRouterCommandProvider(task, selectedSkill)
                 AgentRunner(
                     toolExecutor = toolExecutor,
                     approvalProvider = ToolApprovalProvider { request ->
@@ -329,11 +335,18 @@ class MainActivity : Activity() {
                     },
                     commandProvider = when (providerMode) {
                         AgentProviderMode.CLOUD -> OpenAiAgentCommandProvider(providerConfig)
-                        AgentProviderMode.LOCAL_ROUTER -> LocalRouterCommandProvider(task, selectedSkill)
+                        AgentProviderMode.LOCAL_MODEL -> LocalModelCommandProvider(
+                            runtime = localModelRuntime,
+                            fallback = localRouter,
+                            task = task,
+                            skill = selectedSkill
+                        )
+                        AgentProviderMode.LOCAL_ROUTER -> localRouter
                     },
                     skill = selectedSkill,
                     source = when (providerMode) {
                         AgentProviderMode.CLOUD -> ToolSource.CLOUD_FALLBACK
+                        AgentProviderMode.LOCAL_MODEL -> ToolSource.FUTURE_LOCAL_MODEL
                         AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
                     }
                 ).run(task).transcript
@@ -400,16 +413,14 @@ class MainActivity : Activity() {
     private fun renderRuntimeScreen() {
         contentRoot.addView(sectionTitle("Local Runtime"))
         contentRoot.addView(statusPill())
+        contentRoot.addView(localModelStatusCard())
         contentRoot.addView(
             timelineCard(
                 "Runtime boundary",
                 """
-                Local router is the default command provider. It maps simple tasks to typed Android tools without a network dependency.
+                LiteRT command routing is the first local model runtime target. If the model asset is unavailable, TouchPilot falls back to the deterministic local router.
 
-                Future runtime layers will fit behind the same JSON command boundary:
-                - small local routing model
-                - local LLM runtime
-                - experimental cloud fallback
+                Every local model command still goes through JSON parsing, tool validation, skill allowlists, safety policy, approval, and redacted logs.
                 """.trimIndent()
             )
         )
@@ -429,10 +440,10 @@ class MainActivity : Activity() {
         contentRoot.addView(providerModeSpinner)
         contentRoot.addView(
             primaryButton("Save Runtime") {
-                val mode = if (providerModeSpinner.selectedItemPosition == 1) {
-                    AgentProviderMode.CLOUD
-                } else {
-                    AgentProviderMode.LOCAL_ROUTER
+                val mode = when (providerModeSpinner.selectedItemPosition) {
+                    1 -> AgentProviderMode.LOCAL_MODEL
+                    2 -> AgentProviderMode.CLOUD
+                    else -> AgentProviderMode.LOCAL_ROUTER
                 }
                 preferences.edit().putString("agent_provider_mode", mode.name).apply()
                 showSection(Section.RUNTIME)
@@ -712,10 +723,10 @@ class MainActivity : Activity() {
     }
 
     private fun currentProviderMode(): AgentProviderMode {
-        return if (preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name) == AgentProviderMode.CLOUD.name) {
-            AgentProviderMode.CLOUD
-        } else {
-            AgentProviderMode.LOCAL_ROUTER
+        return when (preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name)) {
+            AgentProviderMode.CLOUD.name -> AgentProviderMode.CLOUD
+            AgentProviderMode.LOCAL_MODEL.name -> AgentProviderMode.LOCAL_MODEL
+            else -> AgentProviderMode.LOCAL_ROUTER
         }
     }
 
@@ -825,7 +836,21 @@ class MainActivity : Activity() {
     private fun statusPill(): View {
         return timelineCard(
             "Runtime",
-            "${currentProviderMode().label()}\n${if (AccessibilityBridge.isConnected()) "Accessibility connected" else "Accessibility not connected"}"
+            "${currentProviderMode().label()}\n${localModelRuntime.status().shortLine()}\n${if (AccessibilityBridge.isConnected()) "Accessibility connected" else "Accessibility not connected"}"
+        )
+    }
+
+    private fun localModelStatusCard(): View {
+        val status = localModelRuntime.status()
+        return timelineCard(
+            "Local model",
+            """
+            Runtime: ${status.runtime}
+            Status: ${if (status.available) "available" else "fallback active"}
+            Model asset: ${status.modelAsset}
+            Version: ${status.version}
+            ${status.message}
+            """.trimIndent()
         )
     }
 
@@ -896,13 +921,26 @@ class MainActivity : Activity() {
     }
 
     private fun providerModeIndex(savedMode: String?): Int {
-        return if (savedMode == AgentProviderMode.CLOUD.name) 1 else 0
+        return when (savedMode) {
+            AgentProviderMode.LOCAL_MODEL.name -> 1
+            AgentProviderMode.CLOUD.name -> 2
+            else -> 0
+        }
     }
 
     private fun AgentProviderMode.label(): String {
         return when (this) {
             AgentProviderMode.CLOUD -> "Experimental cloud fallback"
+            AgentProviderMode.LOCAL_MODEL -> "Local model with router fallback"
             AgentProviderMode.LOCAL_ROUTER -> "Local router"
+        }
+    }
+
+    private fun LocalModelStatus.shortLine(): String {
+        return if (available) {
+            "$runtime model available"
+        } else {
+            "$runtime fallback: ${message.substringBefore(';')}"
         }
     }
 
@@ -1027,7 +1065,7 @@ class MainActivity : Activity() {
         const val MaxApprovalArgLength = 500
         const val DefaultProviderUrl = "https://api.openai.com/v1/chat/completions"
         const val DefaultModel = "gpt-5.2-mini"
-        val ProviderModeLabels = listOf("Local router", "Experimental cloud fallback")
+        val ProviderModeLabels = listOf("Local router", "Local model", "Experimental cloud fallback")
     }
 
     private object Theme {
