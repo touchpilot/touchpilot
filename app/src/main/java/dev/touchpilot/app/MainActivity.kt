@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     private lateinit var contentRoot: LinearLayout
     private lateinit var statusView: TextView
     private lateinit var executionLogView: TextView
+    private val bottomNavItems = mutableMapOf<Section, TextView>()
 
     private var activeSection = Section.CHAT
     private var selectedSkillId: String? = null
@@ -90,7 +91,7 @@ class MainActivity : Activity() {
     private fun buildRoot(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(9, 14, 18))
+            setBackgroundColor(Theme.Background)
 
             addView(buildHeader())
 
@@ -119,7 +120,7 @@ class MainActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(30, 82, 30, 14)
-            setBackgroundColor(Color.rgb(9, 14, 18))
+            setBackgroundColor(Theme.Background)
 
             val row = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -140,7 +141,7 @@ class MainActivity : Activity() {
                     text = "Pilot"
                     textSize = 25f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.rgb(57, 220, 109))
+                    setTextColor(Theme.Accent)
                 }
             )
 
@@ -161,7 +162,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(10, 8, 10, 34)
-            setBackgroundColor(Color.rgb(9, 14, 18))
+            setBackgroundColor(Theme.Background)
         }
 
         Section.values().forEach { section ->
@@ -169,21 +170,28 @@ class MainActivity : Activity() {
                 TextView(this).apply {
                     text = section.label
                     textSize = 10.5f
+                    typeface = Typeface.DEFAULT_BOLD
                     gravity = Gravity.CENTER
                     setSingleLine(true)
-                    setTextColor(if (section == activeSection) Accent else MutedText)
-                    setPadding(2, 10, 2, 10)
+                    setPadding(2, 12, 2, 12)
                     setOnClickListener { showSection(section) }
+                    bottomNavItems[section] = this
                 },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                LinearLayout.LayoutParams(0, 62, 1f).apply {
+                    leftMargin = 2
+                    rightMargin = 2
+                }
             )
         }
+
+        updateBottomNav()
 
         return nav
     }
 
     private fun showSection(section: Section) {
         activeSection = section
+        updateBottomNav()
         contentRoot.removeAllViews()
         when (section) {
             Section.CHAT -> renderChatScreen()
@@ -193,6 +201,18 @@ class MainActivity : Activity() {
             Section.MCP -> renderMcpScreen()
             Section.LOGS -> renderLogsScreen()
             Section.SETTINGS -> renderSettingsScreen()
+        }
+    }
+
+    private fun updateBottomNav() {
+        bottomNavItems.forEach { (section, view) ->
+            val selected = section == activeSection
+            view.setTextColor(if (selected) Theme.OnAccent else Theme.NavText)
+            view.background = if (selected) {
+                rounded(Theme.Accent, 24, Theme.Accent)
+            } else {
+                rounded(Color.TRANSPARENT, 24, Color.TRANSPARENT)
+            }
         }
     }
 
@@ -225,8 +245,8 @@ class MainActivity : Activity() {
             maxLines = 4
             textSize = 14f
             setTextColor(Color.WHITE)
-            setHintTextColor(MutedText)
-            background = rounded(Color.rgb(16, 24, 31), 26, StrokeDark)
+            setHintTextColor(Theme.MutedText)
+            background = rounded(Theme.SurfaceRaised, 26, Theme.StrokeDark)
             setPadding(24, 10, 24, 10)
         }
         inputRow.addView(taskInput, LinearLayout.LayoutParams(0, 58, 1f))
@@ -238,7 +258,7 @@ class MainActivity : Activity() {
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(Color.rgb(5, 26, 12))
-                background = rounded(Accent, 30, Accent)
+                background = rounded(Theme.Accent, 30, Theme.Accent)
                 setOnClickListener {
                     val task = taskInput.text.toString().trim()
                     if (task.isNotEmpty()) {
@@ -595,9 +615,9 @@ class MainActivity : Activity() {
             id = R.id.execution_log_view
             text = ToolExecutionLog.render()
             textSize = 12f
-            setTextColor(BodyText)
+            setTextColor(Theme.BodyText)
             setPadding(18, 18, 18, 18)
-            background = rounded(Card, 18, StrokeDark)
+            background = rounded(Theme.Card, 18, Theme.StrokeDark)
         }
         contentRoot.addView(executionLogView)
     }
@@ -662,7 +682,7 @@ class MainActivity : Activity() {
             } else {
                 "Accessibility service: not connected"
             }
-            statusView.setTextColor(if (AccessibilityBridge.isConnected()) Accent else MutedText)
+            statusView.setTextColor(if (AccessibilityBridge.isConnected()) Theme.Accent else Theme.MutedText)
         }
     }
 
@@ -679,7 +699,18 @@ class MainActivity : Activity() {
     }
 
     private fun rowButtonParams(): LinearLayout.LayoutParams {
-        return LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        return LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            setMargins(4, 6, 4, 6)
+        }
+    }
+
+    private fun controlParams(): LinearLayout.LayoutParams {
+        return LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(0, 7, 0, 7)
+        }
     }
 
     private fun sectionTitle(text: String): TextView {
@@ -696,7 +727,7 @@ class MainActivity : Activity() {
         return TextView(this).apply {
             setText(text)
             textSize = 12f
-            setTextColor(MutedText)
+            setTextColor(Theme.MutedText)
             setPadding(0, 14, 0, 6)
         }
     }
@@ -707,8 +738,10 @@ class MainActivity : Activity() {
             setSingleLine(true)
             textSize = 14f
             setTextColor(Color.WHITE)
-            setHintTextColor(MutedText)
-            background = rounded(Color.rgb(16, 24, 31), 18, StrokeDark)
+            setHintTextColor(Theme.MutedText)
+            background = rounded(Theme.SurfaceRaised, 18, Theme.StrokeDark)
+            layoutParams = controlParams()
+            minHeight = 54
             setPadding(20, 8, 20, 8)
         }
     }
@@ -720,7 +753,9 @@ class MainActivity : Activity() {
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(5, 26, 12))
-            background = rounded(Accent, 20, Accent)
+            background = rounded(Theme.Accent, 20, Theme.Accent)
+            layoutParams = controlParams()
+            minHeight = 52
             setPadding(18, 14, 18, 14)
             setOnClickListener { onClick() }
         }
@@ -731,8 +766,10 @@ class MainActivity : Activity() {
             setText(text)
             gravity = Gravity.CENTER
             textSize = 13f
-            setTextColor(BodyText)
-            background = rounded(Color.rgb(18, 27, 35), 18, StrokeDark)
+            setTextColor(Theme.BodyText)
+            background = rounded(Theme.SurfaceRaised, 18, Theme.StrokeDark)
+            layoutParams = controlParams()
+            minHeight = 50
             setPadding(14, 13, 14, 13)
             setOnClickListener { onClick() }
         }
@@ -743,7 +780,7 @@ class MainActivity : Activity() {
             setText(text)
             textSize = 14f
             setTextColor(Color.rgb(3, 30, 13))
-            background = rounded(Accent, 22, Accent)
+            background = rounded(Theme.Accent, 22, Theme.Accent)
             setPadding(22, 16, 22, 16)
         }.withMargins(left = 84, top = 10, bottom = 10)
     }
@@ -766,7 +803,7 @@ class MainActivity : Activity() {
     private fun timelineCard(title: String, body: String): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = rounded(Card, 18, StrokeDark)
+            background = rounded(Theme.Card, 18, Theme.StrokeDark)
             setPadding(18, 16, 18, 16)
         }
         card.addView(
@@ -781,7 +818,7 @@ class MainActivity : Activity() {
             TextView(this).apply {
                 text = body
                 textSize = 12.5f
-                setTextColor(BodyText)
+                setTextColor(Theme.BodyText)
                 setPadding(0, 8, 0, 0)
             }
         )
@@ -944,11 +981,17 @@ class MainActivity : Activity() {
         const val DefaultProviderUrl = "https://api.openai.com/v1/chat/completions"
         const val DefaultModel = "gpt-5.2-mini"
         val ProviderModeLabels = listOf("Local router", "Experimental cloud fallback")
+    }
 
-        val Accent: Int = Color.rgb(48, 220, 105)
+    private object Theme {
+        val Background: Int = Color.rgb(8, 13, 16)
+        val SurfaceRaised: Int = Color.rgb(18, 28, 36)
         val Card: Int = Color.rgb(17, 25, 33)
-        val StrokeDark: Int = Color.rgb(31, 42, 51)
+        val StrokeDark: Int = Color.rgb(32, 45, 55)
+        val Accent: Int = Color.rgb(47, 220, 105)
+        val OnAccent: Int = Color.rgb(4, 28, 12)
         val BodyText: Int = Color.rgb(214, 223, 231)
         val MutedText: Int = Color.rgb(137, 151, 164)
+        val NavText: Int = Color.rgb(156, 168, 178)
     }
 }
