@@ -43,7 +43,7 @@ jobs:
 
       - name: Ensure labels exist
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create "type: bug" --color d73a4a --description "Broken or unexpected behavior." --force
@@ -69,7 +69,7 @@ jobs:
 
       - name: Add triage status
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
@@ -81,6 +81,6 @@ jobs:
       - name: Apply labels from changed files
         uses: actions/labeler@v5
         with:
-          repo-token: ${{ github.token }}
+          repo-token: ${{ secrets.GH_LABELER_TOKEN || github.token }}
           configuration-path: .github/labeler.yml
           pr-number: ${{ steps.pr.outputs.number }}
