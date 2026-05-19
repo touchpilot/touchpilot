@@ -27,6 +27,7 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunner
+import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.LocalRouterCommandProvider
 import dev.touchpilot.app.agent.OpenAiAgentCommandProvider
 import dev.touchpilot.app.agent.ProviderConfig
@@ -310,6 +311,14 @@ class MainActivity : Activity() {
 
     private fun runAgentFromChat(task: String) {
         conversation += ChatEvent.User(task)
+
+        val conversationalResponse = ConversationalGate.respond(task)
+        if (conversationalResponse != null) {
+            conversation += ChatEvent.Agent(conversationalResponse.message, "")
+            showSection(Section.CHAT)
+            return
+        }
+
         conversation += ChatEvent.Agent("Working on it.", "Runtime: ${currentProviderMode().label()}")
         showSection(Section.CHAT)
 
