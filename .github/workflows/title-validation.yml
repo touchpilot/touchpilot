@@ -1,0 +1,104 @@
+name: Title Validation
+
+"on":
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - ready_for_review
+  issues:
+    types:
+      - opened
+      - edited
+      - reopened
+  workflow_dispatch:
+    inputs:
+      title:
+        description: Title to validate manually
+        required: true
+        type: string
+      kind:
+        description: Title kind
+        required: true
+        type: choice
+        options:
+          - pull_request
+          - issue
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Validate title
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve title
+        id: title
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_KIND: ${{ inputs.kind }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "title=$INPUT_TITLE" >> "$GITHUB_OUTPUT"
+            echo "kind=$INPUT_KIND" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "issues" ]; then
+            echo "title=$ISSUE_TITLE" >> "$GITHUB_OUTPUT"
+            echo "kind=issue" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
+            echo "kind=pull_request" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate PR title
+        if: steps.title.outputs.kind == 'pull_request'
+        env:
+          TITLE: ${{ steps.title.outputs.title }}
+        run: |
+          pattern='^(fix|feat|docs|test|ci|refactor|chore): .+'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            cat <<'EOF'
+          Pull request title must follow CONTRIBUTING.md.
+
+          Use one of:
+          - fix: handle missing accessibility root
+          - feat: add local runtime screen
+          - docs: add live testing checklist
+          - test: add emulator validation fixture
+          - ci: add Android lint workflow
+          - refactor: split agent settings UI
+          - chore: update Gradle config
+          EOF
+            echo "Received: $TITLE"
+            exit 1
+          fi
+
+      - name: Validate issue title
+        if: steps.title.outputs.kind == 'issue'
+        env:
+          TITLE: ${{ steps.title.outputs.title }}
+        run: |
+          pattern='^((Bug|Feature): |(bug|feature|fix|docs|test|ci|refactor|chore): ).+'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            cat <<'EOF'
+          Issue title must follow CONTRIBUTING.md.
+
+          Preferred issue examples:
+          - Bug: Tap by node_id fails after screen transition
+          - Feature: Add local runtime status screen
+
+          Lowercase project prefixes are also accepted for existing planning issues:
+          - feature: define agent event model
+          - fix: handle missing accessibility root
+          EOF
+            echo "Received: $TITLE"
+            exit 1
+          fi
