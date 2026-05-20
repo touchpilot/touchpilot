@@ -82,6 +82,20 @@ For each pass, capture:
 - for the live run: device or emulator name, Android version, and a copy of
   the agent event log exported through `Export Debug Trace`.
 
+## Live Validation Run
+
+Run on commit `ab6092c` using `TouchPilot_API_35` (Android 15, x86_64 google_apis) on Windows. Airplane mode enabled throughout (`settings get global airplane_mode_on` returned `1`).
+
+Validated live:
+
+- `Hello` produced `Hello, I am TouchPilot, how can I help you?` via `ConversationalGate`, no tool call.
+- `help` produced the conversational help reply, no tool call.
+- `Open Settings` emitted an `open_app` approval card with `target: settings`, MEDIUM risk. Approving it launched `com.android.settings/.Settings` (confirmed via `dumpsys activity activities | grep ResumedActivity`).
+- `Go back` emitted a `press_back` approval card. Approving it executed `pressBack` and navigated TouchPilot to the background.
+- `show me something useful` ran two steps locally: `observe_screen` then the deterministic final answer `Local router completed its safe routing pass. Use cloud mode for complex reasoning.` — no model and no cloud call.
+- `type_text` from the Tools panel with `my password is hunter2` was blocked by `DefaultActionPolicy` before execution: `type_text({text=my password is hunter2}) -> false: TouchPilot blocked this request because password workflows are blocked.` (logged in `ToolExecutionLog`.)
+- `dumpsys netstats detail` showed no rx or tx bytes attributed to `dev.touchpilot.app` (uid 10209) for the duration of the run — the app uid was absent from `mAppUidStatsMap`.
+
 ## Known Post-Milestone Follow-Up Areas
 
 - Replace the deterministic fallback in the ambiguous flow with a bundled
