@@ -23,6 +23,7 @@ class AgentRunner(
 ) {
     fun run(task: String, maxSteps: Int = 4): AgentRunResult {
         val transcript = StringBuilder()
+        val events = mutableListOf<AgentEvent>(AgentEvent.UserMessage(task))
         var context = "User task: $task\n\nCurrent screen:\n${SensitiveTextRedactor.redact(toolExecutor.observeScreen())}"
 
         repeat(maxSteps) { step ->
@@ -31,7 +32,7 @@ class AgentRunner(
                 commandProvider.complete(AgentPrompts.systemPrompt(skill), context)
             }.getOrElse { error ->
                 transcript.appendLine("Command provider error: ${error.message}")
-                return AgentRunResult(transcript.toString(), null)
+                return AgentRunResult(transcript.toString(), null, events)
             }
             transcript.appendLine("Model: $raw")
 
@@ -39,18 +40,20 @@ class AgentRunner(
                 AgentCommandParser.parse(raw)
             }.getOrElse { error ->
                 transcript.appendLine("Command parse error: ${error.message}")
-                return AgentRunResult(transcript.toString(), null)
+                return AgentRunResult(transcript.toString(), null, events)
             }
             if (command.finalAnswer != null) {
                 transcript.appendLine("Final: ${command.finalAnswer}")
-                return AgentRunResult(transcript.toString(), command.finalAnswer)
+                events += AgentEvent.FinalAnswer(command.finalAnswer)
+                return AgentRunResult(transcript.toString(), command.finalAnswer, events)
             }
 
             val toolName = command.tool
             if (toolName == null) {
                 transcript.appendLine("No tool or final answer returned.")
-                return AgentRunResult(transcript.toString(), null)
+                return AgentRunResult(transcript.toString(), null, events)
             }
+            AgentEvent.toolRequested(command, source)?.let { events += it }
 
             val validationError = toolExecutor.validate(toolName, command.args)
             val spec = AndroidToolCatalog.find(toolName)
@@ -63,7 +66,12 @@ class AgentRunner(
                     ok = false,
                     message = "denied by skill allowlist"
                 )
-                return AgentRunResult(transcript.toString(), null)
+                events += AgentEvent.PolicyBlocked(
+                    tool = toolName,
+                    reason = "denied by skill allowlist",
+                    userMessage = allowlistError
+                )
+                return AgentRunResult(transcript.toString(), null, events)
             } else if (validationError != null) {
                 transcript.appendLine("Tool validation failed: $validationError")
             } else if (spec != null) {
@@ -82,7 +90,9 @@ class AgentRunner(
                     }
                     is PolicyDecision.RequireApproval -> {
                         transcript.appendLine("Approval requested for $toolName: ${decision.reason}")
-                        val approved = approvalProvider.approve(ToolApprovalRequest(spec, command.args, decision))
+                        val approvalRequest = ToolApprovalRequest(spec, command.args, decision)
+                        events += AgentEvent.approvalRequired(approvalRequest)
+                        val approved = approvalProvider.approve(approvalRequest)
                         if (!approved) {
                             transcript.appendLine("Tool denied by user: $toolName")
                             ToolExecutionLog.record(
@@ -91,30 +101,40 @@ class AgentRunner(
                                 ok = false,
                                 message = "denied by user: ${decision.reason}"
                             )
-                            return AgentRunResult(transcript.toString(), null)
+                            events += AgentEvent.PolicyBlocked(
+                                tool = toolName,
+                                reason = "denied by user: ${decision.reason}",
+                                userMessage = "The user did not approve $toolName."
+                            )
+                            return AgentRunResult(transcript.toString(), null, events)
                         }
                         transcript.appendLine("Tool approved by user: $toolName")
                     }
                     is PolicyDecision.Deny -> {
                         transcript.appendLine("Policy denied $toolName: ${decision.reason}")
                         ToolExecutionLog.record(toolName, "policy=deny", false, decision.userMessage)
-                        return AgentRunResult(transcript.toString(), null)
+                        AgentEvent.policyBlocked(toolName, decision)?.let { events += it }
+                        return AgentRunResult(transcript.toString(), null, events)
                     }
                     is PolicyDecision.Block -> {
                         transcript.appendLine("Policy blocked $toolName: ${decision.reason}")
                         ToolExecutionLog.record(toolName, "policy=block", false, decision.userMessage)
-                        return AgentRunResult(transcript.toString(), null)
+                        AgentEvent.policyBlocked(toolName, decision)?.let { events += it }
+                        return AgentRunResult(transcript.toString(), null, events)
                     }
                 }
             }
 
+            AgentEvent.toolRunning(command, source)?.let { events += it }
             val result = runCatching {
                 toolExecutor.execute(toolName, command.args, source)
             }.getOrElse { error ->
                 transcript.appendLine("Tool execution error: ${error.message}")
+                events += AgentEvent.ToolFailed(tool = toolName, message = error.message ?: "Tool execution error")
                 context = recoveryContext(task, transcript.toString())
                 return@repeat
             }
+            events += AgentEvent.toolResult(toolName, result)
             transcript.appendLine("Tool result: ${result.ok} ${SensitiveTextRedactor.redact(result.message)}")
             if (result.data.isNotEmpty()) {
                 transcript.appendLine("Tool data: ${SensitiveTextRedactor.redact(result.data)}")
@@ -136,7 +156,7 @@ class AgentRunner(
             }
         }
 
-        return AgentRunResult(transcript.toString(), null)
+        return AgentRunResult(transcript.toString(), null, events)
     }
 
     private fun recoveryContext(task: String, transcript: String): String {

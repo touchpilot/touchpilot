@@ -20,5 +20,6 @@ data class AgentCommand(
 
 data class AgentRunResult(
     val transcript: String,
-    val finalAnswer: String?
+    val finalAnswer: String?,
+    val events: List<AgentEvent> = emptyList()
 )
