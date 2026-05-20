@@ -2,7 +2,11 @@ package dev.touchpilot.app.agent
 
 data class ConversationalResponse(val message: String)
 
-object ConversationalGate {
+fun interface ConversationalIntents {
+    fun respond(input: String): ConversationalResponse?
+}
+
+object ConversationalGate : ConversationalIntents {
     private const val GreetingReply = "Hello, I am TouchPilot, how can I help you?"
     private const val HelpReply =
         "I can help you control Android apps, open settings, tap visible text, scroll, " +
@@ -25,7 +29,7 @@ object ConversationalGate {
         )
     )
 
-    fun respond(input: String): ConversationalResponse? {
+    override fun respond(input: String): ConversationalResponse? {
         val normalized = input.trim()
         if (normalized.isEmpty()) return null
         return Conversations

@@ -25,14 +25,14 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentProviderMode
-import dev.touchpilot.app.agent.AgentRunner
 import dev.touchpilot.app.agent.ConversationalGate
-import dev.touchpilot.app.agent.LocalRouterCommandProvider
-import dev.touchpilot.app.agent.OpenAiAgentCommandProvider
+import dev.touchpilot.app.agent.DefaultLocalReasoningCore
+import dev.touchpilot.app.agent.LocalReasoningContext
+import dev.touchpilot.app.agent.LocalReasoningCore
 import dev.touchpilot.app.agent.ProviderConfig
+import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
-import dev.touchpilot.app.localinference.LocalModelCommandProvider
 import dev.touchpilot.app.localinference.LocalModelStatus
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
@@ -59,6 +59,7 @@ class MainActivity : Activity() {
     private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
+    private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var contentRoot: LinearLayout
     private lateinit var statusView: TextView
     private lateinit var executionLogView: TextView
@@ -77,6 +78,17 @@ class MainActivity : Activity() {
         toolExecutor = AndroidToolExecutor(this)
         localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
+
+        reasoningCore = DefaultLocalReasoningCore(
+            invocation = defaultAgentRunInvocation(
+                toolExecutor = toolExecutor,
+                approvalProvider = ToolApprovalProvider { request ->
+                    approveAgentTool(request)
+                },
+                localModelRuntime = localModelRuntime
+            ),
+            sessionContext = { currentReasoningContext() }
+        )
 
         if (conversation.isEmpty()) {
             conversation += ChatEvent.Agent(
@@ -394,42 +406,8 @@ class MainActivity : Activity() {
         showSection(Section.CHAT)
 
         Thread {
-            val providerMode = currentProviderMode()
-            val selectedSkill = selectedSkill()
-            val providerConfig = ProviderConfig(
-                baseUrl = preferences.getString("provider_url", DefaultProviderUrl).orEmpty(),
-                apiKey = if (providerMode == AgentProviderMode.CLOUD) {
-                    runCatching { secretStore.loadApiKey().orEmpty() }.getOrDefault("")
-                } else {
-                    ""
-                },
-                model = preferences.getString("provider_model", DefaultModel).orEmpty()
-            )
-
             val transcript = runCatching {
-                val localRouter = LocalRouterCommandProvider(task, selectedSkill)
-                AgentRunner(
-                    toolExecutor = toolExecutor,
-                    approvalProvider = ToolApprovalProvider { request ->
-                        approveAgentTool(request)
-                    },
-                    commandProvider = when (providerMode) {
-                        AgentProviderMode.CLOUD -> OpenAiAgentCommandProvider(providerConfig)
-                        AgentProviderMode.LOCAL_MODEL -> LocalModelCommandProvider(
-                            runtime = localModelRuntime,
-                            fallback = localRouter,
-                            task = task,
-                            skill = selectedSkill
-                        )
-                        AgentProviderMode.LOCAL_ROUTER -> localRouter
-                    },
-                    skill = selectedSkill,
-                    source = when (providerMode) {
-                        AgentProviderMode.CLOUD -> ToolSource.CLOUD_FALLBACK
-                        AgentProviderMode.LOCAL_MODEL -> ToolSource.LOCAL_MODEL
-                        AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
-                    }
-                ).run(task).transcript
+                reasoningCore.run(task).transcript
             }.getOrElse { error ->
                 "Agent failed: ${error.message}"
             }
@@ -442,6 +420,24 @@ class MainActivity : Activity() {
                 showSection(Section.CHAT)
             }
         }.start()
+    }
+
+    private fun currentReasoningContext(): LocalReasoningContext {
+        val providerMode = currentProviderMode()
+        val providerConfig = ProviderConfig(
+            baseUrl = preferences.getString("provider_url", DefaultProviderUrl).orEmpty(),
+            apiKey = if (providerMode == AgentProviderMode.CLOUD) {
+                runCatching { secretStore.loadApiKey().orEmpty() }.getOrDefault("")
+            } else {
+                ""
+            },
+            model = preferences.getString("provider_model", DefaultModel).orEmpty()
+        )
+        return LocalReasoningContext(
+            skill = selectedSkill(),
+            providerMode = providerMode,
+            providerConfig = providerConfig
+        )
     }
 
     private fun renderSkillsScreen() {
