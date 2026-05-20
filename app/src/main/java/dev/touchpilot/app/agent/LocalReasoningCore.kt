@@ -41,7 +41,9 @@ fun interface AgentRunInvocation {
 class DefaultLocalReasoningCore(
     private val invocation: AgentRunInvocation,
     private val sessionContext: () -> LocalReasoningContext,
-    private val intents: ConversationalIntents = ConversationalGate
+    private val intents: ConversationalIntents = ConversationalGate,
+    private val intentGate: IntentGate = IntentGate(),
+    private val availableSkills: () -> List<Skill> = { emptyList() }
 ) : LocalReasoningCore {
 
     override fun run(task: String, listener: AgentEventListener): AgentRunResult {
@@ -57,10 +59,69 @@ class DefaultLocalReasoningCore(
             )
         }
 
-        val ctx = sessionContext()
-        val result = invocation.invoke(task, ctx)
+        val baseCtx = sessionContext()
+        val intent = intentGate.classify(task, availableSkills())
+
+        when (intent) {
+            is IntentDecision.UnsafeRequest -> return blockUnsafe(task, intent, listener)
+            is IntentDecision.ClarificationNeeded -> return askForClarification(task, intent, listener)
+            is IntentDecision.ExactCommand,
+            is IntentDecision.KnownSkill,
+            is IntentDecision.LocalModelNeeded -> Unit
+        }
+
+        val effectiveCtx = if (intent is IntentDecision.ExactCommand) {
+            // Exact commands bypass the local model so a small model cannot
+            // hallucinate an alternative tool call.
+            baseCtx.copy(providerMode = AgentProviderMode.LOCAL_ROUTER)
+        } else {
+            baseCtx
+        }
+
+        val result = invocation.invoke(task, effectiveCtx)
         result.events.forEach(listener::onEvent)
         return result
+    }
+
+    private fun blockUnsafe(
+        task: String,
+        intent: IntentDecision.UnsafeRequest,
+        listener: AgentEventListener
+    ): AgentRunResult {
+        val userEvent = AgentEvent.UserMessage(task)
+        val blocked = AgentEvent.PolicyBlocked(
+            tool = null,
+            reason = intent.reason,
+            userMessage = intent.userMessage
+        )
+        val finalEvent = AgentEvent.FinalAnswer(intent.userMessage)
+        listener.onEvent(userEvent)
+        listener.onEvent(blocked)
+        listener.onEvent(finalEvent)
+        return AgentRunResult(
+            transcript = "Blocked by intent gate: ${intent.reason}",
+            finalAnswer = intent.userMessage,
+            events = listOf(userEvent, blocked, finalEvent)
+        )
+    }
+
+    private fun askForClarification(
+        task: String,
+        intent: IntentDecision.ClarificationNeeded,
+        listener: AgentEventListener
+    ): AgentRunResult {
+        val userEvent = AgentEvent.UserMessage(task)
+        val assistant = AgentEvent.AssistantMessage(
+            text = intent.clarification,
+            detail = intent.reason
+        )
+        listener.onEvent(userEvent)
+        listener.onEvent(assistant)
+        return AgentRunResult(
+            transcript = "Clarification requested: ${intent.reason}",
+            finalAnswer = intent.clarification,
+            events = listOf(userEvent, assistant)
+        )
     }
 }
 

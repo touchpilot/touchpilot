@@ -156,6 +156,100 @@ class LocalReasoningCoreTest {
         assertIs<OpenAiAgentCommandProvider>(provider)
     }
 
+    @Test
+    fun unsafeIntentShortCircuitsBeforeInvocation() {
+        var invoked = false
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _ ->
+                invoked = true
+                error("unsafe intent must not invoke the runner")
+            },
+            sessionContext = { defaultContext }
+        )
+
+        val result = core.run("Send this payment") { collected += it }
+
+        assertFalse(invoked)
+        assertEquals(3, collected.size)
+        assertIs<AgentEvent.UserMessage>(collected[0])
+        assertIs<AgentEvent.PolicyBlocked>(collected[1])
+        assertIs<AgentEvent.FinalAnswer>(collected[2])
+        assertEquals("Blocked by intent gate: payments are blocked", result.transcript)
+    }
+
+    @Test
+    fun clarificationIntentShortCircuitsBeforeInvocation() {
+        var invoked = false
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _ ->
+                invoked = true
+                error("clarification intent must not invoke the runner")
+            },
+            sessionContext = { defaultContext }
+        )
+
+        val result = core.run("Do the thing I usually do here") { collected += it }
+
+        assertFalse(invoked)
+        assertEquals(2, collected.size)
+        assertIs<AgentEvent.UserMessage>(collected[0])
+        val ask = assertIs<AgentEvent.AssistantMessage>(collected[1])
+        assertEquals(
+            "Can you describe what you would like me to do more specifically?",
+            ask.text
+        )
+        assertEquals(
+            "Can you describe what you would like me to do more specifically?",
+            result.finalAnswer
+        )
+    }
+
+    @Test
+    fun exactCommandIntentForcesLocalRouterModeOnInvocation() {
+        val ctxsSeen = mutableListOf<LocalReasoningContext>()
+        val cloudContext = LocalReasoningContext(
+            skill = null,
+            providerMode = AgentProviderMode.CLOUD,
+            providerConfig = ProviderConfig(baseUrl = "u", apiKey = "k", model = "m")
+        )
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, ctx ->
+                ctxsSeen += ctx
+                AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
+            },
+            sessionContext = { cloudContext }
+        )
+
+        core.run("Go back")
+
+        assertEquals(1, ctxsSeen.size)
+        assertEquals(AgentProviderMode.LOCAL_ROUTER, ctxsSeen[0].providerMode)
+    }
+
+    @Test
+    fun localModelNeededIntentLeavesContextUntouched() {
+        val ctxsSeen = mutableListOf<LocalReasoningContext>()
+        val cloudContext = LocalReasoningContext(
+            skill = null,
+            providerMode = AgentProviderMode.CLOUD,
+            providerConfig = ProviderConfig(baseUrl = "u", apiKey = "k", model = "m")
+        )
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, ctx ->
+                ctxsSeen += ctx
+                AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
+            },
+            sessionContext = { cloudContext }
+        )
+
+        core.run("Find the Wi-Fi toggle")
+
+        assertEquals(1, ctxsSeen.size)
+        assertEquals(AgentProviderMode.CLOUD, ctxsSeen[0].providerMode)
+    }
+
     private class StubRuntime(private val output: String) : LocalCommandModelRuntime {
         override fun status(): LocalModelStatus = LocalModelStatus(
             available = true,

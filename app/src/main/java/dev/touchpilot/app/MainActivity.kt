@@ -87,7 +87,8 @@ class MainActivity : Activity() {
                 },
                 localModelRuntime = localModelRuntime
             ),
-            sessionContext = { currentReasoningContext() }
+            sessionContext = { currentReasoningContext() },
+            availableSkills = { skills }
         )
 
         if (conversation.isEmpty()) {
