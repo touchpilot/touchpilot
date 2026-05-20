@@ -85,4 +85,45 @@ object AndroidToolCatalog {
     fun find(name: String): ToolSpec? {
         return initialTools.firstOrNull { it.name == name }
     }
+
+    fun validate(name: String, args: Map<String, String>): String? {
+        val spec = find(name) ?: return "Unknown tool: $name"
+        return spec.validateArgs(args)
+    }
+
+    private fun ToolSpec.validateArgs(args: Map<String, String>): String? {
+        val unknownArgs = args.keys - arguments.keys
+        if (unknownArgs.isNotEmpty()) {
+            return "Unknown argument(s) for $name: ${unknownArgs.joinToString()}"
+        }
+
+        val missingArgs = requiredArguments.filter { args[it].isNullOrBlank() }
+        if (missingArgs.isNotEmpty()) {
+            return "Missing required argument(s) for $name: ${missingArgs.joinToString()}"
+        }
+
+        if (name == "tap") {
+            val selectors = listOf("text", "node_id", "bounds")
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.size != 1) {
+                return "tap requires exactly one selector: text, node_id, or bounds"
+            }
+        }
+
+        if (name == "scroll") {
+            val direction = args["direction"].orEmpty()
+            if (!direction.equals("forward", ignoreCase = true) &&
+                !direction.equals("backward", ignoreCase = true)
+            ) {
+                return "Invalid scroll direction: $direction"
+            }
+        }
+
+        val timeout = args["timeout_ms"]
+        if (timeout != null && timeout.toLongOrNull() == null) {
+            return "timeout_ms must be a number"
+        }
+
+        return null
+    }
 }

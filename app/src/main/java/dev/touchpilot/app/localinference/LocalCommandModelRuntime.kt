@@ -1,7 +1,6 @@
 package dev.touchpilot.app.localinference
 
 import android.content.Context
-import dev.touchpilot.app.agent.AgentCommandParser
 import dev.touchpilot.app.agent.AgentCommandProvider
 import dev.touchpilot.app.agent.LocalRouterCommandProvider
 import dev.touchpilot.app.memory.Skill
@@ -224,17 +223,23 @@ class LocalModelCommandProvider(
                 runtime.route(task, context, skill)
             }.getOrNull()
 
-            if (modelResult != null && isValidCommand(modelResult)) {
-                return modelResult
+            val validOutput = modelResult?.let { validateModelOutput(it) }
+            if (validOutput != null) {
+                return validOutput.toCommandJson()
             }
         }
 
         return fallback.complete(systemPrompt, context)
     }
 
-    private fun isValidCommand(raw: String): Boolean {
-        return runCatching {
-            AgentCommandParser.parse(raw)
-        }.isSuccess
+    private fun validateModelOutput(raw: String): LocalModelOutput? {
+        val output = runCatching {
+            LocalModelOutputParser.parse(raw)
+        }.getOrNull() ?: return null
+
+        return when (val validation = LocalModelOutputValidator.validate(output, skill)) {
+            is LocalModelOutputValidation.Valid -> validation.output
+            is LocalModelOutputValidation.Invalid -> null
+        }
     }
 }
