@@ -26,7 +26,15 @@ fun interface AgentEventListener {
 data class LocalReasoningContext(
     val skill: Skill?,
     val providerMode: AgentProviderMode,
-    val providerConfig: ProviderConfig
+    val providerConfig: ProviderConfig,
+    /**
+     * When set, [buildCommandProvider] returns a [FixedCommandProvider] that
+     * emits exactly this command on the next runner step. Populated by the
+     * intent gate's [IntentDecision.ExactCommand] branch so the gate's
+     * decided tool/args are what actually runs, with no second parser
+     * deciding differently.
+     */
+    val exactCommand: AgentCommand? = null
 )
 
 /**
@@ -71,9 +79,19 @@ class DefaultLocalReasoningCore(
         }
 
         val effectiveCtx = if (intent is IntentDecision.ExactCommand) {
-            // Exact commands bypass the local model so a small model cannot
-            // hallucinate an alternative tool call.
-            baseCtx.copy(providerMode = AgentProviderMode.LOCAL_ROUTER)
+            // Run the gate's decided tool/args verbatim through a
+            // FixedCommandProvider. Forcing LOCAL_ROUTER mode alone would let
+            // the router's independent parser pick a different action (e.g.
+            // "scroll back" -> press_back vs the gate's scroll/forward), so
+            // we plumb the exact command into the context.
+            baseCtx.copy(
+                providerMode = AgentProviderMode.LOCAL_ROUTER,
+                exactCommand = AgentCommand(
+                    tool = intent.tool,
+                    args = intent.args,
+                    finalAnswer = null
+                )
+            )
         } else {
             baseCtx
         }
@@ -173,6 +191,9 @@ fun buildCommandProvider(
     context: LocalReasoningContext,
     localModelRuntime: LocalCommandModelRuntime
 ): AgentCommandProvider {
+    context.exactCommand?.let { command ->
+        return FixedCommandProvider(command)
+    }
     val localRouter = LocalRouterCommandProvider(task, context.skill)
     return when (context.providerMode) {
         AgentProviderMode.CLOUD -> OpenAiAgentCommandProvider(context.providerConfig)

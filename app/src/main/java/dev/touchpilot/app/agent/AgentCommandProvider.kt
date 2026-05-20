@@ -16,6 +16,43 @@ class OpenAiAgentCommandProvider(
     }
 }
 
+/**
+ * Returns a pre-decided tool command on the first call and a final answer on
+ * every call after. Used by [DefaultLocalReasoningCore] for
+ * [IntentDecision.ExactCommand] so the tool/args picked by [IntentGate]
+ * execute as-is — no second exact-command parser runs and the two cannot
+ * drift.
+ */
+class FixedCommandProvider(
+    private val command: AgentCommand,
+    private val finalMessage: String = "Exact command completed."
+) : AgentCommandProvider {
+    private var emittedCommand = false
+
+    override fun complete(systemPrompt: String, context: String): String {
+        if (!emittedCommand) {
+            emittedCommand = true
+            return commandJson(command)
+        }
+        return """{"final":"${escapeJson(finalMessage)}"}"""
+    }
+
+    private fun commandJson(command: AgentCommand): String {
+        val tool = command.tool ?: error("FixedCommandProvider requires command.tool")
+        val argsJson = command.args.entries.joinToString(separator = ",") { (key, value) ->
+            """"$key":"${escapeJson(value)}""""
+        }
+        return """{"tool":"$tool","args":{$argsJson}}"""
+    }
+
+    private fun escapeJson(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+    }
+}
+
 class LocalRouterCommandProvider(
     private val task: String,
     private val skill: Skill?

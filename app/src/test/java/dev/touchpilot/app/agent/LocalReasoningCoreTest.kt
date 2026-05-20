@@ -226,6 +226,51 @@ class LocalReasoningCoreTest {
 
         assertEquals(1, ctxsSeen.size)
         assertEquals(AgentProviderMode.LOCAL_ROUTER, ctxsSeen[0].providerMode)
+        // The gate's decided tool/args must reach the invocation so a second
+        // exact-command parser cannot pick a different action.
+        assertEquals("press_back", ctxsSeen[0].exactCommand?.tool)
+        assertEquals(emptyMap(), ctxsSeen[0].exactCommand?.args)
+    }
+
+    @Test
+    fun scrollBackIntentExecutesWhateverTheGateDecidedNotPressBack() {
+        // Regression for the reviewer's example on PR #48: "scroll back"
+        // makes IntentGate emit scroll/forward, but LocalRouterCommandProvider's
+        // independent parser would press_back. The gate's decision must win.
+        val ctxsSeen = mutableListOf<LocalReasoningContext>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, ctx ->
+                ctxsSeen += ctx
+                AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
+            },
+            sessionContext = { defaultContext }
+        )
+
+        core.run("scroll back")
+
+        val gateCommand = ctxsSeen.single().exactCommand
+        assertEquals("scroll", gateCommand?.tool)
+        assertEquals("forward", gateCommand?.args?.get("direction"))
+    }
+
+    @Test
+    fun exactCommandContextProducesFixedCommandProvider() {
+        val ctx = defaultContext.copy(
+            exactCommand = AgentCommand(
+                tool = "press_back",
+                args = emptyMap(),
+                finalAnswer = null
+            )
+        )
+        val provider = buildCommandProvider(
+            task = "go back",
+            context = ctx,
+            localModelRuntime = NeverCalledRuntime
+        )
+        assertIs<FixedCommandProvider>(provider)
+
+        val parsed = AgentCommandParser.parse(provider.complete("", ""))
+        assertEquals("press_back", parsed.tool)
     }
 
     @Test
