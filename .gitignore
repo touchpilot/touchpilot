@@ -17,3 +17,7 @@ captures/
 # Logs
 *.log
 logs/
+
+# Local research and generated working files
+docs/research/
+tmp/

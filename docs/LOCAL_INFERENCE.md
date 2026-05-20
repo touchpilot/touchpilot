@@ -47,24 +47,24 @@ Tradeoffs:
 - Android integration is more native-build heavy.
 - Device RAM, thermals, and token speed will strongly constrain UX.
 
-## Local-First Runtime Modes
+## Local Runtime Modes
 
-The Android app now has three runtime modes:
+The Android app should keep all core runtime modes local:
 
 - Local router: default offline deterministic routing for simple commands such
   as observe, back, home, scroll, open app, and tap text.
 - Local model: LiteRT command-routing runtime. If the model cannot be loaded,
   it falls back to the deterministic local router and reports that fallback in
   the runtime UI.
-- Experimental cloud fallback: optional OpenAI-compatible chat completions for
-  development and complex tasks.
+- Future local LLM/VLM: broader local reasoning, planning, and visual fallback
+  behind the same tool and policy contract.
 
 The local router is intentionally conservative. It is useful for validating the
 command-provider boundary, tool policy path, skill allowlists, approvals, and
 fallback behavior without shipping a large model runtime prematurely.
 
-Cloud fallback support remains available, but basic Android control should not
-require a provider URL, model name, or API key.
+Cloud fallback is not part of the product direction. Basic Android control and
+AI-assisted routing should not require a provider URL, model name, or API key.
 
 ## Runtime Boundary
 
@@ -77,8 +77,6 @@ behind validation, skill allowlists, approval policy, and local logs.
 - Small local routing model: current LiteRT path for command route logits and
   future target for richer classification and structured argument extraction.
 - Local LLM runtime: future broader reasoning path for multi-step workflows.
-- Experimental cloud fallback: optional secondary path, not the primary product
-  direction.
 
 ## LiteRT Command Router Asset Contract
 
