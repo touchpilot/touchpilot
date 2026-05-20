@@ -50,7 +50,7 @@ class DefaultLocalReasoningCore(
     private val invocation: AgentRunInvocation,
     private val sessionContext: () -> LocalReasoningContext,
     private val intents: ConversationalIntents = ConversationalGate,
-    private val intentGate: IntentGate = IntentGate(),
+    private val intentClassifier: IntentClassifier = IntentGate(),
     private val availableSkills: () -> List<Skill> = { emptyList() }
 ) : LocalReasoningCore {
 
@@ -68,7 +68,8 @@ class DefaultLocalReasoningCore(
         }
 
         val baseCtx = sessionContext()
-        val intent = intentGate.classify(task, availableSkills())
+        val skills = availableSkills()
+        val intent = intentClassifier.classify(task, skills)
 
         when (intent) {
             is IntentDecision.UnsafeRequest -> return blockUnsafe(task, intent, listener)
@@ -78,7 +79,8 @@ class DefaultLocalReasoningCore(
             is IntentDecision.LocalModelNeeded -> Unit
         }
 
-        val effectiveCtx = if (intent is IntentDecision.ExactCommand) {
+        val effectiveCtx = when (intent) {
+            is IntentDecision.ExactCommand -> {
             // Run the gate's decided tool/args verbatim through a
             // FixedCommandProvider. Forcing LOCAL_ROUTER mode alone would let
             // the router's independent parser pick a different action (e.g.
@@ -92,8 +94,24 @@ class DefaultLocalReasoningCore(
                     finalAnswer = null
                 )
             )
-        } else {
-            baseCtx
+            }
+            is IntentDecision.KnownSkill -> {
+                val matchedSkill = skills.firstOrNull { it.id == intent.skillId }
+                if (matchedSkill == null) {
+                    return askForClarification(
+                        task = task,
+                        intent = IntentDecision.ClarificationNeeded(
+                            reason = "matched skill '${intent.skillId}' is unavailable",
+                            clarification = "I couldn't load that skill. Please pick another skill or rephrase the request."
+                        ),
+                        listener = listener
+                    )
+                }
+                baseCtx.copy(skill = matchedSkill)
+            }
+            is IntentDecision.LocalModelNeeded -> baseCtx
+            is IntentDecision.UnsafeRequest,
+            is IntentDecision.ClarificationNeeded -> error("handled above")
         }
 
         val result = invocation.invoke(task, effectiveCtx)

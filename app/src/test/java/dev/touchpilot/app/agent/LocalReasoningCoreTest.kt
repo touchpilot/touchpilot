@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -157,6 +158,29 @@ class LocalReasoningCoreTest {
     }
 
     @Test
+    fun localRouterRespectsSkillAllowlist() {
+        val restrictedSkill = Skill(
+            id = "observe-only",
+            title = "Observe Only",
+            markdown = "",
+            allowedTools = setOf("observe_screen")
+        )
+        val ctx = defaultContext.copy(skill = restrictedSkill)
+        val provider = buildCommandProvider(
+            task = "go home",
+            context = ctx,
+            localModelRuntime = NeverCalledRuntime
+        )
+
+        assertIs<LocalRouterCommandProvider>(provider)
+        val first = AgentCommandParser.parse(provider.complete("", ""))
+        assertEquals("observe_screen", first.tool)
+        val second = AgentCommandParser.parse(provider.complete("", ""))
+        assertNull(second.tool)
+        assertEquals("Local router completed its safe routing pass. Use cloud mode for complex reasoning.", second.finalAnswer)
+    }
+
+    @Test
     fun unsafeIntentShortCircuitsBeforeInvocation() {
         var invoked = false
         val collected = mutableListOf<AgentEvent>()
@@ -293,6 +317,76 @@ class LocalReasoningCoreTest {
 
         assertEquals(1, ctxsSeen.size)
         assertEquals(AgentProviderMode.CLOUD, ctxsSeen[0].providerMode)
+    }
+
+    @Test
+    fun knownSkillIntentOverridesSessionSkillWithMatchedSkill() {
+        val baseSkill = Skill(
+            id = "messages",
+            title = "Messages",
+            markdown = "",
+            allowedTools = setOf("open_app", "type_text")
+        )
+        val matchedSkill = Skill(
+            id = "settings",
+            title = "Settings",
+            markdown = "",
+            allowedTools = setOf("open_app", "tap")
+        )
+        val ctxsSeen = mutableListOf<LocalReasoningContext>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, ctx ->
+                ctxsSeen += ctx
+                AgentRunResult(transcript = "", finalAnswer = "ok", events = emptyList())
+            },
+            sessionContext = {
+                defaultContext.copy(
+                    skill = baseSkill,
+                    providerMode = AgentProviderMode.LOCAL_MODEL
+                )
+            },
+            availableSkills = { listOf(matchedSkill) }
+        )
+
+        core.run("help me with settings")
+
+        assertEquals(1, ctxsSeen.size)
+        val effectiveSkill = assertNotNull(ctxsSeen.single().skill)
+        assertEquals("settings", effectiveSkill.id)
+        assertEquals(setOf("open_app", "tap"), effectiveSkill.allowedTools)
+        assertEquals(AgentProviderMode.LOCAL_MODEL, ctxsSeen.single().providerMode)
+    }
+
+    @Test
+    fun unresolvedKnownSkillAsksForClarification() {
+        var invoked = false
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _ ->
+                invoked = true
+                error("missing skill should not invoke runner")
+            },
+            sessionContext = { defaultContext },
+            intentClassifier = IntentClassifier { _, _ ->
+                IntentDecision.KnownSkill(
+                    skillId = "missing-skill",
+                    skillTitle = "Missing Skill",
+                    reason = "test mismatch"
+                )
+            }
+        )
+
+        val result = core.run("use missing skill") { collected += it }
+
+        assertFalse(invoked)
+        assertEquals(2, collected.size)
+        assertIs<AgentEvent.UserMessage>(collected[0])
+        val assistant = assertIs<AgentEvent.AssistantMessage>(collected[1])
+        assertEquals(
+            "I couldn't load that skill. Please pick another skill or rephrase the request.",
+            assistant.text
+        )
+        assertEquals(assistant.text, result.finalAnswer)
     }
 
     private class StubRuntime(private val output: String) : LocalCommandModelRuntime {

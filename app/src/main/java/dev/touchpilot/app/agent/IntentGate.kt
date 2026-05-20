@@ -58,8 +58,14 @@ sealed class IntentDecision {
     ) : IntentDecision()
 }
 
-class IntentGate {
-    fun classify(task: String, skills: List<Skill> = emptyList()): IntentDecision {
+fun interface IntentClassifier {
+    fun classify(task: String, skills: List<Skill>): IntentDecision
+}
+
+class IntentGate : IntentClassifier {
+    fun classify(task: String): IntentDecision = classify(task, emptyList())
+
+    override fun classify(task: String, skills: List<Skill>): IntentDecision {
         val normalized = task.trim().lowercase()
         if (normalized.isBlank()) {
             return IntentDecision.ClarificationNeeded(
