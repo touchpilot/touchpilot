@@ -132,6 +132,37 @@ class ScreenContextSummarizerTest {
     }
 
     @Test
+    fun textSensitiveNodesAreFilteredEvenWithoutNodeSensitiveFlag() {
+        val emailInput = ScreenNode(
+            nodeId = "0.0",
+            role = NodeRole.INPUT,
+            text = ScreenText.of("user@example.com"),
+            isInputField = true
+        )
+        val emailClickable = ScreenNode(
+            nodeId = "0.1",
+            role = NodeRole.BUTTON,
+            text = ScreenText.of("user@example.com"),
+            clickable = true
+        )
+        val continueButton = ScreenNode(
+            nodeId = "0.2",
+            role = NodeRole.BUTTON,
+            text = ScreenText.of("Continue"),
+            clickable = true
+        )
+
+        val summary = summarizer.summarize(
+            ScreenContext(appLabel = "Account", nodes = listOf(emailInput, emailClickable, continueButton))
+        )
+
+        assertFalse(summary.sentence.contains("@example.com"))
+        assertFalse(summary.suggestedActions.any { it.tool == "type_text" })
+        assertFalse(summary.suggestedActions.any { it.label.contains("@example.com") })
+        assertTrue(summary.suggestedActions.any { it.label == "Tap Continue" })
+    }
+
+    @Test
     fun emptyContextReturnsWeakScreenMessageAndNoSuggestions() {
         val summary = summarizer.summarize(ScreenContext.Empty)
         assertEquals(ScreenContextSummarizer.WeakScreenMessage, summary.sentence)

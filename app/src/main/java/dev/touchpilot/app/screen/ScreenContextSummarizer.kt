@@ -29,8 +29,7 @@ class ScreenContextSummarizer(
             )
         }
 
-        val visibleClickables = context.clickableNodes
-            .filter { !it.sensitive && it.text.raw.isNotBlank() }
+        val visibleClickables = context.clickableNodes.filter { it.isSafeToSurface }
 
         val sentence = buildSentence(context, visibleClickables)
         val suggestions = buildSuggestions(context, visibleClickables)
@@ -91,7 +90,8 @@ class ScreenContextSummarizer(
             )
         }
 
-        val firstInput = context.inputFields.firstOrNull { !it.sensitive }
+        val firstInput = context.inputFields.firstOrNull { it.isSafeToSurface || it.text.raw.isBlank() }
+            ?.takeUnless { it.sensitive || it.text.isSensitive }
         if (firstInput != null) {
             val descriptor = firstInput.text.displaySafe.ifBlank { "input field" }
             suggestions += SuggestedAction(
@@ -138,6 +138,17 @@ class ScreenContextSummarizer(
             else -> items.dropLast(1).joinToString(", ") + ", and " + items.last()
         }
     }
+
+    /**
+     * A node is safe to mention by name only when neither the explicit
+     * password/secret flag is set *and* the redactor has not classified its
+     * text as sensitive. The combined check matches
+     * [ScreenContext.containsSensitiveContent], so a node that contributes to
+     * "this screen has sensitive content" never appears verbatim in the
+     * sentence or the suggestion list.
+     */
+    private val ScreenNode.isSafeToSurface: Boolean
+        get() = !sensitive && !text.isSensitive && text.raw.isNotBlank()
 
     companion object {
         const val WeakScreenMessage: String =
