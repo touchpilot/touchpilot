@@ -130,4 +130,46 @@ class IntentGateTest {
         val decision = gate.classify("Go back", skills = listOf(skill))
         assertIs<IntentDecision.ExactCommand>(decision)
     }
+
+    @Test
+    fun classifiesWhatScreenAmIOnAsScreenInquiry() {
+        assertIs<IntentDecision.ScreenInquiry>(gate.classify("What screen am I on?"))
+    }
+
+    @Test
+    fun classifiesWhatCanYouDoHereAsScreenInquiry() {
+        assertIs<IntentDecision.ScreenInquiry>(gate.classify("what can you do here"))
+    }
+
+    @Test
+    fun classifiesWhatButtonsAreVisibleAsScreenInquiry() {
+        assertIs<IntentDecision.ScreenInquiry>(gate.classify("What buttons are visible?"))
+    }
+
+    @Test
+    fun classifiesSummarizeThisScreenAsScreenInquiry() {
+        assertIs<IntentDecision.ScreenInquiry>(gate.classify("Summarize this screen"))
+        assertIs<IntentDecision.ScreenInquiry>(gate.classify("summarise the screen"))
+    }
+
+    @Test
+    fun classifiesSuggestActionsForThisScreenAsScreenInquiry() {
+        assertIs<IntentDecision.ScreenInquiry>(gate.classify("Suggest actions for this screen"))
+    }
+
+    @Test
+    fun whatCanYouDoWithoutHereStaysOutOfScreenInquiry() {
+        // "what can you do" (without "here") is handled by ConversationalGate
+        // as the generic help reply; IntentGate should not claim it.
+        val decision = gate.classify("what can you do")
+        assertIs<IntentDecision.LocalModelNeeded>(decision)
+    }
+
+    @Test
+    fun screenInquiryWinsOverExactCommandWhenBothCouldMatch() {
+        // "what can i do here" has no exact command, but a phrasing like
+        // "summarize the home screen" contains "home" which would otherwise
+        // trip the press_home exact command. Screen inquiry runs first.
+        assertIs<IntentDecision.ScreenInquiry>(gate.classify("summarize the home screen"))
+    }
 }

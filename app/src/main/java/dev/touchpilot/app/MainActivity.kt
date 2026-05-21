@@ -83,7 +83,8 @@ class MainActivity : Activity() {
                 localModelRuntime = localModelRuntime
             ),
             sessionContext = { currentReasoningContext() },
-            availableSkills = { skills }
+            availableSkills = { skills },
+            screenContextProvider = { AccessibilityBridge.observeScreenContext() }
         )
 
         if (conversation.isEmpty()) {
