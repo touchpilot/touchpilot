@@ -371,6 +371,79 @@ class LocalReasoningCoreTest {
         assertEquals(assistant.text, result.finalAnswer)
     }
 
+    @Test
+    fun screenInquiryIntentQueriesProviderAndShortCircuitsBeforeInvocation() {
+        var invoked = false
+        val providerCalls = AtomicInt()
+        val collected = mutableListOf<AgentEvent>()
+        val screen = dev.touchpilot.app.screen.ScreenContext(
+            appLabel = "Settings",
+            nodes = listOf(
+                dev.touchpilot.app.screen.ScreenNode(
+                    nodeId = "0.0",
+                    role = dev.touchpilot.app.screen.NodeRole.BUTTON,
+                    text = dev.touchpilot.app.screen.ScreenText.of("Network & internet"),
+                    clickable = true
+                )
+            )
+        )
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _ ->
+                invoked = true
+                error("screen inquiry must not invoke the runner")
+            },
+            sessionContext = { defaultContext },
+            screenContextProvider = {
+                providerCalls.value += 1
+                screen
+            }
+        )
+
+        val result = core.run("What screen am I on?") { collected += it }
+
+        assertFalse(invoked)
+        assertEquals(1, providerCalls.value)
+        assertEquals(3, collected.size)
+        assertIs<AgentEvent.UserMessage>(collected[0])
+        val assistant = assertIs<AgentEvent.AssistantMessage>(collected[1])
+        assertTrue(assistant.text.startsWith("I see the Settings screen."))
+        assertTrue(assistant.detail.contains("Suggested actions:"))
+        val finalEvent = assertIs<AgentEvent.FinalAnswer>(collected[2])
+        assertEquals(assistant.text, finalEvent.text)
+        assertEquals(assistant.text, result.finalAnswer)
+        // Transcript surfaces the summary plus the suggestion block so the
+        // chat timeline shows the actual answer rather than a diagnostic.
+        assertTrue(result.transcript.startsWith("I see the Settings screen."))
+        assertTrue(result.transcript.contains("Suggested actions:"))
+    }
+
+    @Test
+    fun screenInquiryWithoutProviderFallsBackToWeakScreenMessage() {
+        var invoked = false
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _ ->
+                invoked = true
+                error("screen inquiry must not invoke the runner")
+            },
+            sessionContext = { defaultContext }
+            // screenContextProvider intentionally left at default (Empty).
+        )
+
+        val result = core.run("what can you do here") { collected += it }
+
+        assertFalse(invoked)
+        assertEquals(3, collected.size)
+        val assistant = assertIs<AgentEvent.AssistantMessage>(collected[1])
+        assertTrue(
+            assistant.text.startsWith("I can see this screen, but the app exposes limited"),
+            "expected weak-screen fallback, got: ${assistant.text}"
+        )
+        assertEquals(assistant.text, result.finalAnswer)
+    }
+
+    private class AtomicInt(var value: Int = 0)
+
     private class StubRuntime(private val output: String) : LocalCommandModelRuntime {
         override fun status(): LocalModelStatus = LocalModelStatus(
             available = true,

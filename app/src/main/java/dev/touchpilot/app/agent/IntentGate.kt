@@ -50,6 +50,16 @@ sealed class IntentDecision {
     ) : IntentDecision()
 
     /**
+     * User is asking about the current Android screen ("what screen am I on",
+     * "what can you do here", "suggest actions for this screen"). The
+     * reasoning core answers from a local [dev.touchpilot.app.screen.ScreenContext]
+     * summary instead of invoking the agent runner.
+     */
+    data class ScreenInquiry(
+        override val reason: String
+    ) : IntentDecision()
+
+    /**
      * No deterministic path matched — defer to the configured local model path
      * for reasoning.
      */
@@ -75,11 +85,18 @@ class IntentGate : IntentClassifier {
         }
 
         detectUnsafe(normalized)?.let { return it }
+        detectScreenInquiry(normalized)?.let { return it }
         detectExactCommand(normalized)?.let { return it }
         detectKnownSkill(normalized, skills)?.let { return it }
         detectAmbiguousReference(normalized)?.let { return it }
 
         return IntentDecision.LocalModelNeeded(reason = "no deterministic route matched")
+    }
+
+    private fun detectScreenInquiry(normalized: String): IntentDecision.ScreenInquiry? {
+        val match = ScreenInquiryPatterns.firstOrNull { pattern -> pattern.containsMatchIn(normalized) }
+            ?: return null
+        return IntentDecision.ScreenInquiry(reason = "screen inquiry phrase '${match.pattern}'")
     }
 
     private fun detectUnsafe(normalized: String): IntentDecision.UnsafeRequest? {
@@ -178,6 +195,17 @@ class IntentGate : IntentClassifier {
             "bank" to "banking or financial actions are blocked",
             "wire transfer" to "banking or financial actions are blocked",
             "transfer money" to "banking or financial actions are blocked"
+        )
+
+        val ScreenInquiryPatterns: List<Regex> = listOf(
+            Regex("\\bwhat\\s+screen\\s+am\\s+i\\s+on\\b"),
+            Regex("\\bwhat\\s+can\\s+you\\s+do\\s+here\\b"),
+            Regex("\\bwhat\\s+can\\s+i\\s+do\\s+here\\b"),
+            Regex("\\bwhat\\s+(actions|buttons|controls)\\s+(are|can\\s+i)\\s+\\w+"),
+            Regex("\\bwhat\\s+(is|are)\\s+on\\s+(this|the)\\s+screen\\b"),
+            Regex("\\b(summari[sz]e|describe)\\b[\\w\\s-]{0,40}?\\bscreen\\b"),
+            Regex("\\bsuggest\\s+actions?\\s+(for|on)\\s+(this|the)\\s+screen\\b"),
+            Regex("\\bwhat\\s+actions?\\s+can\\s+i\\s+take\\s+here\\b")
         )
 
         val AmbiguousPhrases: List<String> = listOf(
