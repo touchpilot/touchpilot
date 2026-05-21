@@ -104,7 +104,7 @@ Validated live:
 - `help` produced the conversational help reply, no tool call.
 - `Open Settings` emitted an `open_app` approval card with `target: settings`, MEDIUM risk. Approving it launched `com.android.settings/.Settings` (confirmed via `dumpsys activity activities | grep ResumedActivity`).
 - `Go back` emitted a `press_back` approval card. Approving it executed `pressBack` and navigated TouchPilot to the background.
-- `show me something useful` ran two steps locally: `observe_screen` then the deterministic final answer `Local router completed its safe routing pass. Use cloud mode for complex reasoning.` — no model and no cloud call.
+- `show me something useful` ran two steps locally: `observe_screen` then the deterministic final answer `Local router completed its safe routing pass. Try a more specific request, a skill, or local model mode for ambiguous tasks.` — no cloud call.
 - `type_text` from the Tools panel with `my password is hunter2` was blocked by `DefaultActionPolicy` before execution: `type_text({text=my password is hunter2}) -> false: TouchPilot blocked this request because password workflows are blocked.` (logged in `ToolExecutionLog`.)
 - `dumpsys netstats detail` showed no rx or tx bytes attributed to `dev.touchpilot.app` (uid 10209) for the duration of the run — the app uid was absent from `mAppUidStatsMap`.
 

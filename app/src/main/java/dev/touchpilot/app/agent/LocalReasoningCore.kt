@@ -26,7 +26,6 @@ fun interface AgentEventListener {
 data class LocalReasoningContext(
     val skill: Skill?,
     val providerMode: AgentProviderMode,
-    val providerConfig: ProviderConfig,
     /**
      * When set, [buildCommandProvider] returns a [FixedCommandProvider] that
      * emits exactly this command on the next runner step. Populated by the
@@ -214,7 +213,6 @@ fun buildCommandProvider(
     }
     val localRouter = LocalRouterCommandProvider(task, context.skill)
     return when (context.providerMode) {
-        AgentProviderMode.CLOUD -> OpenAiAgentCommandProvider(context.providerConfig)
         AgentProviderMode.LOCAL_MODEL -> LocalModelCommandProvider(
             runtime = localModelRuntime,
             fallback = localRouter,
@@ -226,7 +224,6 @@ fun buildCommandProvider(
 }
 
 private fun AgentProviderMode.toToolSource(): ToolSource = when (this) {
-    AgentProviderMode.CLOUD -> ToolSource.CLOUD_FALLBACK
     AgentProviderMode.LOCAL_MODEL -> ToolSource.LOCAL_MODEL
     AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
 }

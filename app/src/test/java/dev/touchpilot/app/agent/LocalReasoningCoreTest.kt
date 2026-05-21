@@ -15,8 +15,7 @@ import kotlin.test.assertTrue
 class LocalReasoningCoreTest {
     private val defaultContext = LocalReasoningContext(
         skill = null,
-        providerMode = AgentProviderMode.LOCAL_ROUTER,
-        providerConfig = ProviderConfig(baseUrl = "", apiKey = "", model = "")
+        providerMode = AgentProviderMode.LOCAL_ROUTER
     )
 
     @Test
@@ -140,24 +139,6 @@ class LocalReasoningCoreTest {
     }
 
     @Test
-    fun providerFactoryPicksCloudWhenModeIsCloud() {
-        val ctx = defaultContext.copy(
-            providerMode = AgentProviderMode.CLOUD,
-            providerConfig = ProviderConfig(
-                baseUrl = "https://example.com/v1/chat/completions",
-                apiKey = "k",
-                model = "m"
-            )
-        )
-        val provider = buildCommandProvider(
-            task = "open Settings",
-            context = ctx,
-            localModelRuntime = NeverCalledRuntime
-        )
-        assertIs<OpenAiAgentCommandProvider>(provider)
-    }
-
-    @Test
     fun localRouterRespectsSkillAllowlist() {
         val restrictedSkill = Skill(
             id = "observe-only",
@@ -177,7 +158,10 @@ class LocalReasoningCoreTest {
         assertEquals("observe_screen", first.tool)
         val second = AgentCommandParser.parse(provider.complete("", ""))
         assertNull(second.tool)
-        assertEquals("Local router completed its safe routing pass. Use cloud mode for complex reasoning.", second.finalAnswer)
+        assertEquals(
+            "Local router completed its safe routing pass. Try a more specific request, a skill, or local model mode for ambiguous tasks.",
+            second.finalAnswer
+        )
     }
 
     @Test
@@ -233,17 +217,16 @@ class LocalReasoningCoreTest {
     @Test
     fun exactCommandIntentForcesLocalRouterModeOnInvocation() {
         val ctxsSeen = mutableListOf<LocalReasoningContext>()
-        val cloudContext = LocalReasoningContext(
+        val localModelContext = LocalReasoningContext(
             skill = null,
-            providerMode = AgentProviderMode.CLOUD,
-            providerConfig = ProviderConfig(baseUrl = "u", apiKey = "k", model = "m")
+            providerMode = AgentProviderMode.LOCAL_MODEL
         )
         val core = DefaultLocalReasoningCore(
             invocation = { _, ctx ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
             },
-            sessionContext = { cloudContext }
+            sessionContext = { localModelContext }
         )
 
         core.run("Go back")
@@ -300,23 +283,22 @@ class LocalReasoningCoreTest {
     @Test
     fun localModelNeededIntentLeavesContextUntouched() {
         val ctxsSeen = mutableListOf<LocalReasoningContext>()
-        val cloudContext = LocalReasoningContext(
+        val localModelContext = LocalReasoningContext(
             skill = null,
-            providerMode = AgentProviderMode.CLOUD,
-            providerConfig = ProviderConfig(baseUrl = "u", apiKey = "k", model = "m")
+            providerMode = AgentProviderMode.LOCAL_MODEL
         )
         val core = DefaultLocalReasoningCore(
             invocation = { _, ctx ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
             },
-            sessionContext = { cloudContext }
+            sessionContext = { localModelContext }
         )
 
         core.run("Find the Wi-Fi toggle")
 
         assertEquals(1, ctxsSeen.size)
-        assertEquals(AgentProviderMode.CLOUD, ctxsSeen[0].providerMode)
+        assertEquals(AgentProviderMode.LOCAL_MODEL, ctxsSeen[0].providerMode)
     }
 
     @Test

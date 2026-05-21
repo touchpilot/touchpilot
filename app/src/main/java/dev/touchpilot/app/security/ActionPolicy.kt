@@ -6,7 +6,6 @@ import dev.touchpilot.app.tools.ToolSpec
 enum class ToolSource {
     LOCAL_ROUTER,
     LOCAL_MODEL,
-    CLOUD_FALLBACK,
     SKILL_SELECTED,
     DIRECT_DEBUG,
     MCP

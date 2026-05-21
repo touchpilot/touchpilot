@@ -10,7 +10,6 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
-import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -29,7 +28,6 @@ import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
-import dev.touchpilot.app.agent.ProviderConfig
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
@@ -37,7 +35,6 @@ import dev.touchpilot.app.localinference.LocalModelStatus
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
-import dev.touchpilot.app.security.ProviderSecretStore
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolApprovalProvider
@@ -55,7 +52,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
-    private lateinit var secretStore: ProviderSecretStore
     private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
@@ -73,7 +69,6 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
-        secretStore = ProviderSecretStore(this)
         skills = SkillStore(this).loadSkills()
         toolExecutor = AndroidToolExecutor(this)
         localModelRuntime = LiteRtCommandModelRuntime(this)
@@ -425,19 +420,9 @@ class MainActivity : Activity() {
 
     private fun currentReasoningContext(): LocalReasoningContext {
         val providerMode = currentProviderMode()
-        val providerConfig = ProviderConfig(
-            baseUrl = preferences.getString("provider_url", DefaultProviderUrl).orEmpty(),
-            apiKey = if (providerMode == AgentProviderMode.CLOUD) {
-                runCatching { secretStore.loadApiKey().orEmpty() }.getOrDefault("")
-            } else {
-                ""
-            },
-            model = preferences.getString("provider_model", DefaultModel).orEmpty()
-        )
         return LocalReasoningContext(
             skill = selectedSkill(),
-            providerMode = providerMode,
-            providerConfig = providerConfig
+            providerMode = providerMode
         )
     }
 
@@ -519,7 +504,6 @@ class MainActivity : Activity() {
             primaryButton("Save Runtime") {
                 val mode = when (providerModeSpinner.selectedItemPosition) {
                     1 -> AgentProviderMode.LOCAL_MODEL
-                    2 -> AgentProviderMode.CLOUD
                     else -> AgentProviderMode.LOCAL_ROUTER
                 }
                 preferences.edit().putString("agent_provider_mode", mode.name).apply()
@@ -737,40 +721,11 @@ class MainActivity : Activity() {
 
     private fun renderSettingsScreen() {
         contentRoot.addView(sectionTitle("Settings"))
-        contentRoot.addView(timelineCard("Cloud fallback", "Optional. Local router remains the default runtime."))
-
-        val urlInput = editText("Cloud fallback chat completions URL").apply {
-            id = R.id.agent_provider_url_input
-            setText(preferences.getString("provider_url", DefaultProviderUrl))
-        }
-        val modelInput = editText("Model name").apply {
-            id = R.id.agent_model_input
-            setText(preferences.getString("provider_model", DefaultModel))
-        }
-        val apiKeyInput = editText(
-            if (secretStore.hasApiKey()) {
-                "Cloud API key stored; leave blank to keep it"
-            } else {
-                "Cloud API key"
-            }
-        ).apply {
-            id = R.id.agent_api_key_input
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-
-        contentRoot.addView(urlInput)
-        contentRoot.addView(modelInput)
-        contentRoot.addView(apiKeyInput)
         contentRoot.addView(
-            primaryButton("Save Settings") {
-                preferences.edit()
-                    .putString("provider_url", urlInput.text.toString())
-                    .putString("provider_model", modelInput.text.toString())
-                    .apply()
-                resolveApiKey(apiKeyInput, secretStore)
-                outputText = "Settings saved."
-                showSection(Section.SETTINGS)
-            }
+            timelineCard(
+                "Local-first runtime",
+                "TouchPilot keeps the normal product path on device. Use Local Runtime to switch between deterministic routing and the LiteRT local model path."
+            )
         )
     }
 
@@ -801,7 +756,6 @@ class MainActivity : Activity() {
 
     private fun currentProviderMode(): AgentProviderMode {
         return when (preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name)) {
-            AgentProviderMode.CLOUD.name -> AgentProviderMode.CLOUD
             AgentProviderMode.LOCAL_MODEL.name -> AgentProviderMode.LOCAL_MODEL
             else -> AgentProviderMode.LOCAL_ROUTER
         }
@@ -1000,14 +954,12 @@ class MainActivity : Activity() {
     private fun providerModeIndex(savedMode: String?): Int {
         return when (savedMode) {
             AgentProviderMode.LOCAL_MODEL.name -> 1
-            AgentProviderMode.CLOUD.name -> 2
             else -> 0
         }
     }
 
     private fun AgentProviderMode.label(): String {
         return when (this) {
-            AgentProviderMode.CLOUD -> "Experimental cloud fallback"
             AgentProviderMode.LOCAL_MODEL -> "Local model with router fallback"
             AgentProviderMode.LOCAL_ROUTER -> "Local router"
         }
@@ -1019,25 +971,6 @@ class MainActivity : Activity() {
         } else {
             "$runtime fallback: ${message.substringBefore(';')}"
         }
-    }
-
-    private fun resolveApiKey(
-        apiKeyInput: EditText,
-        secretStore: ProviderSecretStore
-    ): String {
-        val enteredApiKey = apiKeyInput.text.toString()
-        if (enteredApiKey.isNotBlank()) {
-            secretStore.saveApiKey(enteredApiKey)
-            apiKeyInput.text.clear()
-            apiKeyInput.hint = "Cloud API key stored; leave blank to keep it"
-            return enteredApiKey
-        }
-
-        return runCatching { secretStore.loadApiKey().orEmpty() }
-            .getOrElse {
-                secretStore.clearApiKey()
-                ""
-            }
     }
 
     private fun approveAgentTool(request: ToolApprovalRequest): Boolean {
@@ -1132,9 +1065,7 @@ class MainActivity : Activity() {
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
-        const val DefaultProviderUrl = "https://api.openai.com/v1/chat/completions"
-        const val DefaultModel = "gpt-5.2-mini"
-        val ProviderModeLabels = listOf("Local router", "Local model", "Experimental cloud fallback")
+        val ProviderModeLabels = listOf("Local router", "Local model")
     }
 
     private object Theme {
