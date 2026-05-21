@@ -40,23 +40,35 @@ secret configured:
 
 ### Automated (JVM unit suite)
 
-- [ ] `./gradlew test --tests "dev.touchpilot.app.agent.OfflineMilestone2Test"` passes.
-- [ ] `Hello` flow yields a `user_message` followed by an `assistant_message`
-      whose text matches `ConversationalGate` and no tool events.
-- [ ] `Help` flow yields a `user_message` followed by an `assistant_message`
-      whose text matches `ConversationalGate` and no tool events.
-- [ ] `Open Settings` flow drives `LocalRouterCommandProvider` to emit
-      `observe_screen` then `open_app(target=settings)`, and the matching
-      event sequence ends with `tool_succeeded`.
-- [ ] `Go back` flow drives `LocalRouterCommandProvider` to emit
-      `observe_screen` then `press_back`, and the matching event sequence
-      ends with `tool_succeeded`.
-- [ ] Ambiguous request (`show me something useful`) routes through
-      `LocalModelCommandProvider` with a stub local runtime and never calls
-      a cloud client; deterministic fallback still produces a parseable
-      command or a `final` answer.
-- [ ] `type_text` with `text=password=hunter2` is rejected by
-      `DefaultActionPolicy` and the agent emits a `policy_blocked` event.
+Every test drives the real `DefaultLocalReasoningCore` and asserts the event
+contract it actually emits, rather than synthesising events. For flows that
+reach `AgentRunner`, the tests inject a fake `AgentRunInvocation` that returns
+events built with the same `AgentEvent` factory methods the production runner
+uses (see `AgentRunner.kt`).
+
+- [ ] `./gradlew :app:testDebugUnitTest --tests "dev.touchpilot.app.agent.OfflineMilestone2Test"` passes.
+- [ ] `Hello` and `help` each produce exactly `user_message` then
+      `final_answer` through the conversational short-circuit in
+      `DefaultLocalReasoningCore`, with no tool events and no invocation.
+- [ ] `Open Settings` goes through `IntentGate` and reaches the runner with
+      `exactCommand = open_app(target=settings)` and `providerMode = LOCAL_ROUTER`;
+      the resulting event sequence is `user_message -> tool_requested ->
+      approval_required -> tool_running -> tool_succeeded -> final_answer`.
+- [ ] `Go back` follows the same shape, producing an `approval_required` event
+      for `press_back` and a `tool_succeeded` for the same tool.
+- [ ] An unsafe phrase such as `change my password please` is short-circuited
+      by `IntentGate.UnsafeRequest` and emits `user_message -> policy_blocked
+      -> final_answer` without invoking the runner at all.
+- [ ] An ambiguous reference such as `do the thing` is classified as
+      `IntentDecision.ClarificationNeeded` and emits `user_message ->
+      assistant_message` (clarification prompt) without invoking the runner.
+- [ ] A non-deterministic request such as `show me something useful` is
+      classified as `IntentDecision.LocalModelNeeded`; the core hands off to
+      invocation preserving the session's `providerMode` and never sets
+      `exactCommand`. No cloud provider is required.
+- [ ] `type_text` with `text=my password is hunter2` is rejected by
+      `DefaultActionPolicy` as a second line of defence and the agent emits a
+      `policy_blocked` event with the matching wire shape.
 
 ### Live (emulator or device, optional but recommended)
 
