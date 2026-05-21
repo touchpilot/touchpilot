@@ -1,5 +1,7 @@
 package dev.touchpilot.app.androidcontrol
 
+import dev.touchpilot.app.screen.ScreenContext
+
 object AccessibilityBridge {
     @Volatile
     private var service: TouchPilotAccessibilityService? = null
@@ -18,6 +20,10 @@ object AccessibilityBridge {
 
     fun observeScreen(): String {
         return service?.observeScreen() ?: "TouchPilot Control is not enabled."
+    }
+
+    fun observeScreenContext(): ScreenContext {
+        return service?.observeScreenContext() ?: ScreenContext.Empty
     }
 
     fun tapByText(text: String): Boolean {

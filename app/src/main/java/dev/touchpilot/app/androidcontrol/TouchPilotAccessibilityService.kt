@@ -7,6 +7,8 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import dev.touchpilot.app.screen.ScreenContext
+import dev.touchpilot.app.screen.ScreenContextBuilder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -36,6 +38,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             appendLine("TouchPilot screen snapshot")
             appendNode(root, depth = 0, maxDepth = 8, nodeId = "0")
         }
+    }
+
+    fun observeScreenContext(): ScreenContext {
+        val root = rootInActiveWindow ?: return ScreenContext.Empty
+        val snapshot = AccessibilityNodeSnapshotAdapter.from(root)
+        return ScreenContextBuilder().build(
+            root = snapshot,
+            packageName = root.packageName?.toString(),
+            windowTitle = root.window?.title?.toString()
+        )
     }
 
     fun tapByText(text: String): Boolean {
