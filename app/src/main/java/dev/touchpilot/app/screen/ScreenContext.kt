@@ -1,6 +1,8 @@
 package dev.touchpilot.app.screen
 
 import dev.touchpilot.app.security.SensitiveTextRedactor
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Normalized snapshot of the active Android screen, suitable as input to
@@ -30,8 +32,46 @@ data class ScreenContext(
     val containsSensitiveContent: Boolean
         get() = nodes.any { it.sensitive || it.text.isSensitive }
 
+    fun toJson(redacted: Boolean = true): JSONObject {
+        val contextToSerialize = if (redacted) redactedCopy() else this
+        return JSONObject().apply {
+            put("appLabel", contextToSerialize.appLabel)
+            put("packageName", contextToSerialize.packageName)
+            put("windowTitle", contextToSerialize.windowTitle)
+            put("nodes", JSONArray().apply {
+                contextToSerialize.nodes.forEach { put(it.toJson(redacted)) }
+            })
+            put("containsSensitiveContent", contextToSerialize.containsSensitiveContent)
+        }
+    }
+
+    fun toRedactedJson(): String {
+        return toJson(redacted = true).toString(2)
+    }
+
+    fun redactedCopy(): ScreenContext {
+        return copy(
+            nodes = nodes.map { it.redactedCopy() }
+        )
+    }
+
     companion object {
         val Empty: ScreenContext = ScreenContext()
+
+        fun fromJson(json: JSONObject): ScreenContext {
+            val nodesArray = json.optJSONArray("nodes") ?: JSONArray()
+            val nodes = mutableListOf<ScreenNode>()
+            for (i in 0 until nodesArray.length()) {
+                nodes.add(ScreenNode.fromJson(nodesArray.getJSONObject(i)))
+            }
+
+            return ScreenContext(
+                appLabel = if (json.has("appLabel") && !json.isNull("appLabel")) json.getString("appLabel") else null,
+                packageName = if (json.has("packageName") && !json.isNull("packageName")) json.getString("packageName") else null,
+                windowTitle = if (json.has("windowTitle") && !json.isNull("windowTitle")) json.getString("windowTitle") else null,
+                nodes = nodes
+            )
+        }
     }
 }
 
@@ -55,7 +95,54 @@ data class ScreenNode(
     val sensitive: Boolean = false,
     val viewIdResourceName: String? = null,
     val className: String? = null
-)
+) {
+    fun toJson(redacted: Boolean = true): JSONObject {
+        val nodeToSerialize = if (redacted) redactedCopy() else this
+        return JSONObject().apply {
+            put("nodeId", nodeToSerialize.nodeId)
+            put("role", nodeToSerialize.role.name)
+            put("text", nodeToSerialize.text.toJson(redacted))
+            put("bounds", nodeToSerialize.bounds.toJson())
+            put("clickable", nodeToSerialize.clickable)
+            put("longClickable", nodeToSerialize.longClickable)
+            put("scrollable", nodeToSerialize.scrollable)
+            put("enabled", nodeToSerialize.enabled)
+            put("focused", nodeToSerialize.focused)
+            put("checked", nodeToSerialize.checked)
+            put("isInputField", nodeToSerialize.isInputField)
+            put("sensitive", nodeToSerialize.sensitive)
+            put("viewIdResourceName", nodeToSerialize.viewIdResourceName)
+            put("className", nodeToSerialize.className)
+        }
+    }
+
+    fun redactedCopy(): ScreenNode {
+        return copy(
+            text = text.redactedCopy()
+        )
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): ScreenNode {
+            return ScreenNode(
+                nodeId = if (json.has("nodeId") && !json.isNull("nodeId")) json.getString("nodeId") else null,
+                role = NodeRole.valueOf(json.optString("role", "OTHER")),
+                text = ScreenText.fromJson(json.getJSONObject("text")),
+                bounds = NodeBounds.fromJson(json.getJSONObject("bounds")),
+                clickable = json.optBoolean("clickable", false),
+                longClickable = json.optBoolean("longClickable", false),
+                scrollable = json.optBoolean("scrollable", false),
+                enabled = json.optBoolean("enabled", true),
+                focused = json.optBoolean("focused", false),
+                checked = if (json.has("checked") && !json.isNull("checked")) json.getBoolean("checked") else null,
+                isInputField = json.optBoolean("isInputField", false),
+                sensitive = json.optBoolean("sensitive", false),
+                viewIdResourceName = if (json.has("viewIdResourceName") && !json.isNull("viewIdResourceName")) json.getString("viewIdResourceName") else null,
+                className = if (json.has("className") && !json.isNull("className")) json.getString("className") else null
+            )
+        }
+    }
+}
 
 enum class NodeRole {
     BUTTON,
@@ -81,8 +168,26 @@ data class NodeBounds(
     val centerX: Int get() = (left + right) / 2
     val centerY: Int get() = (top + bottom) / 2
 
+    fun toJson(): JSONObject {
+        return JSONObject().apply {
+            put("left", left)
+            put("top", top)
+            put("right", right)
+            put("bottom", bottom)
+        }
+    }
+
     companion object {
         val Unknown: NodeBounds = NodeBounds(left = 0, top = 0, right = 0, bottom = 0)
+
+        fun fromJson(json: JSONObject): NodeBounds {
+            return NodeBounds(
+                left = json.optInt("left", 0),
+                top = json.optInt("top", 0),
+                right = json.optInt("right", 0),
+                bottom = json.optInt("bottom", 0)
+            )
+        }
     }
 }
 
@@ -104,6 +209,23 @@ data class ScreenText(
     val displaySafe: String,
     val isSensitive: Boolean
 ) {
+    fun toJson(redacted: Boolean = true): JSONObject {
+        val textToSerialize = if (redacted) redactedCopy() else this
+        return JSONObject().apply {
+            put("raw", if (redacted) textToSerialize.displaySafe else textToSerialize.raw)
+            put("displaySafe", textToSerialize.displaySafe)
+            put("isSensitive", textToSerialize.isSensitive)
+        }
+    }
+
+    fun redactedCopy(): ScreenText {
+        return if (isSensitive) {
+            copy(displaySafe = "[REDACTED]")
+        } else {
+            this
+        }
+    }
+
     companion object {
         val Empty: ScreenText = ScreenText(raw = "", displaySafe = "", isSensitive = false)
 
@@ -112,6 +234,14 @@ data class ScreenText(
             val sensitive = SensitiveTextRedactor.containsSensitiveText(raw)
             val displaySafe = if (sensitive) "[REDACTED]" else SensitiveTextRedactor.redact(raw)
             return ScreenText(raw = raw, displaySafe = displaySafe, isSensitive = sensitive)
+        }
+
+        fun fromJson(json: JSONObject): ScreenText {
+            return ScreenText(
+                raw = json.optString("raw", ""),
+                displaySafe = json.optString("displaySafe", ""),
+                isSensitive = json.optBoolean("isSensitive", false)
+            )
         }
     }
 }

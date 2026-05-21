@@ -124,6 +124,102 @@ class ScreenContextTest {
         assertEquals(1, context.clickableNodes.size)
     }
 
+    @Test
+    fun screenContextToJsonAndBack() {
+        val context = ScreenContext(
+            appLabel = "Gmail",
+            packageName = "com.google.android.gm",
+            windowTitle = "Inbox",
+            nodes = listOf(
+                node("compose", role = NodeRole.BUTTON, clickable = true, text = "Compose"),
+                node("search", role = NodeRole.INPUT, isInputField = true, text = "Search")
+            )
+        )
+
+        val json = context.toJson(redacted = false)
+        val restored = ScreenContext.fromJson(json)
+
+        assertEquals(context.appLabel, restored.appLabel)
+        assertEquals(context.packageName, restored.packageName)
+        assertEquals(context.windowTitle, restored.windowTitle)
+        assertEquals(context.nodes.size, restored.nodes.size)
+    }
+
+    @Test
+    fun screenContextRedactedJsonHidesSensitiveText() {
+        val context = ScreenContext(
+            appLabel = "Banking App",
+            packageName = "com.example.bank",
+            windowTitle = "Login",
+            nodes = listOf(
+                node("password", role = NodeRole.INPUT, isInputField = true, text = "password: hunter2")
+            )
+        )
+
+        val json = context.toRedactedJson()
+        assertTrue(json.contains("[REDACTED]"))
+        assertFalse(json.contains("hunter2"))
+    }
+
+    @Test
+    fun screenContextRedactedCopy() {
+        val context = ScreenContext(
+            nodes = listOf(
+                node("pw", role = NodeRole.INPUT, isInputField = true, text = "password: secret123")
+            )
+        )
+
+        val redacted = context.redactedCopy()
+        assertEquals("[REDACTED]", redacted.nodes[0].text.displaySafe)
+        assertEquals("password: secret123", redacted.nodes[0].text.raw)
+    }
+
+    @Test
+    fun screenNodeToJsonAndBack() {
+        val node = ScreenNode(
+            nodeId = "node123",
+            role = NodeRole.BUTTON,
+            text = ScreenText.of("Click me"),
+            bounds = NodeBounds(left = 10, top = 20, right = 110, bottom = 70),
+            clickable = true,
+            enabled = true,
+            viewIdResourceName = "com.example:id/button"
+        )
+
+        val json = node.toJson(redacted = false)
+        val restored = ScreenNode.fromJson(json)
+
+        assertEquals(node.nodeId, restored.nodeId)
+        assertEquals(node.role, restored.role)
+        assertEquals(node.text.raw, restored.text.raw)
+        assertEquals(node.bounds, restored.bounds)
+    }
+
+    @Test
+    fun screenTextToJsonAndBack() {
+        val text = ScreenText.of("Hello World")
+        val json = text.toJson(redacted = false)
+        val restored = ScreenText.fromJson(json)
+
+        assertEquals(text.raw, restored.raw)
+        assertEquals(text.displaySafe, restored.displaySafe)
+        assertEquals(text.isSensitive, restored.isSensitive)
+    }
+
+    @Test
+    fun nodeBoundsToJsonAndBack() {
+        val bounds = NodeBounds(left = 10, top = 20, right = 110, bottom = 70)
+        val json = bounds.toJson()
+        val restored = NodeBounds.fromJson(json)
+
+        assertEquals(bounds.left, restored.left)
+        assertEquals(bounds.top, restored.top)
+        assertEquals(bounds.right, restored.right)
+        assertEquals(bounds.bottom, restored.bottom)
+        assertEquals(bounds.width, restored.width)
+        assertEquals(bounds.height, restored.height)
+    }
+
     private fun node(
         id: String,
         role: NodeRole = NodeRole.OTHER,
