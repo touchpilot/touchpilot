@@ -38,7 +38,6 @@ class OfflineMilestone2Test {
     private val baseContext = LocalReasoningContext(
         skill = null,
         providerMode = AgentProviderMode.LOCAL_ROUTER,
-        providerConfig = ProviderConfig(baseUrl = "", apiKey = "", model = ""),
         exactCommand = null
     )
 
@@ -303,7 +302,6 @@ class OfflineMilestone2Test {
     )
 
     private fun AgentProviderMode.toToolSource(): ToolSource = when (this) {
-        AgentProviderMode.CLOUD -> ToolSource.CLOUD_FALLBACK
         AgentProviderMode.LOCAL_MODEL -> ToolSource.LOCAL_MODEL
         AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
     }

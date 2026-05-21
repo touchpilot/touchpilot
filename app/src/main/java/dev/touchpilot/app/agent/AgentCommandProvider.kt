@@ -6,16 +6,6 @@ fun interface AgentCommandProvider {
     fun complete(systemPrompt: String, context: String): String
 }
 
-class OpenAiAgentCommandProvider(
-    private val config: ProviderConfig
-) : AgentCommandProvider {
-    private val client = OpenAiCompatibleClient(config)
-
-    override fun complete(systemPrompt: String, context: String): String {
-        return client.complete(systemPrompt, context)
-    }
-}
-
 /**
  * Returns a pre-decided tool command on the first call and a final answer on
  * every call after. Used by [DefaultLocalReasoningCore] for
@@ -74,7 +64,7 @@ class LocalRouterCommandProvider(
             }
         }
 
-        return """{"final":"Local router completed its safe routing pass. Use cloud mode for complex reasoning."}"""
+        return """{"final":"Local router completed its safe routing pass. Try a more specific request, a skill, or local model mode for ambiguous tasks."}"""
     }
 
     private fun routeTask(task: String): LocalRoute? {

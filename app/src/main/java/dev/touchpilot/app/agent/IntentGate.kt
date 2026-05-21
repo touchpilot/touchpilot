@@ -50,8 +50,8 @@ sealed class IntentDecision {
     ) : IntentDecision()
 
     /**
-     * No deterministic path matched — defer to the configured provider (local
-     * model or cloud fallback) for reasoning.
+     * No deterministic path matched — defer to the configured local model path
+     * for reasoning.
      */
     data class LocalModelNeeded(
         override val reason: String

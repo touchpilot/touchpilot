@@ -42,8 +42,8 @@ and safety-focused rather than a clone of any reference project.
 | Milestone | Status | Purpose |
 | --- | --- | --- |
 | Milestone 1 | Complete | Local-first Android agent foundation. |
-| Milestone 2 | Next | Hybrid local AI core. |
-| Milestone 3 | Planned | Screen context and local understanding. |
+| Milestone 2 | Complete | Hybrid local AI core. |
+| Milestone 3 | Next | Screen context and local understanding. |
 | Milestone 4 | Planned | Reliable Android control. |
 | Milestone 5 | Planned | Local multi-step agent loop. |
 | Milestone 6 | Planned | Skills system v2. |
@@ -57,8 +57,8 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 14 | Planned | Advanced local AI. |
 | Milestone 15 | Planned | 1.0 release. |
 
-The active roadmap starts at Milestone 2. Milestone 1 is retained only as the
-completed baseline so future work has a clear starting point.
+The active roadmap now starts at Milestone 3. Milestones 1 and 2 are retained
+as completed baselines so future work has a clear starting point.
 
 ## Completed Baseline: Milestone 1
 
@@ -100,11 +100,13 @@ Completed scope:
 - CI, lint, unit-test workflow, issue templates, PR template, and labels
 - live emulator validation
 
-## Future Roadmap
-
 ## Milestone 2: Hybrid Local AI Core
 
 Goal: make TouchPilot a real local AI product, not only a command router.
+
+Status: complete. Milestone 2 established the local reasoning core boundary,
+intent gate, agent event contract, local model contracts, known-skill routing,
+local-only runtime selection, and offline validation for the main user flows.
 
 ```text
 user message
@@ -124,21 +126,23 @@ user message
 
 Deliverables:
 
-- Define the local reasoning core boundary.
-- Add an intent gate for exact commands, known skills, unsafe requests, and
+- [x] Define the local reasoning core boundary.
+- [x] Add an intent gate for exact commands, known skills, unsafe requests, and
   model-needed requests.
-- Remove cloud/provider fallback from the normal product path.
-- Define local model input/output contracts for intent, tool selection, target
+- [x] Remove cloud/provider fallback from the normal product path.
+- [x] Define local model input/output contracts for intent, tool selection, target
   ranking, and final answer.
-- Build agent event types for messages, tool calls, approvals, errors, and
+- [x] Build agent event types for messages, tool calls, approvals, errors, and
   final responses.
-- Keep deterministic router as fallback and test baseline.
-- Add offline-only validation for the main user flows.
+- [x] Keep deterministic router as fallback and test baseline.
+- [x] Add offline-only validation for the main user flows.
 
 Exit criteria:
 
 TouchPilot can route simple requests deterministically, use a local model path
 for ambiguous requests, and expose all work as local agent events.
+
+## Future Roadmap
 
 ## Milestone 3: Screen Context and Understanding
 

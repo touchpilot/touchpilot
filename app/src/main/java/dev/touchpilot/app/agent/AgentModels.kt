@@ -1,13 +1,6 @@
 package dev.touchpilot.app.agent
 
-data class ProviderConfig(
-    val baseUrl: String,
-    val apiKey: String,
-    val model: String
-)
-
 enum class AgentProviderMode {
-    CLOUD,
     LOCAL_MODEL,
     LOCAL_ROUTER
 }
