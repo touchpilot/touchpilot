@@ -3,6 +3,9 @@ package dev.touchpilot.app.agent
 import dev.touchpilot.app.localinference.LocalCommandModelRuntime
 import dev.touchpilot.app.localinference.LocalModelCommandProvider
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.screen.ScreenContext
+import dev.touchpilot.app.screen.ScreenContextSummarizer
+import dev.touchpilot.app.screen.ScreenSummary
 import dev.touchpilot.app.security.ActionPolicy
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.ToolApprovalProvider
@@ -26,7 +29,6 @@ fun interface AgentEventListener {
 data class LocalReasoningContext(
     val skill: Skill?,
     val providerMode: AgentProviderMode,
-    val providerConfig: ProviderConfig,
     /**
      * When set, [buildCommandProvider] returns a [FixedCommandProvider] that
      * emits exactly this command on the next runner step. Populated by the
@@ -51,7 +53,9 @@ class DefaultLocalReasoningCore(
     private val sessionContext: () -> LocalReasoningContext,
     private val intents: ConversationalIntents = ConversationalGate,
     private val intentClassifier: IntentClassifier = IntentGate(),
-    private val availableSkills: () -> List<Skill> = { emptyList() }
+    private val availableSkills: () -> List<Skill> = { emptyList() },
+    private val screenContextProvider: () -> ScreenContext = { ScreenContext.Empty },
+    private val screenSummarizer: ScreenContextSummarizer = ScreenContextSummarizer()
 ) : LocalReasoningCore {
 
     override fun run(task: String, listener: AgentEventListener): AgentRunResult {
@@ -74,6 +78,7 @@ class DefaultLocalReasoningCore(
         when (intent) {
             is IntentDecision.UnsafeRequest -> return blockUnsafe(task, intent, listener)
             is IntentDecision.ClarificationNeeded -> return askForClarification(task, intent, listener)
+            is IntentDecision.ScreenInquiry -> return answerScreenInquiry(task, intent, listener)
             is IntentDecision.ExactCommand,
             is IntentDecision.KnownSkill,
             is IntentDecision.LocalModelNeeded -> Unit
@@ -111,7 +116,8 @@ class DefaultLocalReasoningCore(
             }
             is IntentDecision.LocalModelNeeded -> baseCtx
             is IntentDecision.UnsafeRequest,
-            is IntentDecision.ClarificationNeeded -> error("handled above")
+            is IntentDecision.ClarificationNeeded,
+            is IntentDecision.ScreenInquiry -> error("handled above")
         }
 
         val result = invocation.invoke(task, effectiveCtx)
@@ -158,6 +164,48 @@ class DefaultLocalReasoningCore(
             finalAnswer = intent.clarification,
             events = listOf(userEvent, assistant)
         )
+    }
+
+    private fun answerScreenInquiry(
+        task: String,
+        intent: IntentDecision.ScreenInquiry,
+        listener: AgentEventListener
+    ): AgentRunResult {
+        val context = screenContextProvider()
+        val summary = screenSummarizer.summarize(context)
+        val userEvent = AgentEvent.UserMessage(task)
+        val suggestionBlock = renderSuggestions(summary)
+        val assistant = AgentEvent.AssistantMessage(
+            text = summary.sentence,
+            detail = suggestionBlock
+        )
+        val finalEvent = AgentEvent.FinalAnswer(summary.sentence)
+        listener.onEvent(userEvent)
+        listener.onEvent(assistant)
+        listener.onEvent(finalEvent)
+        val transcript = if (suggestionBlock.isBlank()) {
+            summary.sentence
+        } else {
+            summary.sentence + "\n\n" + suggestionBlock
+        }
+        return AgentRunResult(
+            transcript = transcript,
+            finalAnswer = summary.sentence,
+            events = listOf(userEvent, assistant, finalEvent)
+        )
+    }
+
+    private fun renderSuggestions(summary: ScreenSummary): String {
+        if (summary.suggestedActions.isEmpty()) return ""
+        return buildString {
+            appendLine("Suggested actions:")
+            summary.suggestedActions.forEachIndexed { index, action ->
+                append(index + 1)
+                append(". ")
+                append(action.label)
+                if (index < summary.suggestedActions.lastIndex) appendLine()
+            }
+        }
     }
 }
 
@@ -214,7 +262,6 @@ fun buildCommandProvider(
     }
     val localRouter = LocalRouterCommandProvider(task, context.skill)
     return when (context.providerMode) {
-        AgentProviderMode.CLOUD -> OpenAiAgentCommandProvider(context.providerConfig)
         AgentProviderMode.LOCAL_MODEL -> LocalModelCommandProvider(
             runtime = localModelRuntime,
             fallback = localRouter,
@@ -226,7 +273,6 @@ fun buildCommandProvider(
 }
 
 private fun AgentProviderMode.toToolSource(): ToolSource = when (this) {
-    AgentProviderMode.CLOUD -> ToolSource.CLOUD_FALLBACK
     AgentProviderMode.LOCAL_MODEL -> ToolSource.LOCAL_MODEL
     AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
 }

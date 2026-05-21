@@ -28,7 +28,7 @@ class DefaultActionPolicyTest {
             ToolPolicyRequest(
                 tool = mediumTool("type_text"),
                 args = mapOf("text" to "password=correct horse battery staple"),
-                source = ToolSource.CLOUD_FALLBACK
+                source = ToolSource.LOCAL_MODEL
             )
         )
 

@@ -15,8 +15,7 @@ import kotlin.test.assertTrue
 class LocalReasoningCoreTest {
     private val defaultContext = LocalReasoningContext(
         skill = null,
-        providerMode = AgentProviderMode.LOCAL_ROUTER,
-        providerConfig = ProviderConfig(baseUrl = "", apiKey = "", model = "")
+        providerMode = AgentProviderMode.LOCAL_ROUTER
     )
 
     @Test
@@ -140,24 +139,6 @@ class LocalReasoningCoreTest {
     }
 
     @Test
-    fun providerFactoryPicksCloudWhenModeIsCloud() {
-        val ctx = defaultContext.copy(
-            providerMode = AgentProviderMode.CLOUD,
-            providerConfig = ProviderConfig(
-                baseUrl = "https://example.com/v1/chat/completions",
-                apiKey = "k",
-                model = "m"
-            )
-        )
-        val provider = buildCommandProvider(
-            task = "open Settings",
-            context = ctx,
-            localModelRuntime = NeverCalledRuntime
-        )
-        assertIs<OpenAiAgentCommandProvider>(provider)
-    }
-
-    @Test
     fun localRouterRespectsSkillAllowlist() {
         val restrictedSkill = Skill(
             id = "observe-only",
@@ -177,7 +158,10 @@ class LocalReasoningCoreTest {
         assertEquals("observe_screen", first.tool)
         val second = AgentCommandParser.parse(provider.complete("", ""))
         assertNull(second.tool)
-        assertEquals("Local router completed its safe routing pass. Use cloud mode for complex reasoning.", second.finalAnswer)
+        assertEquals(
+            "Local router completed its safe routing pass. Try a more specific request, a skill, or local model mode for ambiguous tasks.",
+            second.finalAnswer
+        )
     }
 
     @Test
@@ -233,17 +217,16 @@ class LocalReasoningCoreTest {
     @Test
     fun exactCommandIntentForcesLocalRouterModeOnInvocation() {
         val ctxsSeen = mutableListOf<LocalReasoningContext>()
-        val cloudContext = LocalReasoningContext(
+        val localModelContext = LocalReasoningContext(
             skill = null,
-            providerMode = AgentProviderMode.CLOUD,
-            providerConfig = ProviderConfig(baseUrl = "u", apiKey = "k", model = "m")
+            providerMode = AgentProviderMode.LOCAL_MODEL
         )
         val core = DefaultLocalReasoningCore(
             invocation = { _, ctx ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
             },
-            sessionContext = { cloudContext }
+            sessionContext = { localModelContext }
         )
 
         core.run("Go back")
@@ -300,23 +283,22 @@ class LocalReasoningCoreTest {
     @Test
     fun localModelNeededIntentLeavesContextUntouched() {
         val ctxsSeen = mutableListOf<LocalReasoningContext>()
-        val cloudContext = LocalReasoningContext(
+        val localModelContext = LocalReasoningContext(
             skill = null,
-            providerMode = AgentProviderMode.CLOUD,
-            providerConfig = ProviderConfig(baseUrl = "u", apiKey = "k", model = "m")
+            providerMode = AgentProviderMode.LOCAL_MODEL
         )
         val core = DefaultLocalReasoningCore(
             invocation = { _, ctx ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
             },
-            sessionContext = { cloudContext }
+            sessionContext = { localModelContext }
         )
 
         core.run("Find the Wi-Fi toggle")
 
         assertEquals(1, ctxsSeen.size)
-        assertEquals(AgentProviderMode.CLOUD, ctxsSeen[0].providerMode)
+        assertEquals(AgentProviderMode.LOCAL_MODEL, ctxsSeen[0].providerMode)
     }
 
     @Test
@@ -388,6 +370,79 @@ class LocalReasoningCoreTest {
         )
         assertEquals(assistant.text, result.finalAnswer)
     }
+
+    @Test
+    fun screenInquiryIntentQueriesProviderAndShortCircuitsBeforeInvocation() {
+        var invoked = false
+        val providerCalls = AtomicInt()
+        val collected = mutableListOf<AgentEvent>()
+        val screen = dev.touchpilot.app.screen.ScreenContext(
+            appLabel = "Settings",
+            nodes = listOf(
+                dev.touchpilot.app.screen.ScreenNode(
+                    nodeId = "0.0",
+                    role = dev.touchpilot.app.screen.NodeRole.BUTTON,
+                    text = dev.touchpilot.app.screen.ScreenText.of("Network & internet"),
+                    clickable = true
+                )
+            )
+        )
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _ ->
+                invoked = true
+                error("screen inquiry must not invoke the runner")
+            },
+            sessionContext = { defaultContext },
+            screenContextProvider = {
+                providerCalls.value += 1
+                screen
+            }
+        )
+
+        val result = core.run("What screen am I on?") { collected += it }
+
+        assertFalse(invoked)
+        assertEquals(1, providerCalls.value)
+        assertEquals(3, collected.size)
+        assertIs<AgentEvent.UserMessage>(collected[0])
+        val assistant = assertIs<AgentEvent.AssistantMessage>(collected[1])
+        assertTrue(assistant.text.startsWith("I see the Settings screen."))
+        assertTrue(assistant.detail.contains("Suggested actions:"))
+        val finalEvent = assertIs<AgentEvent.FinalAnswer>(collected[2])
+        assertEquals(assistant.text, finalEvent.text)
+        assertEquals(assistant.text, result.finalAnswer)
+        // Transcript surfaces the summary plus the suggestion block so the
+        // chat timeline shows the actual answer rather than a diagnostic.
+        assertTrue(result.transcript.startsWith("I see the Settings screen."))
+        assertTrue(result.transcript.contains("Suggested actions:"))
+    }
+
+    @Test
+    fun screenInquiryWithoutProviderFallsBackToWeakScreenMessage() {
+        var invoked = false
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _ ->
+                invoked = true
+                error("screen inquiry must not invoke the runner")
+            },
+            sessionContext = { defaultContext }
+            // screenContextProvider intentionally left at default (Empty).
+        )
+
+        val result = core.run("what can you do here") { collected += it }
+
+        assertFalse(invoked)
+        assertEquals(3, collected.size)
+        val assistant = assertIs<AgentEvent.AssistantMessage>(collected[1])
+        assertTrue(
+            assistant.text.startsWith("I can see this screen, but the app exposes limited"),
+            "expected weak-screen fallback, got: ${assistant.text}"
+        )
+        assertEquals(assistant.text, result.finalAnswer)
+    }
+
+    private class AtomicInt(var value: Int = 0)
 
     private class StubRuntime(private val output: String) : LocalCommandModelRuntime {
         override fun status(): LocalModelStatus = LocalModelStatus(
