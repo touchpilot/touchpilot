@@ -2,10 +2,13 @@ package dev.touchpilot.app.screen.ocr
 
 import android.accessibilityservice.AccessibilityService
 import android.app.UiAutomation
+import android.content.Intent
+import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.After
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,11 +18,14 @@ import org.junit.runner.RunWith
  * Live behavior proof for issue #42. Runs on a real Android device/emulator.
  *
  * The test:
- * 1. Sends the device to the launcher via the UiAutomation global "home" action.
- * 2. Walks the live `AccessibilityNodeInfo` root with the same counting rules the
- *    new `ContextQualityDetector` expects.
- * 3. Classifies and prints the result so the gradle `connectedDebugAndroidTest`
+ * 1. Sends the device to the launcher to start from a known state.
+ * 2. Launches the Android Settings app via Intent so the recorded run has a
+ *    visible app transition rather than a no-op HOME press.
+ * 3. Walks the live `AccessibilityNodeInfo` root with the same counting rules
+ *    the new `ContextQualityDetector` expects.
+ * 4. Classifies and prints the result so the gradle `connectedDebugAndroidTest`
  *    log captures real on-device evidence for the PR.
+ * 5. Returns to HOME so subsequent runs start clean.
  *
  * The test does not depend on TouchPilot's own `AccessibilityService` being
  * enabled — `UiAutomation` is granted the same view of the tree by the
@@ -30,12 +36,21 @@ class OcrFallbackBoundaryLiveTest {
     private val tag = "OcrFallbackBoundary"
 
     @Test
-    fun launcherSignalsClassifyAsStrongOrWeakNotEmpty() {
+    fun settingsScreenClassifiesAsStrongOrWeakNotEmpty() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val uiAutomation: UiAutomation = instrumentation.uiAutomation
 
+        // Start from a known state so the recording has a clean home screen.
         uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
         Thread.sleep(1_500L)
+
+        // Visible app transition: launch the system Settings activity.
+        val context = instrumentation.targetContext
+        val settingsIntent = Intent(Settings.ACTION_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(settingsIntent)
+        Thread.sleep(2_500L)
 
         val root: AccessibilityNodeInfo? = uiAutomation.rootInActiveWindow
         assertNotNull("rootInActiveWindow was null on the live device", root)
@@ -69,13 +84,19 @@ class OcrFallbackBoundaryLiveTest {
             }
         }
 
-        // The launcher always renders something; an Empty classification would
-        // indicate the live tree was not observable at all, which is the
+        // The Settings screen renders an app-like UI; an Empty classification
+        // would indicate the live tree was not observable at all, which is the
         // failure mode we are guarding against.
         assertTrue(
-            "Live launcher screen classified as Empty: $annotated",
+            "Live Settings screen classified as Empty: $annotated",
             quality !is ContextQuality.Empty,
         )
+    }
+
+    @After
+    fun returnHome() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
     }
 
     private fun countSignals(root: AccessibilityNodeInfo): ObservedScreenSignals {
