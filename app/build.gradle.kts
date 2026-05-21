@@ -30,13 +30,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
     implementation("com.google.android.material:material:1.14.0")
     implementation("com.google.ai.edge.litert:litert:1.4.2")
+    testImplementation("androidx.test:core:1.6.1")
     testImplementation("org.json:json:20250517")
     testImplementation(kotlin("test"))
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }
 
 kotlin {

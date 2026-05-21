@@ -62,6 +62,7 @@ class MainActivity : Activity() {
     private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
+    private var activeSettingsPanel = SettingsPanel.SKILLS
     private var selectedSkillId: String? = null
     private val conversation = mutableListOf<ChatEvent>()
 
@@ -228,10 +229,7 @@ class MainActivity : Activity() {
         contentRoot.removeAllViews()
         when (section) {
             Section.CHAT -> renderChatScreen()
-            Section.SKILLS -> renderSkillsScreen()
-            Section.RUNTIME -> renderRuntimeScreen()
             Section.TOOLS -> renderToolsScreen()
-            Section.MCP -> renderMcpScreen()
             Section.LOGS -> renderLogsScreen()
             Section.SETTINGS -> renderSettingsScreen()
         }
@@ -427,7 +425,7 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun renderSkillsScreen() {
+    private fun renderSkillsSettingsPanel() {
         contentRoot.addView(sectionTitle("Skills"))
         contentRoot.addView(agentBubble("Active skill", selectedSkill()?.title ?: "No skill"))
 
@@ -450,7 +448,7 @@ class MainActivity : Activity() {
                 val index = skillSpinner.selectedItemPosition - 1
                 selectedSkillId = skills.getOrNull(index)?.id
                 preferences.edit().putString("active_skill", selectedSkillId).apply()
-                showSection(Section.SKILLS)
+                showSection(Section.SETTINGS)
             }
         )
 
@@ -473,8 +471,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderRuntimeScreen() {
-        contentRoot.addView(sectionTitle("Local Runtime"))
+    private fun renderRuntimeSettingsPanel() {
+        contentRoot.addView(sectionTitle("Runtime"))
         contentRoot.addView(statusPill())
         contentRoot.addView(localModelStatusCard())
         contentRoot.addView(
@@ -508,8 +506,13 @@ class MainActivity : Activity() {
                     else -> AgentProviderMode.LOCAL_ROUTER
                 }
                 preferences.edit().putString("agent_provider_mode", mode.name).apply()
-                showSection(Section.RUNTIME)
+                showSection(Section.SETTINGS)
             }
+        )
+        contentRoot.addView(
+            secondaryButton("Open Accessibility Settings") {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }.apply { id = R.id.open_accessibility_settings_button }
         )
     }
 
@@ -616,7 +619,7 @@ class MainActivity : Activity() {
         contentRoot.addView(timelineCard("Latest result", outputText))
     }
 
-    private fun renderMcpScreen() {
+    private fun renderMcpSettingsPanel() {
         contentRoot.addView(sectionTitle("MCP"))
 
         val endpointInput = editText("MCP HTTP JSON-RPC endpoint").apply {
@@ -638,7 +641,7 @@ class MainActivity : Activity() {
                 val endpoint = endpointInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
                 outputText = "Listing MCP tools..."
-                showSection(Section.MCP)
+                showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
                         val client = McpHttpClient(endpoint)
@@ -662,7 +665,7 @@ class MainActivity : Activity() {
                     }
                     runOnUiThread {
                         outputText = result
-                        showSection(Section.MCP)
+                        showSection(Section.SETTINGS)
                     }
                 }.start()
             }.apply { id = R.id.list_mcp_tools_button },
@@ -675,7 +678,7 @@ class MainActivity : Activity() {
                 val argsText = argsInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
                 outputText = "Calling MCP tool..."
-                showSection(Section.MCP)
+                showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
                         val client = McpHttpClient(endpoint)
@@ -687,7 +690,7 @@ class MainActivity : Activity() {
                     }
                     runOnUiThread {
                         outputText = result
-                        showSection(Section.MCP)
+                        showSection(Section.SETTINGS)
                     }
                 }.start()
             }.apply { id = R.id.call_mcp_tool_button },
@@ -720,14 +723,78 @@ class MainActivity : Activity() {
         contentRoot.addView(executionLogView)
     }
 
-    private fun renderSettingsScreen() {
-        contentRoot.addView(sectionTitle("Settings"))
+    private fun renderCloudApiSettingsPanel() {
+        contentRoot.addView(sectionTitle("Cloud API"))
+
+        val providerInput = editText("Provider URL").apply {
+            id = R.id.agent_provider_url_input
+            setText(preferences.getString("agent_provider_url", ""))
+        }
+        val modelInput = editText("Model name").apply {
+            id = R.id.agent_model_input
+            setText(preferences.getString("agent_model", ""))
+        }
+        val apiKeyInput = editText("API key").apply {
+            id = R.id.agent_api_key_input
+            setText(preferences.getString("agent_api_key", ""))
+        }
+
+        contentRoot.addView(providerInput)
+        contentRoot.addView(modelInput)
+        contentRoot.addView(apiKeyInput)
+        contentRoot.addView(
+            primaryButton("Save Cloud API") {
+                preferences.edit()
+                    .putString("agent_provider_url", providerInput.text.toString().trim())
+                    .putString("agent_model", modelInput.text.toString().trim())
+                    .putString("agent_api_key", apiKeyInput.text.toString().trim())
+                    .apply()
+                outputText = "Cloud API settings saved."
+                showSection(Section.SETTINGS)
+            }
+        )
         contentRoot.addView(
             timelineCard(
-                "Local-first runtime",
-                "TouchPilot keeps the normal product path on device. Use Local Runtime to switch between deterministic routing and the LiteRT local model path."
+                "Current cloud profile",
+                buildString {
+                    appendLine("Provider URL: ${preferences.getString("agent_provider_url", "").orEmpty().ifBlank { "not set" }}")
+                    appendLine("Model: ${preferences.getString("agent_model", "").orEmpty().ifBlank { "not set" }}")
+                    append("API key: ${if (preferences.getString("agent_api_key", "").isNullOrBlank()) "not set" else "configured"}")
+                }
             )
         )
+    }
+
+    private fun renderSettingsScreen() {
+        contentRoot.addView(sectionTitle("Settings"))
+        val panelRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        SettingsPanel.values().forEach { panel ->
+            panelRow.addView(settingsPanelButton(panel), rowButtonParams())
+        }
+        contentRoot.addView(panelRow)
+
+        when (activeSettingsPanel) {
+            SettingsPanel.SKILLS -> renderSkillsSettingsPanel()
+            SettingsPanel.MCP -> renderMcpSettingsPanel()
+            SettingsPanel.CLOUD_API -> renderCloudApiSettingsPanel()
+            SettingsPanel.RUNTIME -> renderRuntimeSettingsPanel()
+        }
+    }
+
+    private fun settingsPanelButton(panel: SettingsPanel): TextView {
+        val selected = panel == activeSettingsPanel
+        val button = if (selected) {
+            primaryButton(panel.label) {
+                activeSettingsPanel = panel
+                showSection(Section.SETTINGS)
+            }
+        } else {
+            secondaryButton(panel.label) {
+                activeSettingsPanel = panel
+                showSection(Section.SETTINGS)
+            }
+        }
+        return button.apply { minHeight = 46 }
     }
 
     private var outputText: String = "No result yet."
@@ -1055,12 +1122,16 @@ class MainActivity : Activity() {
 
     private enum class Section(val label: String) {
         CHAT("Chat"),
-        SKILLS("Skills"),
-        RUNTIME("Run"),
         TOOLS("Tools"),
-        MCP("MCP"),
         LOGS("Logs"),
         SETTINGS("Settings")
+    }
+
+    private enum class SettingsPanel(val label: String) {
+        SKILLS("Skills"),
+        MCP("MCP"),
+        CLOUD_API("Cloud API"),
+        RUNTIME("Runtime")
     }
 
     private companion object {
