@@ -14,6 +14,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.EditText
@@ -61,6 +62,9 @@ class MainActivity : Activity() {
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var contentRoot: LinearLayout
+    private lateinit var scrollView: ScrollView
+    private lateinit var chatInputBar: LinearLayout
+    private lateinit var chatTaskInput: EditText
     private lateinit var statusView: TextView
     private lateinit var executionLogView: TextView
     private var bottomNav: TabLayout? = null
@@ -118,8 +122,10 @@ class MainActivity : Activity() {
 
             addView(buildHeader())
 
-            val scrollView = ScrollView(this@MainActivity).apply {
+            scrollView = ScrollView(this@MainActivity).apply {
+                id = R.id.chat_scroll_view
                 setFillViewport(false)
+                isScrollbarFadingEnabled = true
                 contentRoot = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(28, 16, 28, 18)
@@ -134,6 +140,9 @@ class MainActivity : Activity() {
                     1f
                 )
             )
+
+            chatInputBar = buildChatInputBar()
+            addView(chatInputBar)
 
             addView(buildBottomNav())
         }
@@ -229,6 +238,7 @@ class MainActivity : Activity() {
     private fun showSection(section: Section) {
         activeSection = section
         updateBottomNav()
+        chatInputBar.visibility = if (section == Section.CHAT) View.VISIBLE else View.GONE
         contentRoot.removeAllViews()
         when (section) {
             Section.CHAT -> renderChatScreen()
@@ -253,62 +263,118 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderChatScreen() {
-        contentRoot.addView(sectionTitle("Agent"))
-        contentRoot.addView(statusPill())
-        contentRoot.addView(skillPill())
-
-        val introEvents = conversation.takeWhile { it is ChatEvent.Agent }
-        val timelineEvents = conversation.drop(introEvents.size)
-
-        introEvents.forEach { event ->
-            contentRoot.addView(renderChatEvent(event))
+    private fun buildChatInputBar(): LinearLayout {
+        val bar = LinearLayout(this).apply {
+            id = R.id.chat_input_bar
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setBackgroundColor(Theme.SurfaceRaised)
+            setPadding(20, 12, 20, 10)
         }
+        bar.addView(
+            View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    1
+                )
+                setBackgroundColor(Theme.StrokeDark)
+            }
+        )
 
         val inputRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 18, 0, 0)
+            setPadding(0, 12, 0, 0)
         }
-        val taskInput = EditText(this).apply {
+        chatTaskInput = EditText(this).apply {
             id = R.id.agent_task_input
             hint = "Message TouchPilot..."
             setSingleLine(false)
             minLines = 1
             maxLines = 4
-            textSize = 14f
+            textSize = 14.5f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
-            background = rounded(Theme.SurfaceRaised, 26, Theme.StrokeDark)
-            setPadding(24, 10, 24, 10)
-        }
-        inputRow.addView(taskInput, LinearLayout.LayoutParams(0, 58, 1f))
-        inputRow.addView(
-            TextView(this).apply {
-                id = R.id.run_agent_button
-                text = "Go"
-                textSize = 15f
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setTextColor(Color.rgb(5, 26, 12))
-                background = rounded(Theme.Accent, 30, Theme.Accent)
-                setOnClickListener {
-                    val task = taskInput.text.toString().trim()
-                    if (task.isNotEmpty()) {
-                        hideKeyboard(taskInput)
-                        taskInput.text.clear()
-                        runAgentFromChat(task)
-                    }
+            background = rounded(Theme.Card, 28, Theme.StrokeDark)
+            setPadding(22, 14, 22, 14)
+            imeOptions = EditorInfo.IME_ACTION_SEND
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEND) {
+                    submitChatMessage()
+                    true
+                } else {
+                    false
                 }
+            }
+        }
+        inputRow.addView(
+            chatTaskInput,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+        )
+        inputRow.addView(
+            MaterialButton(this).apply {
+                id = R.id.run_agent_button
+                text = "Send"
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                isAllCaps = false
+                minHeight = 52
+                minWidth = 0
+                insetTop = 0
+                insetBottom = 0
+                gravity = Gravity.CENTER
+                setTextColor(Theme.OnAccent)
+                backgroundTintList = ColorStateList.valueOf(Theme.Accent)
+                cornerRadius = 26
+                setOnClickListener { submitChatMessage() }
             },
-            LinearLayout.LayoutParams(64, 58).apply {
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
                 leftMargin = 10
             }
         )
-        contentRoot.addView(inputRow)
+        bar.addView(inputRow)
+        return bar
+    }
 
-        timelineEvents.forEach { event ->
+    private fun submitChatMessage() {
+        val task = chatTaskInput.text.toString().trim()
+        if (task.isEmpty()) return
+        hideKeyboard(chatTaskInput)
+        chatTaskInput.text.clear()
+        runAgentFromChat(task)
+    }
+
+    private fun renderChatScreen() {
+        contentRoot.addView(sectionTitle("Chat"))
+        contentRoot.addView(statusPill())
+        contentRoot.addView(skillPill())
+
+        conversation.forEach { event ->
             contentRoot.addView(renderChatEvent(event))
+        }
+
+        contentRoot.addView(
+            View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    24
+                )
+            }
+        )
+        scrollChatToBottom()
+    }
+
+    private fun scrollChatToBottom() {
+        scrollView.post {
+            scrollView.fullScroll(View.FOCUS_DOWN)
         }
     }
 
@@ -897,17 +963,32 @@ class MainActivity : Activity() {
     }
 
     private fun userBubble(text: String): View {
-        return TextView(this).apply {
-            setText(text)
-            textSize = 14f
-            setTextColor(Color.rgb(3, 30, 13))
-            background = rounded(Theme.Accent, 22, Theme.Accent)
-            setPadding(22, 16, 22, 16)
-        }.withMargins(left = 84, top = 10, bottom = 10)
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        row.addView(
+            TextView(this).apply {
+                setText(text)
+                textSize = 14f
+                setTextColor(Theme.OnAccent)
+                background = rounded(Theme.Accent, 22, Theme.Accent)
+                setPadding(20, 14, 20, 14)
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = 56
+            }
+        )
+        return row.withMargins(top = 8, bottom = 8)
     }
 
     private fun agentBubble(text: String, detail: String): View {
-        return timelineCard(text, detail)
+        return timelineCard(text, detail).apply {
+            (layoutParams as? LinearLayout.LayoutParams)?.rightMargin = 36
+        }
     }
 
     private fun statusPill(): View {
