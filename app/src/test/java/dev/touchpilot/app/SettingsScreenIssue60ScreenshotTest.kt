@@ -32,19 +32,19 @@ class SettingsScreenIssue60ScreenshotTest {
         clickLabel(activity.window.decorView, "Skills")
         shadowOf(activity.mainLooper).idle()
         capture(activity, "settings-skills")
-        clickLabel(activity.window.decorView, "Back to Settings")
+        clickLabelContaining(activity.window.decorView, "Back to Settings")
         shadowOf(activity.mainLooper).idle()
 
         clickLabel(activity.window.decorView, "MCP")
         shadowOf(activity.mainLooper).idle()
         capture(activity, "settings-mcp")
-        clickLabel(activity.window.decorView, "Back to Settings")
+        clickLabelContaining(activity.window.decorView, "Back to Settings")
         shadowOf(activity.mainLooper).idle()
 
         clickLabel(activity.window.decorView, "API")
         shadowOf(activity.mainLooper).idle()
         capture(activity, "settings-cloud-api")
-        clickLabel(activity.window.decorView, "Back to Settings")
+        clickLabelContaining(activity.window.decorView, "Back to Settings")
         shadowOf(activity.mainLooper).idle()
 
         clickLabel(activity.window.decorView, "Runtime")
@@ -83,6 +83,13 @@ class SettingsScreenIssue60ScreenshotTest {
         val target = findViewsByType(root, TextView::class.java)
             .firstOrNull { it.text.toString() == label && it.isClickable }
             ?: error("Clickable label '$label' not found")
+        target.performClick()
+    }
+
+    private fun clickLabelContaining(root: View, label: String) {
+        val target = findViewsByType(root, TextView::class.java)
+            .firstOrNull { label in it.text.toString() && it.isClickable }
+            ?: error("Clickable label containing '$label' not found")
         target.performClick()
     }
 
