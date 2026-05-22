@@ -32,4 +32,10 @@
     <item name="execution_log_view" type="id" />
     <item name="approval_approve_button" type="id" />
     <item name="approval_reject_button" type="id" />
+    <item name="settings_panel_skills_button" type="id" />
+    <item name="settings_panel_mcp_button" type="id" />
+    <item name="settings_panel_cloud_button" type="id" />
+    <item name="settings_panel_runtime_button" type="id" />
+    <item name="save_cloud_api_button" type="id" />
+    <item name="save_skill_button" type="id" />
 </resources>

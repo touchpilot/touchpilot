@@ -14,11 +14,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -62,6 +60,7 @@ class MainActivity : Activity() {
     private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
+    private var activeSettingsPanel = SettingsPanel.SKILLS
     private var selectedSkillId: String? = null
     private val conversation = mutableListOf<ChatEvent>()
 
@@ -228,10 +227,7 @@ class MainActivity : Activity() {
         contentRoot.removeAllViews()
         when (section) {
             Section.CHAT -> renderChatScreen()
-            Section.SKILLS -> renderSkillsScreen()
-            Section.RUNTIME -> renderRuntimeScreen()
             Section.TOOLS -> renderToolsScreen()
-            Section.MCP -> renderMcpScreen()
             Section.LOGS -> renderLogsScreen()
             Section.SETTINGS -> renderSettingsScreen()
         }
@@ -427,88 +423,101 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun renderSkillsScreen() {
-        contentRoot.addView(sectionTitle("Skills"))
-        contentRoot.addView(agentBubble("Active skill", selectedSkill()?.title ?: "No skill"))
-
-        val skillSpinner = Spinner(this).apply {
-            id = R.id.skill_spinner
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_item,
-                listOf("No skill") + skills.map { it.title }
-            ).apply {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            val selectedIndex = skills.indexOfFirst { it.id == selectedSkillId }
-            setSelection(if (selectedIndex >= 0) selectedIndex + 1 else 0)
-        }
-        contentRoot.addView(formLabel("Active Skill"))
-        contentRoot.addView(skillSpinner)
+    private fun renderSkillsPanel() {
+        val active = selectedSkill()
         contentRoot.addView(
-            primaryButton("Save Skill") {
-                val index = skillSpinner.selectedItemPosition - 1
-                selectedSkillId = skills.getOrNull(index)?.id
-                preferences.edit().putString("active_skill", selectedSkillId).apply()
-                showSection(Section.SKILLS)
-            }
-        )
-
-        if (skills.isEmpty()) {
-            contentRoot.addView(timelineCard("Installed skills", "No bundled skills found."))
-        } else {
-            skills.forEach { skill ->
-                contentRoot.addView(
-                    timelineCard(
-                        skill.title,
-                        buildString {
-                            appendLine(skill.markdown.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty())
-                            appendLine()
-                            appendLine("Allowed tools:")
-                            appendLine(skill.allowedTools.joinToString(separator = "\n") { "- $it" })
-                        }.trim()
-                    )
-                )
-            }
-        }
-    }
-
-    private fun renderRuntimeScreen() {
-        contentRoot.addView(sectionTitle("Local Runtime"))
-        contentRoot.addView(statusPill())
-        contentRoot.addView(localModelStatusCard())
-        contentRoot.addView(
-            timelineCard(
-                "Runtime boundary",
-                """
-                LiteRT command routing is the first local model runtime target. If the model asset is unavailable, TouchPilot falls back to the deterministic local router.
-
-                Every local model command still goes through JSON parsing, tool validation, skill allowlists, safety policy, approval, and redacted logs.
-                """.trimIndent()
+            summaryCard(
+                title = "Active skill",
+                value = active?.title ?: "No skill selected",
+                chipText = if (active != null) "${active.allowedTools.size} tools" else "none",
+                chipAccent = active != null
             )
         )
 
-        val providerModeSpinner = Spinner(this).apply {
-            id = R.id.agent_provider_spinner
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_item,
-                ProviderModeLabels
-            ).apply {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            setSelection(providerModeIndex(preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name)))
+        contentRoot.addView(formLabel("Available skills"))
+        if (skills.isEmpty()) {
+            contentRoot.addView(timelineCard("Installed skills", "No bundled skills found."))
+            return
         }
-        contentRoot.addView(formLabel("Agent Runtime"))
-        contentRoot.addView(providerModeSpinner)
+
         contentRoot.addView(
-            primaryButton("Save Runtime") {
-                val mode = when (providerModeSpinner.selectedItemPosition) {
-                    1 -> AgentProviderMode.LOCAL_MODEL
-                    else -> AgentProviderMode.LOCAL_ROUTER
+            skillSelectRow(
+                title = "No skill",
+                subtitle = "Run TouchPilot without a skill scope",
+                badge = null,
+                selected = selectedSkillId == null
+            ) { commitSelectedSkill(null) }
+        )
+        skills.forEach { skill ->
+            val description = skill.markdown.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotBlank() && !it.startsWith("#") && !it.startsWith("-") }
+                .orEmpty()
+            contentRoot.addView(
+                skillSelectRow(
+                    title = skill.title,
+                    subtitle = description.ifBlank { "No description provided" },
+                    badge = "${skill.allowedTools.size} tools",
+                    selected = selectedSkillId == skill.id
+                ) { commitSelectedSkill(skill.id) }
+            )
+        }
+    }
+
+    private fun commitSelectedSkill(id: String?) {
+        selectedSkillId = id
+        preferences.edit().putString("active_skill", selectedSkillId).apply()
+        showSection(Section.SETTINGS)
+    }
+
+    private fun renderRuntimePanel() {
+        val mode = currentProviderMode()
+        val localStatus = localModelRuntime.status()
+        contentRoot.addView(
+            summaryCard(
+                title = "Current runtime",
+                value = mode.label(),
+                chipText = if (localStatus.available) "model ready" else "fallback",
+                chipAccent = localStatus.available
+            )
+        )
+
+        contentRoot.addView(formLabel("Runtime mode"))
+        AgentProviderMode.values().forEach { option ->
+            contentRoot.addView(
+                skillSelectRow(
+                    title = option.label(),
+                    subtitle = option.description(),
+                    badge = null,
+                    selected = option == mode
+                ) {
+                    preferences.edit().putString("agent_provider_mode", option.name).apply()
+                    showSection(Section.SETTINGS)
                 }
-                preferences.edit().putString("agent_provider_mode", mode.name).apply()
-                showSection(Section.RUNTIME)
+            )
+        }
+
+        contentRoot.addView(formLabel("Local model status"))
+        contentRoot.addView(
+            timelineCard(
+                "LiteRT command model",
+                """
+                Status: ${if (localStatus.available) "available" else "fallback active"}
+                Asset: ${localStatus.modelAsset}
+                Version: ${localStatus.version}
+                ${localStatus.message}
+                """.trimIndent()
+            )
+        )
+        contentRoot.addView(
+            timelineCard(
+                "Boundary",
+                "Every local model command still goes through JSON parsing, tool validation, skill allowlists, safety policy, approval, and redacted logs."
+            )
+        )
+        contentRoot.addView(
+            secondaryButton("Open Accessibility Settings") {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         )
     }
@@ -616,13 +625,25 @@ class MainActivity : Activity() {
         contentRoot.addView(timelineCard("Latest result", outputText))
     }
 
-    private fun renderMcpScreen() {
-        contentRoot.addView(sectionTitle("MCP"))
+    private fun renderMcpPanel() {
+        val savedEndpoint = preferences.getString("mcp_endpoint", "").orEmpty()
+        contentRoot.addView(
+            summaryCard(
+                title = "MCP endpoint",
+                value = savedEndpoint.ifBlank { "Not configured" },
+                chipText = if (savedEndpoint.isBlank()) "not set" else "configured",
+                chipAccent = savedEndpoint.isNotBlank()
+            )
+        )
 
+        contentRoot.addView(formLabel("Server"))
         val endpointInput = editText("MCP HTTP JSON-RPC endpoint").apply {
             id = R.id.mcp_endpoint_input
-            setText(preferences.getString("mcp_endpoint", ""))
+            setText(savedEndpoint)
         }
+        contentRoot.addView(endpointInput)
+
+        contentRoot.addView(formLabel("Tool call"))
         val toolInput = editText("MCP tool name").apply { id = R.id.mcp_tool_input }
         val argsInput = editText("MCP tool arguments JSON").apply {
             id = R.id.mcp_args_input
@@ -630,15 +651,16 @@ class MainActivity : Activity() {
             minLines = 3
             setText("{}")
         }
+        contentRoot.addView(toolInput)
+        contentRoot.addView(argsInput)
 
-        contentRoot.addView(endpointInput)
-        val mcpRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        mcpRow.addView(
+        val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        actionRow.addView(
             secondaryButton("List Tools") {
                 val endpoint = endpointInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
                 outputText = "Listing MCP tools..."
-                showSection(Section.MCP)
+                showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
                         val client = McpHttpClient(endpoint)
@@ -662,20 +684,20 @@ class MainActivity : Activity() {
                     }
                     runOnUiThread {
                         outputText = result
-                        showSection(Section.MCP)
+                        showSection(Section.SETTINGS)
                     }
                 }.start()
             }.apply { id = R.id.list_mcp_tools_button },
             rowButtonParams()
         )
-        mcpRow.addView(
-            secondaryButton("Call Tool") {
+        actionRow.addView(
+            primaryButton("Call Tool") {
                 val endpoint = endpointInput.text.toString()
                 val toolName = toolInput.text.toString()
                 val argsText = argsInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
                 outputText = "Calling MCP tool..."
-                showSection(Section.MCP)
+                showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
                         val client = McpHttpClient(endpoint)
@@ -687,15 +709,14 @@ class MainActivity : Activity() {
                     }
                     runOnUiThread {
                         outputText = result
-                        showSection(Section.MCP)
+                        showSection(Section.SETTINGS)
                     }
                 }.start()
             }.apply { id = R.id.call_mcp_tool_button },
             rowButtonParams()
         )
-        contentRoot.addView(mcpRow)
-        contentRoot.addView(toolInput)
-        contentRoot.addView(argsInput)
+        contentRoot.addView(actionRow)
+
         contentRoot.addView(timelineCard("MCP result", outputText))
     }
 
@@ -723,9 +744,81 @@ class MainActivity : Activity() {
     private fun renderSettingsScreen() {
         contentRoot.addView(sectionTitle("Settings"))
         contentRoot.addView(
+            TextView(this).apply {
+                text = activeSettingsPanel.intro
+                textSize = 13f
+                setTextColor(Theme.MutedText)
+                setPadding(0, 0, 0, 12)
+            }
+        )
+        contentRoot.addView(settingsPanelSwitcher())
+        when (activeSettingsPanel) {
+            SettingsPanel.SKILLS -> renderSkillsPanel()
+            SettingsPanel.MCP -> renderMcpPanel()
+            SettingsPanel.CLOUD -> renderCloudPanel()
+            SettingsPanel.RUNTIME -> renderRuntimePanel()
+        }
+    }
+
+    private fun renderCloudPanel() {
+        val savedUrl = preferences.getString("agent_provider_url", "").orEmpty()
+        val savedModel = preferences.getString("agent_model", "").orEmpty()
+        val savedKey = preferences.getString("agent_api_key", "").orEmpty()
+        val configured = savedUrl.isNotBlank() && savedModel.isNotBlank() && savedKey.isNotBlank()
+
+        contentRoot.addView(
+            summaryCard(
+                title = "Cloud profile",
+                value = if (configured) "$savedModel via ${shortHost(savedUrl)}" else "Not configured",
+                chipText = if (configured) "configured" else "incomplete",
+                chipAccent = configured
+            )
+        )
+
+        contentRoot.addView(formLabel("Provider URL"))
+        val providerInput = editText("https://api.example.com/v1").apply {
+            id = R.id.agent_provider_url_input
+            setText(savedUrl)
+        }
+        contentRoot.addView(providerInput)
+
+        contentRoot.addView(formLabel("Model"))
+        val modelInput = editText("e.g. gpt-4o-mini").apply {
+            id = R.id.agent_model_input
+            setText(savedModel)
+        }
+        contentRoot.addView(modelInput)
+
+        contentRoot.addView(formLabel("API key"))
+        val apiKeyInput = editText("paste API key").apply {
+            id = R.id.agent_api_key_input
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(savedKey)
+        }
+        contentRoot.addView(apiKeyInput)
+
+        contentRoot.addView(
+            primaryButton("Save Cloud API") {
+                preferences.edit()
+                    .putString("agent_provider_url", providerInput.text.toString().trim())
+                    .putString("agent_model", modelInput.text.toString().trim())
+                    .putString("agent_api_key", apiKeyInput.text.toString().trim())
+                    .apply()
+                hideKeyboard(apiKeyInput)
+                outputText = "Cloud API settings saved."
+                showSection(Section.SETTINGS)
+            }.apply { id = R.id.save_cloud_api_button }
+        )
+
+        contentRoot.addView(
             timelineCard(
-                "Local-first runtime",
-                "TouchPilot keeps the normal product path on device. Use Local Runtime to switch between deterministic routing and the LiteRT local model path."
+                "Stored profile",
+                buildString {
+                    appendLine("Provider URL: ${savedUrl.ifBlank { "not set" }}")
+                    appendLine("Model: ${savedModel.ifBlank { "not set" }}")
+                    append("API key: ${if (savedKey.isBlank()) "not set" else "configured"}")
+                }
             )
         )
     }
@@ -890,6 +983,165 @@ class MainActivity : Activity() {
         return timelineCard("Active skill", selectedSkill()?.title ?: "No skill")
     }
 
+    private fun settingsPanelSwitcher(): View {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(Theme.SurfaceRaised, 24, Theme.StrokeDark)
+            setPadding(6, 6, 6, 6)
+        }
+        SettingsPanel.values().forEach { panel ->
+            val isActive = panel == activeSettingsPanel
+            val segment = TextView(this).apply {
+                text = panel.label
+                textSize = 12.5f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setSingleLine(true)
+                isAllCaps = false
+                setTextColor(if (isActive) Theme.OnAccent else Theme.MutedText)
+                background = rounded(
+                    if (isActive) Theme.Accent else Color.TRANSPARENT,
+                    20,
+                    if (isActive) Theme.Accent else Color.TRANSPARENT
+                )
+                setPadding(12, 14, 12, 14)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    if (activeSettingsPanel != panel) {
+                        activeSettingsPanel = panel
+                        showSection(Section.SETTINGS)
+                    }
+                }
+                id = when (panel) {
+                    SettingsPanel.SKILLS -> R.id.settings_panel_skills_button
+                    SettingsPanel.MCP -> R.id.settings_panel_mcp_button
+                    SettingsPanel.CLOUD -> R.id.settings_panel_cloud_button
+                    SettingsPanel.RUNTIME -> R.id.settings_panel_runtime_button
+                }
+            }
+            container.addView(
+                segment,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }
+        return container.withMargins(top = 0, bottom = 18)
+    }
+
+    private fun summaryCard(
+        title: String,
+        value: String,
+        chipText: String,
+        chipAccent: Boolean
+    ): View {
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = if (chipAccent) Theme.Accent else Theme.StrokeDark
+            strokeWidth = if (chipAccent) 2 else 1
+            radius = 18f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(20, 18, 20, 18)
+        }
+        val textColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        textColumn.addView(
+            TextView(this).apply {
+                text = title
+                textSize = 11.5f
+                setTextColor(Theme.MutedText)
+            }
+        )
+        textColumn.addView(
+            TextView(this).apply {
+                text = value
+                textSize = 15f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 4, 0, 0)
+            }
+        )
+        content.addView(textColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        content.addView(statusChip(chipText, chipAccent))
+        card.addView(content)
+        return card.withMargins(top = 4, bottom = 14)
+    }
+
+    private fun statusChip(text: String, accent: Boolean): TextView {
+        val fill = if (accent) Theme.Accent else Theme.SurfaceRaised
+        val textColor = if (accent) Theme.OnAccent else Theme.MutedText
+        val stroke = if (accent) Theme.Accent else Theme.StrokeDark
+        return TextView(this).apply {
+            setText(text)
+            textSize = 10.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(textColor)
+            isAllCaps = true
+            background = rounded(fill, 18, stroke)
+            setPadding(14, 6, 14, 6)
+        }
+    }
+
+    private fun skillSelectRow(
+        title: String,
+        subtitle: String,
+        badge: String?,
+        selected: Boolean,
+        onClick: () -> Unit
+    ): View {
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = if (selected) Theme.Accent else Theme.StrokeDark
+            strokeWidth = if (selected) 2 else 1
+            radius = 16f
+            cardElevation = 0f
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        column.addView(
+            TextView(this).apply {
+                text = title
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(if (selected) Theme.Accent else Color.WHITE)
+            }
+        )
+        column.addView(
+            TextView(this).apply {
+                text = subtitle
+                textSize = 12f
+                setTextColor(Theme.MutedText)
+                setPadding(0, 3, 0, 0)
+            }
+        )
+        row.addView(column, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        if (badge != null) {
+            row.addView(statusChip(badge, accent = selected))
+        }
+        card.addView(row)
+        return card.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun shortHost(url: String): String {
+        val trimmed = url.trim()
+        if (trimmed.isBlank()) return ""
+        val withoutScheme = trimmed.substringAfter("://", trimmed)
+        return withoutScheme.substringBefore('/').ifBlank { trimmed }
+    }
+
     private fun timelineCard(title: String, body: String): View {
         val card = MaterialCardView(this).apply {
             setCardBackgroundColor(Theme.Card)
@@ -952,17 +1204,19 @@ class MainActivity : Activity() {
         manager.hideSoftInputFromWindow(anchor.windowToken, 0)
     }
 
-    private fun providerModeIndex(savedMode: String?): Int {
-        return when (savedMode) {
-            AgentProviderMode.LOCAL_MODEL.name -> 1
-            else -> 0
-        }
-    }
-
     private fun AgentProviderMode.label(): String {
         return when (this) {
             AgentProviderMode.LOCAL_MODEL -> "Local model with router fallback"
             AgentProviderMode.LOCAL_ROUTER -> "Local router"
+        }
+    }
+
+    private fun AgentProviderMode.description(): String {
+        return when (this) {
+            AgentProviderMode.LOCAL_MODEL ->
+                "Use LiteRT command model first; fall back to deterministic routing if unavailable."
+            AgentProviderMode.LOCAL_ROUTER ->
+                "Use the deterministic router only. Predictable, no on-device model load."
         }
     }
 
@@ -1055,18 +1309,33 @@ class MainActivity : Activity() {
 
     private enum class Section(val label: String) {
         CHAT("Chat"),
-        SKILLS("Skills"),
-        RUNTIME("Run"),
         TOOLS("Tools"),
-        MCP("MCP"),
         LOGS("Logs"),
         SETTINGS("Settings")
+    }
+
+    private enum class SettingsPanel(val label: String, val intro: String) {
+        SKILLS(
+            "Skills",
+            "Skills bundle the tools and prompts TouchPilot uses for a kind of task."
+        ),
+        MCP(
+            "MCP",
+            "Connect TouchPilot to an external MCP HTTP JSON-RPC server to call its tools."
+        ),
+        CLOUD(
+            "Cloud API",
+            "Optional cloud agent endpoint. Used only when explicitly selected as the runtime."
+        ),
+        RUNTIME(
+            "Runtime",
+            "Choose how TouchPilot reasons about your requests on this device."
+        )
     }
 
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
-        val ProviderModeLabels = listOf("Local router", "Local model")
     }
 
     private object Theme {
