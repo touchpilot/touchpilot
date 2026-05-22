@@ -67,6 +67,7 @@ class MainActivity : Activity() {
     private var activeSection = Section.CHAT
     private var activeSettingsPanel = SettingsPanel.SKILLS
     private var selectedSkillId: String? = null
+    private var expandedSkillReferenceId: String? = null
     private val conversation = mutableListOf<ChatEvent>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -124,7 +125,7 @@ class MainActivity : Activity() {
                 isScrollbarFadingEnabled = true
                 contentRoot = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(28, 16, 28, 18)
+                    setPadding(24, 18, 24, 20)
                 }
                 addView(contentRoot)
             }
@@ -147,7 +148,7 @@ class MainActivity : Activity() {
     private fun buildHeader(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(30, 82, 30, 14)
+            setPadding(28, 64, 28, 12)
             setBackgroundColor(Theme.Background)
 
             val row = LinearLayout(this@MainActivity).apply {
@@ -159,7 +160,7 @@ class MainActivity : Activity() {
                 TextView(this@MainActivity).apply {
                     id = R.id.touchpilot_title
                     text = "Touch"
-                    textSize = 25f
+                    textSize = 24f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
                 }
@@ -167,7 +168,7 @@ class MainActivity : Activity() {
             row.addView(
                 TextView(this@MainActivity).apply {
                     text = "Pilot"
-                    textSize = 25f
+                    textSize = 24f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Theme.Accent)
                 }
@@ -177,8 +178,8 @@ class MainActivity : Activity() {
 
             statusView = TextView(this@MainActivity).apply {
                 id = R.id.touchpilot_status
-                textSize = 12f
-                setPadding(0, 8, 0, 0)
+                textSize = 11.5f
+                setPadding(0, 6, 0, 0)
                 setTextColor(Color.rgb(150, 164, 178))
             }
             addView(statusView)
@@ -188,11 +189,11 @@ class MainActivity : Activity() {
     private fun buildBottomNav(): View {
         return TabLayout(this).apply {
             bottomNav = this
-            setBackgroundColor(Theme.Background)
-            setPadding(0, 6, 0, 30)
+            setBackgroundColor(Theme.Card)
+            setPadding(12, 8, 12, 18)
             tabMode = TabLayout.MODE_FIXED
             tabGravity = TabLayout.GRAVITY_FILL
-            setSelectedTabIndicatorColor(Theme.Accent)
+            setSelectedTabIndicatorColor(Color.TRANSPARENT)
             setTabTextColors(Theme.NavText, Theme.Accent)
 
             Section.values().forEach { section ->
@@ -224,10 +225,11 @@ class MainActivity : Activity() {
             text = section.label
             gravity = Gravity.CENTER
             setSingleLine(true)
-            textSize = 9.5f
+            textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             minWidth = 0
-            setPadding(0, 10, 0, 10)
+            minHeight = 44
+            setPadding(8, 10, 8, 10)
         }
     }
 
@@ -252,7 +254,13 @@ class MainActivity : Activity() {
         }
         Section.values().forEachIndexed { tabIndex, section ->
             val label = nav.getTabAt(tabIndex)?.customView as? TextView
-            label?.setTextColor(if (section == activeSection) Theme.Accent else Theme.NavText)
+            val selected = section == activeSection
+            label?.setTextColor(if (selected) Theme.OnAccent else Theme.NavText)
+            label?.background = rounded(
+                fill = if (selected) Theme.Accent else Color.TRANSPARENT,
+                radius = 10,
+                stroke = if (selected) Theme.Accent else Color.TRANSPARENT
+            )
         }
     }
 
@@ -288,8 +296,8 @@ class MainActivity : Activity() {
             textSize = 14.5f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
-            background = rounded(Theme.Card, 28, Theme.StrokeDark)
-            setPadding(22, 14, 22, 14)
+            background = rounded(Theme.Card, 10, Theme.StrokeDark)
+            setPadding(18, 12, 18, 12)
             imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
@@ -323,7 +331,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER
                 setTextColor(Theme.OnAccent)
                 backgroundTintList = ColorStateList.valueOf(Theme.Accent)
-                cornerRadius = 26
+                cornerRadius = 10
                 setOnClickListener { submitChatMessage() }
             },
             LinearLayout.LayoutParams(
@@ -391,7 +399,7 @@ class MainActivity : Activity() {
                 ApprovalState.REJECTED -> Theme.StrokeDark
             }
             strokeWidth = 2
-            radius = 18f
+            radius = 8f
             cardElevation = 0f
         }
         val content = LinearLayout(this).apply {
@@ -442,7 +450,7 @@ class MainActivity : Activity() {
         }
 
         card.addView(content)
-        return card.withMargins(top = 10, right = 42, bottom = 10)
+        return card.withMargins(top = 8, bottom = 8)
     }
 
     private fun resolveApproval(event: ChatEvent.ApprovalPrompt, approved: Boolean) {
@@ -528,11 +536,29 @@ class MainActivity : Activity() {
                     selected = selectedSkillId == skill.id
                 ) { commitSelectedSkill(skill.id) }
             )
+            if (expandedSkillReferenceId == skill.id) {
+                contentRoot.addView(
+                    timelineCard(
+                        "Skill reference",
+                        buildString {
+                            appendLine(skill.markdown.trim())
+                            appendLine()
+                            appendLine("Allowed tools:")
+                            skill.allowedTools.forEach { appendLine("- $it") }
+                        }.trim()
+                    )
+                )
+            }
         }
     }
 
     private fun commitSelectedSkill(id: String?) {
         selectedSkillId = id
+        expandedSkillReferenceId = when {
+            id == null -> null
+            expandedSkillReferenceId == id -> null
+            else -> id
+        }
         preferences.edit().putString("active_skill", selectedSkillId).apply()
         showSection(Section.SETTINGS)
     }
@@ -564,24 +590,6 @@ class MainActivity : Activity() {
             )
         }
 
-        contentRoot.addView(formLabel("Local model status"))
-        contentRoot.addView(
-            timelineCard(
-                "LiteRT command model",
-                """
-                Status: ${if (localStatus.available) "available" else "fallback active"}
-                Asset: ${localStatus.modelAsset}
-                Version: ${localStatus.version}
-                ${localStatus.message}
-                """.trimIndent()
-            )
-        )
-        contentRoot.addView(
-            timelineCard(
-                "Boundary",
-                "Every local model command still goes through JSON parsing, tool validation, skill allowlists, safety policy, approval, and redacted logs."
-            )
-        )
         contentRoot.addView(
             secondaryButton("Open Accessibility Settings") {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -802,8 +810,8 @@ class MainActivity : Activity() {
             text = ToolExecutionLog.render()
             textSize = 12f
             setTextColor(Theme.BodyText)
-            setPadding(18, 18, 18, 18)
-            background = rounded(Theme.Card, 18, Theme.StrokeDark)
+            setPadding(16, 16, 16, 16)
+            background = rounded(Theme.Card, 8, Theme.StrokeDark)
         }
         contentRoot.addView(executionLogView)
     }
@@ -946,7 +954,7 @@ class MainActivity : Activity() {
             textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            setPadding(0, 4, 0, 14)
+            setPadding(0, 2, 0, 10)
         }
     }
 
@@ -955,7 +963,7 @@ class MainActivity : Activity() {
             setText(text)
             textSize = 12f
             setTextColor(Theme.MutedText)
-            setPadding(0, 14, 0, 6)
+            setPadding(0, 12, 0, 6)
         }
     }
 
@@ -966,10 +974,10 @@ class MainActivity : Activity() {
             textSize = 14f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
-            background = rounded(Theme.SurfaceRaised, 18, Theme.StrokeDark)
+            background = rounded(Theme.SurfaceRaised, 8, Theme.StrokeDark)
             layoutParams = controlParams()
-            minHeight = 54
-            setPadding(20, 8, 20, 8)
+            minHeight = 52
+            setPadding(16, 8, 16, 8)
         }
     }
 
@@ -984,10 +992,10 @@ class MainActivity : Activity() {
             backgroundTintList = ColorStateList.valueOf(Theme.Accent)
             strokeColor = ColorStateList.valueOf(Theme.Accent)
             strokeWidth = 1
-            cornerRadius = 20
+            cornerRadius = 10
             layoutParams = controlParams()
-            minHeight = 52
-            setPadding(18, 14, 18, 14)
+            minHeight = 50
+            setPadding(16, 12, 16, 12)
             setOnClickListener { onClick() }
         }
     }
@@ -1002,10 +1010,10 @@ class MainActivity : Activity() {
             backgroundTintList = ColorStateList.valueOf(Theme.SurfaceRaised)
             strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
             strokeWidth = 1
-            cornerRadius = 18
+            cornerRadius = 10
             layoutParams = controlParams()
-            minHeight = 50
-            setPadding(14, 13, 14, 13)
+            minHeight = 48
+            setPadding(14, 12, 14, 12)
             setOnClickListener { onClick() }
         }
     }
@@ -1020,8 +1028,8 @@ class MainActivity : Activity() {
                 setText(text)
                 textSize = 14f
                 setTextColor(Theme.OnAccent)
-                background = rounded(Theme.Accent, 22, Theme.Accent)
-                setPadding(20, 14, 20, 14)
+                background = rounded(Theme.Accent, 10, Theme.Accent)
+                setPadding(18, 14, 18, 14)
             },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1067,7 +1075,7 @@ class MainActivity : Activity() {
     private fun settingsPanelSwitcher(): View {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            background = rounded(Theme.SurfaceRaised, 24, Theme.StrokeDark)
+            background = rounded(Theme.SurfaceRaised, 8, Theme.StrokeDark)
             setPadding(6, 6, 6, 6)
         }
         SettingsPanel.values().forEach { panel ->
@@ -1082,10 +1090,10 @@ class MainActivity : Activity() {
                 setTextColor(if (isActive) Theme.OnAccent else Theme.MutedText)
                 background = rounded(
                     if (isActive) Theme.Accent else Color.TRANSPARENT,
-                    20,
+                    8,
                     if (isActive) Theme.Accent else Color.TRANSPARENT
                 )
-                setPadding(12, 14, 12, 14)
+                setPadding(10, 12, 10, 12)
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -1119,13 +1127,13 @@ class MainActivity : Activity() {
             setCardBackgroundColor(Theme.Card)
             strokeColor = if (chipAccent) Theme.Accent else Theme.StrokeDark
             strokeWidth = if (chipAccent) 2 else 1
-            radius = 18f
+            radius = 8f
             cardElevation = 0f
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(20, 18, 20, 18)
+            setPadding(18, 14, 18, 14)
         }
         val textColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1149,7 +1157,7 @@ class MainActivity : Activity() {
         content.addView(textColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         content.addView(statusChip(chipText, chipAccent))
         card.addView(content)
-        return card.withMargins(top = 4, bottom = 14)
+        return card.withMargins(top = 4, bottom = 12)
     }
 
     private fun statusChip(text: String, accent: Boolean): TextView {
@@ -1162,8 +1170,8 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(textColor)
             isAllCaps = true
-            background = rounded(fill, 18, stroke)
-            setPadding(14, 6, 14, 6)
+            background = rounded(fill, 8, stroke)
+            setPadding(12, 5, 12, 5)
         }
     }
 
@@ -1178,7 +1186,7 @@ class MainActivity : Activity() {
             setCardBackgroundColor(Theme.Card)
             strokeColor = if (selected) Theme.Accent else Theme.StrokeDark
             strokeWidth = if (selected) 2 else 1
-            radius = 16f
+            radius = 8f
             cardElevation = 0f
             isClickable = true
             isFocusable = true
@@ -1228,13 +1236,12 @@ class MainActivity : Activity() {
             setCardBackgroundColor(Theme.Card)
             strokeColor = Theme.StrokeDark
             strokeWidth = 1
-            radius = 18f
+            radius = 8f
             cardElevation = 0f
-            setPadding(18, 16, 18, 16)
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 16, 18, 16)
+            setPadding(18, 14, 18, 14)
         }
         content.addView(
             TextView(this).apply {
@@ -1253,7 +1260,7 @@ class MainActivity : Activity() {
             }
         )
         card.addView(content)
-        return card.withMargins(top = 10, right = 42, bottom = 10)
+        return card.withMargins(top = 8, bottom = 8)
     }
 
     private fun View.withMargins(
