@@ -220,6 +220,96 @@ class ScreenContextTest {
         assertEquals(bounds.height, restored.height)
     }
 
+    @Test
+    fun screenNodeFromJsonDefaultsToOtherForUnknownRole() {
+        val json = org.json.JSONObject().apply {
+            put("nodeId", "test")
+            put("role", "UNKNOWN_FUTURE_ROLE")
+            put("text", ScreenText.Empty.toJson(redacted = false))
+            put("bounds", NodeBounds.Unknown.toJson())
+            put("clickable", false)
+            put("longClickable", false)
+            put("scrollable", false)
+            put("enabled", true)
+            put("focused", false)
+            put("isInputField", false)
+            put("sensitive", false)
+        }
+
+        val node = ScreenNode.fromJson(json)
+        assertEquals(NodeRole.OTHER, node.role)
+        assertEquals("test", node.nodeId)
+    }
+
+    @Test
+    fun screenNodeFromJsonHandlesEmptyRoleString() {
+        val json = org.json.JSONObject().apply {
+            put("nodeId", "test_empty")
+            put("role", "")
+            put("text", ScreenText.Empty.toJson(redacted = false))
+            put("bounds", NodeBounds.Unknown.toJson())
+            put("clickable", false)
+            put("longClickable", false)
+            put("scrollable", false)
+            put("enabled", true)
+            put("focused", false)
+            put("isInputField", false)
+            put("sensitive", false)
+        }
+
+        val node = ScreenNode.fromJson(json)
+        assertEquals(NodeRole.OTHER, node.role)
+    }
+
+    @Test
+    fun screenNodeFromJsonHandlesMissingRoleField() {
+        val json = org.json.JSONObject().apply {
+            put("nodeId", "test_missing")
+            put("text", ScreenText.Empty.toJson(redacted = false))
+            put("bounds", NodeBounds.Unknown.toJson())
+            put("clickable", false)
+            put("longClickable", false)
+            put("scrollable", false)
+            put("enabled", true)
+            put("focused", false)
+            put("isInputField", false)
+            put("sensitive", false)
+        }
+
+        val node = ScreenNode.fromJson(json)
+        assertEquals(NodeRole.OTHER, node.role)
+    }
+
+    @Test
+    fun screenNodeFromJsonPreservesValidRoles() {
+        val validRoles = listOf(
+            NodeRole.BUTTON,
+            NodeRole.INPUT,
+            NodeRole.TEXT,
+            NodeRole.IMAGE,
+            NodeRole.SCROLLABLE
+        )
+
+        validRoles.forEach { expectedRole ->
+            val json = org.json.JSONObject().apply {
+                put("nodeId", "test_${expectedRole.name}")
+                put("role", expectedRole.name)
+                put("text", ScreenText.Empty.toJson(redacted = false))
+                put("bounds", NodeBounds.Unknown.toJson())
+                put("clickable", false)
+                put("longClickable", false)
+                put("scrollable", false)
+                put("enabled", true)
+                put("focused", false)
+                put("isInputField", false)
+                put("sensitive", false)
+            }
+
+            val node = ScreenNode.fromJson(json)
+            assertEquals(expectedRole, node.role, "Failed to preserve role: ${expectedRole.name}")
+        }
+    }
+
     private fun node(
         id: String,
         role: NodeRole = NodeRole.OTHER,

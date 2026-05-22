@@ -124,9 +124,16 @@ data class ScreenNode(
 
     companion object {
         fun fromJson(json: JSONObject): ScreenNode {
+            val roleString = json.optString("role", "OTHER")
+            val role = try {
+                NodeRole.valueOf(roleString)
+            } catch (e: IllegalArgumentException) {
+                NodeRole.OTHER
+            }
+            
             return ScreenNode(
                 nodeId = if (json.has("nodeId") && !json.isNull("nodeId")) json.getString("nodeId") else null,
-                role = NodeRole.valueOf(json.optString("role", "OTHER")),
+                role = role,
                 text = ScreenText.fromJson(json.getJSONObject("text")),
                 bounds = NodeBounds.fromJson(json.getJSONObject("bounds")),
                 clickable = json.optBoolean("clickable", false),
