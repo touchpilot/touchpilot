@@ -20,6 +20,8 @@
     <item name="agent_api_key_input" type="id" />
     <item name="skill_spinner" type="id" />
     <item name="agent_provider_spinner" type="id" />
+    <item name="chat_scroll_view" type="id" />
+    <item name="chat_input_bar" type="id" />
     <item name="agent_task_input" type="id" />
     <item name="run_agent_button" type="id" />
     <item name="mcp_endpoint_input" type="id" />
