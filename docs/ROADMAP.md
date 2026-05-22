@@ -173,6 +173,8 @@ Deliverables:
 - Add suggested actions from visible controls.
 - Add OCR fallback only where Accessibility data is weak.
 - Keep local VLM as a future fallback, not the first dependency.
+- Validate representative screen understanding offline; see
+  [Milestone 3 Offline Screen Understanding Validation](OFFLINE_VALIDATION_M3.md).
 
 Exit criteria:
 
