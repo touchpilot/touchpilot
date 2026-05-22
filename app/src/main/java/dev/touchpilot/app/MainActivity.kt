@@ -869,7 +869,7 @@ class MainActivity : Activity() {
     private fun settingsGoBackButton(): View {
         return secondaryButton("Go Back") {
             activeSettingsPanel = null
-            pendingSettingsAnimationDirection = 1
+            pendingSettingsAnimationDirection = -1
             showSection(Section.SETTINGS)
         }.apply {
             minHeight = 46
@@ -1130,7 +1130,7 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     if (activeSettingsPanel != panel) {
                         activeSettingsPanel = panel
-                        pendingSettingsAnimationDirection = -1
+                        pendingSettingsAnimationDirection = 1
                         showSection(Section.SETTINGS)
                     }
                 }
