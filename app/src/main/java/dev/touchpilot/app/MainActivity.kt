@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -66,6 +67,7 @@ class MainActivity : Activity() {
 
     private var activeSection = Section.CHAT
     private var activeSettingsPanel: SettingsPanel? = null
+    private var pendingSettingsAnimationDirection = 0
     private var selectedSkillId: String? = null
     private var expandedSkillReferenceId: String? = null
     private val conversation = mutableListOf<ChatEvent>()
@@ -244,6 +246,23 @@ class MainActivity : Activity() {
             Section.LOGS -> renderLogsScreen()
             Section.SETTINGS -> renderSettingsScreen()
         }
+        animatePendingSettingsTransition(section)
+    }
+
+    private fun animatePendingSettingsTransition(section: Section) {
+        if (section != Section.SETTINGS || pendingSettingsAnimationDirection == 0) return
+
+        val direction = pendingSettingsAnimationDirection
+        pendingSettingsAnimationDirection = 0
+        val travel = (contentRoot.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).toFloat()
+        contentRoot.translationX = travel * direction
+        contentRoot.alpha = 0.96f
+        contentRoot.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(220L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     private fun updateBottomNav() {
@@ -820,15 +839,15 @@ class MainActivity : Activity() {
 
     private fun renderSettingsScreen() {
         contentRoot.addView(sectionTitle("Settings"))
-        contentRoot.addView(
-            TextView(this).apply {
-                text = "Choose a settings area to configure TouchPilot."
-                textSize = 13f
-                setTextColor(Theme.MutedText)
-                setPadding(0, 0, 0, 12)
-            }
-        )
-        contentRoot.addView(settingsPanelSwitcher())
+        val panel = activeSettingsPanel
+        if (panel == null) {
+            contentRoot.addView(settingsIntro("Choose a settings area to configure TouchPilot."))
+            contentRoot.addView(settingsPanelSwitcher())
+            return
+        }
+
+        contentRoot.addView(settingsIntro(panel.intro))
+        contentRoot.addView(settingsGoBackButton())
         when (activeSettingsPanel) {
             SettingsPanel.SKILLS -> renderSkillsPanel()
             SettingsPanel.MCP -> renderMcpPanel()
@@ -836,6 +855,25 @@ class MainActivity : Activity() {
             SettingsPanel.RUNTIME -> renderRuntimePanel()
             null -> Unit
         }
+    }
+
+    private fun settingsIntro(value: String): View {
+        return TextView(this).apply {
+            text = value
+            textSize = 13f
+            setTextColor(Theme.MutedText)
+            setPadding(0, 0, 0, 12)
+        }
+    }
+
+    private fun settingsGoBackButton(): View {
+        return secondaryButton("Go Back") {
+            activeSettingsPanel = null
+            pendingSettingsAnimationDirection = 1
+            showSection(Section.SETTINGS)
+        }.apply {
+            minHeight = 46
+        }.withMargins(bottom = 12)
     }
 
     private fun renderCloudPanel() {
@@ -1092,6 +1130,7 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     if (activeSettingsPanel != panel) {
                         activeSettingsPanel = panel
+                        pendingSettingsAnimationDirection = -1
                         showSection(Section.SETTINGS)
                     }
                 }
