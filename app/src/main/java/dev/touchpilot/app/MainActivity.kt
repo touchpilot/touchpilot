@@ -65,7 +65,7 @@ class MainActivity : Activity() {
     private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
-    private var activeSettingsPanel = SettingsPanel.SKILLS
+    private var activeSettingsPanel: SettingsPanel? = null
     private var selectedSkillId: String? = null
     private var expandedSkillReferenceId: String? = null
     private val conversation = mutableListOf<ChatEvent>()
@@ -326,7 +326,7 @@ class MainActivity : Activity() {
                 typeface = Typeface.DEFAULT_BOLD
                 isAllCaps = false
                 minHeight = 44
-                minWidth = 72
+                minWidth = 88
                 insetTop = 0
                 insetBottom = 0
                 gravity = Gravity.CENTER
@@ -337,7 +337,7 @@ class MainActivity : Activity() {
                 setOnClickListener { submitChatMessage() }
             },
             LinearLayout.LayoutParams(
-                72,
+                88,
                 52
             ).apply {
                 leftMargin = 8
@@ -834,6 +834,7 @@ class MainActivity : Activity() {
             SettingsPanel.MCP -> renderMcpPanel()
             SettingsPanel.CLOUD -> renderCloudPanel()
             SettingsPanel.RUNTIME -> renderRuntimePanel()
+            null -> Unit
         }
     }
 
