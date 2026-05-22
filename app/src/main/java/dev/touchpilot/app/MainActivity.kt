@@ -62,7 +62,6 @@ class MainActivity : Activity() {
     private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
-    private var activeSettingsPanel = SettingsPanel.SKILLS
     private var selectedSkillId: String? = null
     private val conversation = mutableListOf<ChatEvent>()
 
@@ -187,7 +186,7 @@ class MainActivity : Activity() {
             setSelectedTabIndicatorColor(Theme.Accent)
             setTabTextColors(Theme.NavText, Theme.Accent)
 
-            Section.values().forEach { section ->
+            BottomNavSections.forEach { section ->
                 addTab(
                     newTab()
                         .setCustomView(bottomNavLabel(section))
@@ -232,18 +231,23 @@ class MainActivity : Activity() {
             Section.TOOLS -> renderToolsScreen()
             Section.LOGS -> renderLogsScreen()
             Section.SETTINGS -> renderSettingsScreen()
+            Section.SETTINGS_SKILLS -> renderSkillsSettingsPage()
+            Section.SETTINGS_MCP -> renderMcpSettingsPage()
+            Section.SETTINGS_API -> renderCloudApiSettingsPage()
+            Section.SETTINGS_RUNTIME -> renderRuntimeSettingsPage()
         }
     }
 
     private fun updateBottomNav() {
         val nav = bottomNav ?: return
-        val index = Section.values().indexOf(activeSection)
+        val navSection = activeSection.bottomNavSection()
+        val index = BottomNavSections.indexOf(navSection)
         if (index >= 0 && nav.selectedTabPosition != index) {
             nav.getTabAt(index)?.select()
         }
-        Section.values().forEachIndexed { tabIndex, section ->
+        BottomNavSections.forEachIndexed { tabIndex, section ->
             val label = nav.getTabAt(tabIndex)?.customView as? TextView
-            label?.setTextColor(if (section == activeSection) Theme.Accent else Theme.NavText)
+            label?.setTextColor(if (section == navSection) Theme.Accent else Theme.NavText)
         }
     }
 
@@ -425,8 +429,13 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun renderSkillsSettingsPanel() {
+    private fun settingsBackButton(): View {
+        return secondaryButton("Back to Settings") { showSection(Section.SETTINGS) }
+    }
+
+    private fun renderSkillsSettingsPage() {
         contentRoot.addView(sectionTitle("Skills"))
+        contentRoot.addView(settingsBackButton())
         contentRoot.addView(agentBubble("Active skill", selectedSkill()?.title ?: "No skill"))
 
         val skillSpinner = Spinner(this).apply {
@@ -448,7 +457,7 @@ class MainActivity : Activity() {
                 val index = skillSpinner.selectedItemPosition - 1
                 selectedSkillId = skills.getOrNull(index)?.id
                 preferences.edit().putString("active_skill", selectedSkillId).apply()
-                showSection(Section.SETTINGS)
+                showSection(Section.SETTINGS_SKILLS)
             }
         )
 
@@ -471,8 +480,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderRuntimeSettingsPanel() {
+    private fun renderRuntimeSettingsPage() {
         contentRoot.addView(sectionTitle("Runtime"))
+        contentRoot.addView(settingsBackButton())
         contentRoot.addView(statusPill())
         contentRoot.addView(localModelStatusCard())
         contentRoot.addView(
@@ -506,7 +516,7 @@ class MainActivity : Activity() {
                     else -> AgentProviderMode.LOCAL_ROUTER
                 }
                 preferences.edit().putString("agent_provider_mode", mode.name).apply()
-                showSection(Section.SETTINGS)
+                showSection(Section.SETTINGS_RUNTIME)
             }
         )
         contentRoot.addView(
@@ -619,8 +629,9 @@ class MainActivity : Activity() {
         contentRoot.addView(timelineCard("Latest result", outputText))
     }
 
-    private fun renderMcpSettingsPanel() {
+    private fun renderMcpSettingsPage() {
         contentRoot.addView(sectionTitle("MCP"))
+        contentRoot.addView(settingsBackButton())
 
         val endpointInput = editText("MCP HTTP JSON-RPC endpoint").apply {
             id = R.id.mcp_endpoint_input
@@ -641,7 +652,7 @@ class MainActivity : Activity() {
                 val endpoint = endpointInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
                 outputText = "Listing MCP tools..."
-                showSection(Section.SETTINGS)
+                showSection(Section.SETTINGS_MCP)
                 Thread {
                     val result = runCatching {
                         val client = McpHttpClient(endpoint)
@@ -665,7 +676,7 @@ class MainActivity : Activity() {
                     }
                     runOnUiThread {
                         outputText = result
-                        showSection(Section.SETTINGS)
+                        showSection(Section.SETTINGS_MCP)
                     }
                 }.start()
             }.apply { id = R.id.list_mcp_tools_button },
@@ -678,7 +689,7 @@ class MainActivity : Activity() {
                 val argsText = argsInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
                 outputText = "Calling MCP tool..."
-                showSection(Section.SETTINGS)
+                showSection(Section.SETTINGS_MCP)
                 Thread {
                     val result = runCatching {
                         val client = McpHttpClient(endpoint)
@@ -690,7 +701,7 @@ class MainActivity : Activity() {
                     }
                     runOnUiThread {
                         outputText = result
-                        showSection(Section.SETTINGS)
+                        showSection(Section.SETTINGS_MCP)
                     }
                 }.start()
             }.apply { id = R.id.call_mcp_tool_button },
@@ -723,8 +734,9 @@ class MainActivity : Activity() {
         contentRoot.addView(executionLogView)
     }
 
-    private fun renderCloudApiSettingsPanel() {
+    private fun renderCloudApiSettingsPage() {
         contentRoot.addView(sectionTitle("Cloud API"))
+        contentRoot.addView(settingsBackButton())
 
         val providerInput = editText("Provider URL").apply {
             id = R.id.agent_provider_url_input
@@ -750,7 +762,7 @@ class MainActivity : Activity() {
                     .putString("agent_api_key", apiKeyInput.text.toString().trim())
                     .apply()
                 outputText = "Cloud API settings saved."
-                showSection(Section.SETTINGS)
+                showSection(Section.SETTINGS_API)
             }
         )
         contentRoot.addView(
@@ -767,34 +779,19 @@ class MainActivity : Activity() {
 
     private fun renderSettingsScreen() {
         contentRoot.addView(sectionTitle("Settings"))
-        val panelRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        SettingsPanel.values().forEach { panel ->
-            panelRow.addView(settingsPanelButton(panel), rowButtonParams())
-        }
-        contentRoot.addView(panelRow)
-
-        when (activeSettingsPanel) {
-            SettingsPanel.SKILLS -> renderSkillsSettingsPanel()
-            SettingsPanel.MCP -> renderMcpSettingsPanel()
-            SettingsPanel.CLOUD_API -> renderCloudApiSettingsPanel()
-            SettingsPanel.RUNTIME -> renderRuntimeSettingsPanel()
-        }
+        contentRoot.addView(settingsNavItem("Skills") { showSection(Section.SETTINGS_SKILLS) })
+        contentRoot.addView(settingsNavItem("MCP") { showSection(Section.SETTINGS_MCP) })
+        contentRoot.addView(settingsNavItem("API") { showSection(Section.SETTINGS_API) })
+        contentRoot.addView(settingsNavItem("Runtime") { showSection(Section.SETTINGS_RUNTIME) })
     }
 
-    private fun settingsPanelButton(panel: SettingsPanel): TextView {
-        val selected = panel == activeSettingsPanel
-        val button = if (selected) {
-            primaryButton(panel.label) {
-                activeSettingsPanel = panel
-                showSection(Section.SETTINGS)
-            }
-        } else {
-            secondaryButton(panel.label) {
-                activeSettingsPanel = panel
-                showSection(Section.SETTINGS)
-            }
+    private fun settingsNavItem(label: String, onClick: () -> Unit): View {
+        return secondaryButton(label, onClick).apply {
+            textSize = 15f
+            minHeight = 58
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            setPadding(22, 13, 22, 13)
         }
-        return button.apply { minHeight = 46 }
     }
 
     private var outputText: String = "No result yet."
@@ -1033,6 +1030,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun Section.bottomNavSection(): Section {
+        return when (this) {
+            Section.SETTINGS_SKILLS,
+            Section.SETTINGS_MCP,
+            Section.SETTINGS_API,
+            Section.SETTINGS_RUNTIME -> Section.SETTINGS
+            else -> this
+        }
+    }
+
     private fun LocalModelStatus.shortLine(): String {
         return if (available) {
             "$runtime model available"
@@ -1124,20 +1131,18 @@ class MainActivity : Activity() {
         CHAT("Chat"),
         TOOLS("Tools"),
         LOGS("Logs"),
-        SETTINGS("Settings")
-    }
-
-    private enum class SettingsPanel(val label: String) {
-        SKILLS("Skills"),
-        MCP("MCP"),
-        CLOUD_API("Cloud API"),
-        RUNTIME("Runtime")
+        SETTINGS("Settings"),
+        SETTINGS_SKILLS("Settings"),
+        SETTINGS_MCP("Settings"),
+        SETTINGS_API("Settings"),
+        SETTINGS_RUNTIME("Settings")
     }
 
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
         val ProviderModeLabels = listOf("Local router", "Local model")
+        val BottomNavSections = listOf(Section.CHAT, Section.TOOLS, Section.LOGS, Section.SETTINGS)
     }
 
     private object Theme {
