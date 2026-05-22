@@ -10,6 +10,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
+import android.view.animation.DecelerateInterpolator
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -223,6 +224,7 @@ class MainActivity : Activity() {
     }
 
     private fun showSection(section: Section) {
+        val previous = activeSection
         activeSection = section
         updateBottomNav()
         contentRoot.removeAllViews()
@@ -236,6 +238,31 @@ class MainActivity : Activity() {
             Section.SETTINGS_API -> renderCloudApiSettingsPage()
             Section.SETTINGS_RUNTIME -> renderRuntimeSettingsPage()
         }
+        animateSectionTransition(previous, section)
+    }
+
+    private fun animateSectionTransition(from: Section, to: Section) {
+        val width = contentRoot.width.toFloat().takeIf { it > 0f } ?: resources.displayMetrics.widthPixels.toFloat()
+        val enteringSettingsRoot = to == Section.SETTINGS && from != Section.SETTINGS
+        val leavingSettingsRoot = from == Section.SETTINGS && to != Section.SETTINGS
+        val enteringSettingsDetail = from == Section.SETTINGS && to.isSettingsDetail()
+        val leavingSettingsDetail = from.isSettingsDetail() && to == Section.SETTINGS
+
+        val startOffset = when {
+            enteringSettingsRoot || enteringSettingsDetail -> width
+            leavingSettingsRoot || leavingSettingsDetail -> -width
+            else -> 0f
+        }
+        if (startOffset == 0f) return
+
+        contentRoot.translationX = startOffset
+        contentRoot.alpha = 0.92f
+        contentRoot.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(220)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     private fun updateBottomNav() {
@@ -434,7 +461,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderSkillsSettingsPage() {
-        contentRoot.addView(sectionTitle("Skills"))
+        contentRoot.addView(settingsSectionTitle("Skills"))
         contentRoot.addView(settingsBackButton())
         contentRoot.addView(agentBubble("Active skill", selectedSkill()?.title ?: "No skill"))
 
@@ -481,7 +508,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderRuntimeSettingsPage() {
-        contentRoot.addView(sectionTitle("Runtime"))
+        contentRoot.addView(settingsSectionTitle("Runtime"))
         contentRoot.addView(settingsBackButton())
         contentRoot.addView(statusPill())
         contentRoot.addView(localModelStatusCard())
@@ -630,7 +657,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderMcpSettingsPage() {
-        contentRoot.addView(sectionTitle("MCP"))
+        contentRoot.addView(settingsSectionTitle("MCP"))
         contentRoot.addView(settingsBackButton())
 
         val endpointInput = editText("MCP HTTP JSON-RPC endpoint").apply {
@@ -735,7 +762,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderCloudApiSettingsPage() {
-        contentRoot.addView(sectionTitle("Cloud API"))
+        contentRoot.addView(settingsSectionTitle("API"))
         contentRoot.addView(settingsBackButton())
 
         val providerInput = editText("Provider URL").apply {
@@ -778,7 +805,13 @@ class MainActivity : Activity() {
     }
 
     private fun renderSettingsScreen() {
-        contentRoot.addView(sectionTitle("Settings"))
+        contentRoot.addView(settingsSectionTitle("Settings"))
+        contentRoot.addView(
+            timelineCard(
+                "TouchPilot Control Center",
+                "Manage skills, external tools, cloud profile, and runtime behavior from one place."
+            )
+        )
         contentRoot.addView(settingsNavItem("Skills") { showSection(Section.SETTINGS_SKILLS) })
         contentRoot.addView(settingsNavItem("MCP") { showSection(Section.SETTINGS_MCP) })
         contentRoot.addView(settingsNavItem("API") { showSection(Section.SETTINGS_API) })
@@ -786,11 +819,26 @@ class MainActivity : Activity() {
     }
 
     private fun settingsNavItem(label: String, onClick: () -> Unit): View {
-        return secondaryButton(label, onClick).apply {
+        return primaryButton(label, onClick).apply {
             textSize = 15f
             minHeight = 58
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setPadding(22, 13, 22, 13)
+        }
+    }
+
+    private fun settingsSectionTitle(text: String): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(sectionTitle(text))
+            addView(
+                TextView(this@MainActivity).apply {
+                    this.text = "TouchPilot Settings"
+                    textSize = 12f
+                    setTextColor(Theme.Accent)
+                    setPadding(0, 0, 0, 6)
+                }
+            )
         }
     }
 
@@ -1038,6 +1086,13 @@ class MainActivity : Activity() {
             Section.SETTINGS_RUNTIME -> Section.SETTINGS
             else -> this
         }
+    }
+
+    private fun Section.isSettingsDetail(): Boolean {
+        return this == Section.SETTINGS_SKILLS ||
+            this == Section.SETTINGS_MCP ||
+            this == Section.SETTINGS_API ||
+            this == Section.SETTINGS_RUNTIME
     }
 
     private fun LocalModelStatus.shortLine(): String {
