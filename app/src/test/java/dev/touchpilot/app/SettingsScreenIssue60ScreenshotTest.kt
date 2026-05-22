@@ -27,15 +27,25 @@ class SettingsScreenIssue60ScreenshotTest {
         val settingsIndex = tabs.tabCount - 1
         tabs.getTabAt(settingsIndex)?.select() ?: error("Settings tab missing")
         shadowOf(activity.mainLooper).idle()
+        capture(activity, "settings-menu")
+
+        clickLabel(activity.window.decorView, "Skills")
+        shadowOf(activity.mainLooper).idle()
         capture(activity, "settings-skills")
+        clickLabel(activity.window.decorView, "Back to Settings")
+        shadowOf(activity.mainLooper).idle()
 
         clickLabel(activity.window.decorView, "MCP")
         shadowOf(activity.mainLooper).idle()
         capture(activity, "settings-mcp")
+        clickLabel(activity.window.decorView, "Back to Settings")
+        shadowOf(activity.mainLooper).idle()
 
-        clickLabel(activity.window.decorView, "Cloud API")
+        clickLabel(activity.window.decorView, "API")
         shadowOf(activity.mainLooper).idle()
         capture(activity, "settings-cloud-api")
+        clickLabel(activity.window.decorView, "Back to Settings")
+        shadowOf(activity.mainLooper).idle()
 
         clickLabel(activity.window.decorView, "Runtime")
         shadowOf(activity.mainLooper).idle()
