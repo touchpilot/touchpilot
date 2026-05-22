@@ -291,13 +291,14 @@ class MainActivity : Activity() {
             id = R.id.agent_task_input
             hint = "Message TouchPilot..."
             setSingleLine(false)
-            minLines = 1
+            minLines = 2
             maxLines = 4
             textSize = 14.5f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
             background = rounded(Theme.Card, 10, Theme.StrokeDark)
             setPadding(18, 12, 18, 12)
+            minHeight = 64
             imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
@@ -321,24 +322,25 @@ class MainActivity : Activity() {
             MaterialButton(this).apply {
                 id = R.id.run_agent_button
                 text = "Send"
-                textSize = 14f
+                textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
                 isAllCaps = false
-                minHeight = 52
-                minWidth = 0
+                minHeight = 44
+                minWidth = 72
                 insetTop = 0
                 insetBottom = 0
                 gravity = Gravity.CENTER
                 setTextColor(Theme.OnAccent)
                 backgroundTintList = ColorStateList.valueOf(Theme.Accent)
                 cornerRadius = 10
+                setPadding(12, 0, 12, 0)
                 setOnClickListener { submitChatMessage() }
             },
             LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                72,
+                52
             ).apply {
-                leftMargin = 10
+                leftMargin = 8
             }
         )
         bar.addView(inputRow)
@@ -820,7 +822,7 @@ class MainActivity : Activity() {
         contentRoot.addView(sectionTitle("Settings"))
         contentRoot.addView(
             TextView(this).apply {
-                text = activeSettingsPanel.intro
+                text = "Choose a settings area to configure TouchPilot."
                 textSize = 13f
                 setTextColor(Theme.MutedText)
                 setPadding(0, 0, 0, 12)
@@ -1074,26 +1076,16 @@ class MainActivity : Activity() {
 
     private fun settingsPanelSwitcher(): View {
         val container = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            background = rounded(Theme.SurfaceRaised, 8, Theme.StrokeDark)
-            setPadding(6, 6, 6, 6)
+            orientation = LinearLayout.VERTICAL
         }
         SettingsPanel.values().forEach { panel ->
             val isActive = panel == activeSettingsPanel
-            val segment = TextView(this).apply {
-                text = panel.label
-                textSize = 12.5f
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setSingleLine(true)
-                isAllCaps = false
-                setTextColor(if (isActive) Theme.OnAccent else Theme.MutedText)
-                background = rounded(
-                    if (isActive) Theme.Accent else Color.TRANSPARENT,
-                    8,
-                    if (isActive) Theme.Accent else Color.TRANSPARENT
-                )
-                setPadding(10, 12, 10, 12)
+            val row = MaterialCardView(this).apply {
+                setCardBackgroundColor(if (isActive) Theme.Accent else Theme.Card)
+                strokeColor = if (isActive) Theme.Accent else Theme.StrokeDark
+                strokeWidth = 1
+                radius = 8f
+                cardElevation = 0f
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -1109,12 +1101,30 @@ class MainActivity : Activity() {
                     SettingsPanel.RUNTIME -> R.id.settings_panel_runtime_button
                 }
             }
-            container.addView(
-                segment,
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(18, 14, 18, 14)
+            }
+            content.addView(
+                TextView(this).apply {
+                    text = panel.label
+                    textSize = 15f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(if (isActive) Theme.OnAccent else Color.WHITE)
+                }
             )
+            content.addView(
+                TextView(this).apply {
+                    text = panel.intro
+                    textSize = 12f
+                    setTextColor(if (isActive) Theme.OnAccent else Theme.MutedText)
+                    setPadding(0, 4, 0, 0)
+                }
+            )
+            row.addView(content)
+            container.addView(row.withMargins(top = 4, bottom = 6))
         }
-        return container.withMargins(top = 0, bottom = 18)
+        return container.withMargins(bottom = 12)
     }
 
     private fun summaryCard(
