@@ -50,6 +50,62 @@ class DefaultActionPolicyTest {
     }
 
     @Test
+    fun benignTapRequiresApprovalWhenScreenContainsBank() {
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = mediumTool("tap"),
+                args = mapOf("text" to "Settings"),
+                source = ToolSource.LOCAL_ROUTER,
+                activeScreen = "Banking app home screen"
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
+    }
+
+    @Test
+    fun benignOpenAppRequiresApprovalWhenScreenContainsPassword() {
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = mediumTool("open_app"),
+                args = mapOf("target" to "Calculator"),
+                source = ToolSource.LOCAL_ROUTER,
+                activeScreen = "Passwords saved earlier in this session"
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
+    }
+
+    @Test
+    fun benignScrollRequiresApprovalWhenScreenContainsPurchase() {
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = mediumTool("scroll"),
+                args = mapOf("direction" to "forward"),
+                source = ToolSource.LOCAL_ROUTER,
+                activeScreen = "Order history including past purchase totals"
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
+    }
+
+    @Test
+    fun benignPressBackRequiresApprovalWhenScreenMentionsDeleteAccount() {
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = mediumTool("press_back"),
+                args = emptyMap(),
+                source = ToolSource.LOCAL_ROUTER,
+                activeScreen = "Help article: how to delete account permanently"
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
+    }
+
+    @Test
     fun allowsLowRiskObservation() {
         val decision = policy.evaluate(
             ToolPolicyRequest(

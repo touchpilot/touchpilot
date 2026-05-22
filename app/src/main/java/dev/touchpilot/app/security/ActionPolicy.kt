@@ -56,15 +56,19 @@ class DefaultActionPolicy : ActionPolicy {
             return PolicyDecision.Allow("low risk action")
         }
 
-        val haystack = buildString {
+        val intentHaystack = buildString {
             append(request.tool.name)
             append(' ')
             append(request.args.values.joinToString(separator = " "))
+        }.lowercase()
+
+        blockedWorkflow(intentHaystack)?.let { return it }
+
+        val screenAwareHaystack = buildString {
+            append(intentHaystack)
             append(' ')
             append(request.activeScreen)
         }.lowercase()
-
-        blockedWorkflow(haystack)?.let { return it }
 
         if (isSensitiveTextEntry(request)) {
             return PolicyDecision.Block(
@@ -73,7 +77,7 @@ class DefaultActionPolicy : ActionPolicy {
             )
         }
 
-        if (isMessageSend(request, haystack)) {
+        if (isMessageSend(request, screenAwareHaystack)) {
             return approval(
                 request,
                 reason = "sending a message requires explicit approval",
