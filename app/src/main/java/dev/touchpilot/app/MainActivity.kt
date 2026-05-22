@@ -120,7 +120,7 @@ class MainActivity : Activity() {
                 setFillViewport(false)
                 contentRoot = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(28, 16, 28, 18)
+                    setPadding(24, 18, 24, 20)
                 }
                 addView(contentRoot)
             }
@@ -140,7 +140,7 @@ class MainActivity : Activity() {
     private fun buildHeader(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(30, 82, 30, 14)
+            setPadding(28, 64, 28, 12)
             setBackgroundColor(Theme.Background)
 
             val row = LinearLayout(this@MainActivity).apply {
@@ -152,7 +152,7 @@ class MainActivity : Activity() {
                 TextView(this@MainActivity).apply {
                     id = R.id.touchpilot_title
                     text = "Touch"
-                    textSize = 25f
+                    textSize = 24f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
                 }
@@ -160,7 +160,7 @@ class MainActivity : Activity() {
             row.addView(
                 TextView(this@MainActivity).apply {
                     text = "Pilot"
-                    textSize = 25f
+                    textSize = 24f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Theme.Accent)
                 }
@@ -170,8 +170,8 @@ class MainActivity : Activity() {
 
             statusView = TextView(this@MainActivity).apply {
                 id = R.id.touchpilot_status
-                textSize = 12f
-                setPadding(0, 8, 0, 0)
+                textSize = 11.5f
+                setPadding(0, 6, 0, 0)
                 setTextColor(Color.rgb(150, 164, 178))
             }
             addView(statusView)
@@ -181,11 +181,11 @@ class MainActivity : Activity() {
     private fun buildBottomNav(): View {
         return TabLayout(this).apply {
             bottomNav = this
-            setBackgroundColor(Theme.Background)
-            setPadding(0, 6, 0, 30)
+            setBackgroundColor(Theme.Card)
+            setPadding(12, 8, 12, 18)
             tabMode = TabLayout.MODE_FIXED
             tabGravity = TabLayout.GRAVITY_FILL
-            setSelectedTabIndicatorColor(Theme.Accent)
+            setSelectedTabIndicatorColor(Color.TRANSPARENT)
             setTabTextColors(Theme.NavText, Theme.Accent)
 
             BottomNavSections.forEach { section ->
@@ -217,10 +217,11 @@ class MainActivity : Activity() {
             text = section.label
             gravity = Gravity.CENTER
             setSingleLine(true)
-            textSize = 9.5f
+            textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             minWidth = 0
-            setPadding(0, 10, 0, 10)
+            minHeight = 44
+            setPadding(8, 10, 8, 10)
         }
     }
 
@@ -275,7 +276,13 @@ class MainActivity : Activity() {
         }
         BottomNavSections.forEachIndexed { tabIndex, section ->
             val label = nav.getTabAt(tabIndex)?.customView as? TextView
-            label?.setTextColor(if (section == navSection) Theme.Accent else Theme.NavText)
+            val selected = section == navSection
+            label?.setTextColor(if (selected) Theme.OnAccent else Theme.NavText)
+            label?.background = rounded(
+                fill = if (selected) Theme.Accent else Color.TRANSPARENT,
+                radius = 10,
+                stroke = if (selected) Theme.Accent else Color.TRANSPARENT
+            )
         }
     }
 
@@ -305,10 +312,10 @@ class MainActivity : Activity() {
             textSize = 14f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
-            background = rounded(Theme.SurfaceRaised, 26, Theme.StrokeDark)
-            setPadding(24, 10, 24, 10)
+            background = rounded(Theme.SurfaceRaised, 10, Theme.StrokeDark)
+            setPadding(18, 10, 18, 10)
         }
-        inputRow.addView(taskInput, LinearLayout.LayoutParams(0, 58, 1f))
+        inputRow.addView(taskInput, LinearLayout.LayoutParams(0, 54, 1f))
         inputRow.addView(
             TextView(this).apply {
                 id = R.id.run_agent_button
@@ -317,7 +324,7 @@ class MainActivity : Activity() {
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(Color.rgb(5, 26, 12))
-                background = rounded(Theme.Accent, 30, Theme.Accent)
+                background = rounded(Theme.Accent, 10, Theme.Accent)
                 setOnClickListener {
                     val task = taskInput.text.toString().trim()
                     if (task.isNotEmpty()) {
@@ -327,8 +334,8 @@ class MainActivity : Activity() {
                     }
                 }
             },
-            LinearLayout.LayoutParams(64, 58).apply {
-                leftMargin = 10
+            LinearLayout.LayoutParams(60, 54).apply {
+                leftMargin = 8
             }
         )
         contentRoot.addView(inputRow)
@@ -358,7 +365,7 @@ class MainActivity : Activity() {
                 ApprovalState.REJECTED -> Theme.StrokeDark
             }
             strokeWidth = 2
-            radius = 18f
+            radius = 8f
             cardElevation = 0f
         }
         val content = LinearLayout(this).apply {
@@ -767,8 +774,8 @@ class MainActivity : Activity() {
             text = ToolExecutionLog.render()
             textSize = 12f
             setTextColor(Theme.BodyText)
-            setPadding(18, 18, 18, 18)
-            background = rounded(Theme.Card, 18, Theme.StrokeDark)
+            setPadding(16, 16, 16, 16)
+            background = rounded(Theme.Card, 8, Theme.StrokeDark)
         }
         contentRoot.addView(executionLogView)
     }
@@ -845,9 +852,9 @@ class MainActivity : Activity() {
     private fun settingsNavItem(label: String, onClick: () -> Unit): View {
         return primaryButton(label, onClick).apply {
             textSize = 15f
-            minHeight = 58
+            minHeight = 56
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setPadding(22, 13, 22, 13)
+            setPadding(18, 12, 18, 12)
         }
     }
 
@@ -871,12 +878,12 @@ class MainActivity : Activity() {
             setCardBackgroundColor(Theme.Card)
             strokeColor = Theme.StrokeDark
             strokeWidth = 1
-            radius = 18f
+            radius = 8f
             cardElevation = 0f
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 16, 18, 16)
+            setPadding(18, 14, 18, 14)
         }
         content.addView(
             TextView(this).apply {
@@ -896,7 +903,7 @@ class MainActivity : Activity() {
         )
         content.addView(statusChip(chipText, healthy))
         card.addView(content)
-        return card.withMargins(top = 10, right = 42, bottom = 10)
+        return card.withMargins(top = 8, bottom = 8)
     }
 
     private fun statusChip(label: String, healthy: Boolean): View {
@@ -906,10 +913,10 @@ class MainActivity : Activity() {
             setTextColor(if (healthy) Theme.OnAccent else Theme.BodyText)
             background = rounded(
                 if (healthy) Theme.Accent else Theme.SurfaceRaised,
-                14,
+                8,
                 if (healthy) Theme.Accent else Theme.StrokeDark
             )
-            setPadding(14, 6, 14, 6)
+            setPadding(12, 5, 12, 5)
         }
     }
 
@@ -924,7 +931,7 @@ class MainActivity : Activity() {
             setCardBackgroundColor(Theme.Card)
             strokeColor = if (selected) Theme.Accent else Theme.StrokeDark
             strokeWidth = if (selected) 2 else 1
-            radius = 16f
+            radius = 8f
             cardElevation = 0f
             isClickable = true
             isFocusable = true
@@ -958,13 +965,13 @@ class MainActivity : Activity() {
                     text = chipText
                     textSize = 11f
                     setTextColor(Theme.OnAccent)
-                    background = rounded(Theme.Accent, 12, Theme.Accent)
+                    background = rounded(Theme.Accent, 8, Theme.Accent)
                     setPadding(10, 4, 10, 4)
                 }.withMargins(top = 8)
             )
         }
         card.addView(content)
-        return card.withMargins(top = 8, right = 42, bottom = 6)
+        return card.withMargins(top = 8, bottom = 6)
     }
 
     private fun shortHost(raw: String): String {
@@ -1031,7 +1038,7 @@ class MainActivity : Activity() {
             textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            setPadding(0, 4, 0, 14)
+            setPadding(0, 2, 0, 10)
         }
     }
 
@@ -1040,7 +1047,7 @@ class MainActivity : Activity() {
             setText(text)
             textSize = 12f
             setTextColor(Theme.MutedText)
-            setPadding(0, 14, 0, 6)
+            setPadding(0, 12, 0, 6)
         }
     }
 
@@ -1051,10 +1058,10 @@ class MainActivity : Activity() {
             textSize = 14f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
-            background = rounded(Theme.SurfaceRaised, 18, Theme.StrokeDark)
+            background = rounded(Theme.SurfaceRaised, 8, Theme.StrokeDark)
             layoutParams = controlParams()
-            minHeight = 54
-            setPadding(20, 8, 20, 8)
+            minHeight = 52
+            setPadding(16, 8, 16, 8)
         }
     }
 
@@ -1069,10 +1076,10 @@ class MainActivity : Activity() {
             backgroundTintList = ColorStateList.valueOf(Theme.Accent)
             strokeColor = ColorStateList.valueOf(Theme.Accent)
             strokeWidth = 1
-            cornerRadius = 20
+            cornerRadius = 10
             layoutParams = controlParams()
-            minHeight = 52
-            setPadding(18, 14, 18, 14)
+            minHeight = 50
+            setPadding(16, 12, 16, 12)
             setOnClickListener { onClick() }
         }
     }
@@ -1087,10 +1094,10 @@ class MainActivity : Activity() {
             backgroundTintList = ColorStateList.valueOf(Theme.SurfaceRaised)
             strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
             strokeWidth = 1
-            cornerRadius = 18
+            cornerRadius = 10
             layoutParams = controlParams()
-            minHeight = 50
-            setPadding(14, 13, 14, 13)
+            minHeight = 48
+            setPadding(14, 12, 14, 12)
             setOnClickListener { onClick() }
         }
     }
@@ -1100,8 +1107,8 @@ class MainActivity : Activity() {
             setText(text)
             textSize = 14f
             setTextColor(Color.rgb(3, 30, 13))
-            background = rounded(Theme.Accent, 22, Theme.Accent)
-            setPadding(22, 16, 22, 16)
+            background = rounded(Theme.Accent, 10, Theme.Accent)
+            setPadding(18, 14, 18, 14)
         }.withMargins(left = 84, top = 10, bottom = 10)
     }
 
@@ -1139,13 +1146,12 @@ class MainActivity : Activity() {
             setCardBackgroundColor(Theme.Card)
             strokeColor = Theme.StrokeDark
             strokeWidth = 1
-            radius = 18f
+            radius = 8f
             cardElevation = 0f
-            setPadding(18, 16, 18, 16)
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 16, 18, 16)
+            setPadding(18, 14, 18, 14)
         }
         content.addView(
             TextView(this).apply {
@@ -1164,7 +1170,7 @@ class MainActivity : Activity() {
             }
         )
         card.addView(content)
-        return card.withMargins(top = 10, right = 42, bottom = 10)
+        return card.withMargins(top = 8, bottom = 8)
     }
 
     private fun View.withMargins(
