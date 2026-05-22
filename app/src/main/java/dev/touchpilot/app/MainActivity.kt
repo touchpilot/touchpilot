@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.text.InputType
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -293,7 +294,7 @@ class MainActivity : Activity() {
             setHintTextColor(Theme.MutedText)
             background = rounded(Theme.Card, 28, Theme.StrokeDark)
             setPadding(22, 14, 22, 14)
-            imeOptions = EditorInfo.IME_ACTION_SEND
+            imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE
