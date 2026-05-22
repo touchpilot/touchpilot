@@ -8,18 +8,18 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.view.animation.DecelerateInterpolator
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -463,27 +463,24 @@ class MainActivity : Activity() {
     private fun renderSkillsSettingsPage() {
         contentRoot.addView(settingsSectionTitle("Skills"))
         contentRoot.addView(settingsBackButton())
-        contentRoot.addView(agentBubble("Active skill", selectedSkill()?.title ?: "No skill"))
-
-        val skillSpinner = Spinner(this).apply {
-            id = R.id.skill_spinner
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_item,
-                listOf("No skill") + skills.map { it.title }
-            ).apply {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            val selectedIndex = skills.indexOfFirst { it.id == selectedSkillId }
-            setSelection(if (selectedIndex >= 0) selectedIndex + 1 else 0)
-        }
-        contentRoot.addView(formLabel("Active Skill"))
-        contentRoot.addView(skillSpinner)
+        val active = selectedSkill()
         contentRoot.addView(
-            primaryButton("Save Skill") {
-                val index = skillSpinner.selectedItemPosition - 1
-                selectedSkillId = skills.getOrNull(index)?.id
-                preferences.edit().putString("active_skill", selectedSkillId).apply()
+            summaryCard(
+                "Current skill",
+                active?.title ?: "No skill",
+                if (active == null) "not set" else "${active.allowedTools.size} tools",
+                active != null
+            )
+        )
+        contentRoot.addView(formLabel("Tap to select a skill"))
+        contentRoot.addView(
+            skillSelectRow(
+                title = "No skill",
+                description = "Run without a focused skill profile.",
+                selected = active == null
+            ) {
+                selectedSkillId = null
+                preferences.edit().putString("active_skill", null).apply()
                 showSection(Section.SETTINGS_SKILLS)
             }
         )
@@ -493,15 +490,16 @@ class MainActivity : Activity() {
         } else {
             skills.forEach { skill ->
                 contentRoot.addView(
-                    timelineCard(
-                        skill.title,
-                        buildString {
-                            appendLine(skill.markdown.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty())
-                            appendLine()
-                            appendLine("Allowed tools:")
-                            appendLine(skill.allowedTools.joinToString(separator = "\n") { "- $it" })
-                        }.trim()
-                    )
+                    skillSelectRow(
+                        title = skill.title,
+                        description = skill.markdown.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
+                        selected = selectedSkillId == skill.id,
+                        chipText = "${skill.allowedTools.size} tools"
+                    ) {
+                        selectedSkillId = skill.id
+                        preferences.edit().putString("active_skill", selectedSkillId).apply()
+                        showSection(Section.SETTINGS_SKILLS)
+                    }
                 )
             }
         }
@@ -510,7 +508,15 @@ class MainActivity : Activity() {
     private fun renderRuntimeSettingsPage() {
         contentRoot.addView(settingsSectionTitle("Runtime"))
         contentRoot.addView(settingsBackButton())
-        contentRoot.addView(statusPill())
+        val current = currentProviderMode()
+        contentRoot.addView(
+            summaryCard(
+                "Active runtime",
+                current.label(),
+                if (localModelRuntime.status().available) "model ready" else "fallback",
+                localModelRuntime.status().available
+            )
+        )
         contentRoot.addView(localModelStatusCard())
         contentRoot.addView(
             timelineCard(
@@ -522,30 +528,19 @@ class MainActivity : Activity() {
                 """.trimIndent()
             )
         )
-
-        val providerModeSpinner = Spinner(this).apply {
-            id = R.id.agent_provider_spinner
-            adapter = ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_spinner_item,
-                ProviderModeLabels
-            ).apply {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            setSelection(providerModeIndex(preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name)))
-        }
-        contentRoot.addView(formLabel("Agent Runtime"))
-        contentRoot.addView(providerModeSpinner)
-        contentRoot.addView(
-            primaryButton("Save Runtime") {
-                val mode = when (providerModeSpinner.selectedItemPosition) {
-                    1 -> AgentProviderMode.LOCAL_MODEL
-                    else -> AgentProviderMode.LOCAL_ROUTER
+        contentRoot.addView(formLabel("Select runtime mode"))
+        AgentProviderMode.values().forEach { mode ->
+            contentRoot.addView(
+                skillSelectRow(
+                    title = mode.label(),
+                    description = mode.description(),
+                    selected = mode == current
+                ) {
+                    preferences.edit().putString("agent_provider_mode", mode.name).apply()
+                    showSection(Section.SETTINGS_RUNTIME)
                 }
-                preferences.edit().putString("agent_provider_mode", mode.name).apply()
-                showSection(Section.SETTINGS_RUNTIME)
-            }
-        )
+            )
+        }
         contentRoot.addView(
             secondaryButton("Open Accessibility Settings") {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -659,10 +654,19 @@ class MainActivity : Activity() {
     private fun renderMcpSettingsPage() {
         contentRoot.addView(settingsSectionTitle("MCP"))
         contentRoot.addView(settingsBackButton())
+        val endpoint = preferences.getString("mcp_endpoint", "").orEmpty()
+        contentRoot.addView(
+            summaryCard(
+                "MCP server",
+                if (endpoint.isBlank()) "No endpoint configured" else shortHost(endpoint),
+                if (endpoint.isBlank()) "not set" else "configured",
+                endpoint.isNotBlank()
+            )
+        )
 
         val endpointInput = editText("MCP HTTP JSON-RPC endpoint").apply {
             id = R.id.mcp_endpoint_input
-            setText(preferences.getString("mcp_endpoint", ""))
+            setText(endpoint)
         }
         val toolInput = editText("MCP tool name").apply { id = R.id.mcp_tool_input }
         val argsInput = editText("MCP tool arguments JSON").apply {
@@ -673,6 +677,8 @@ class MainActivity : Activity() {
         }
 
         contentRoot.addView(endpointInput)
+        contentRoot.addView(toolInput)
+        contentRoot.addView(argsInput)
         val mcpRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         mcpRow.addView(
             secondaryButton("List Tools") {
@@ -735,8 +741,6 @@ class MainActivity : Activity() {
             rowButtonParams()
         )
         contentRoot.addView(mcpRow)
-        contentRoot.addView(toolInput)
-        contentRoot.addView(argsInput)
         contentRoot.addView(timelineCard("MCP result", outputText))
     }
 
@@ -764,18 +768,30 @@ class MainActivity : Activity() {
     private fun renderCloudApiSettingsPage() {
         contentRoot.addView(settingsSectionTitle("API"))
         contentRoot.addView(settingsBackButton())
+        val savedProvider = preferences.getString("agent_provider_url", "").orEmpty()
+        val savedModel = preferences.getString("agent_model", "").orEmpty()
+        val savedKey = preferences.getString("agent_api_key", "").orEmpty()
+        contentRoot.addView(
+            summaryCard(
+                "Cloud profile",
+                if (savedModel.isBlank()) "No model selected" else savedModel,
+                if (savedProvider.isBlank() || savedModel.isBlank() || savedKey.isBlank()) "incomplete" else "configured",
+                savedProvider.isNotBlank() && savedModel.isNotBlank() && savedKey.isNotBlank()
+            )
+        )
 
         val providerInput = editText("Provider URL").apply {
             id = R.id.agent_provider_url_input
-            setText(preferences.getString("agent_provider_url", ""))
+            setText(savedProvider)
         }
         val modelInput = editText("Model name").apply {
             id = R.id.agent_model_input
-            setText(preferences.getString("agent_model", ""))
+            setText(savedModel)
         }
         val apiKeyInput = editText("API key").apply {
             id = R.id.agent_api_key_input
-            setText(preferences.getString("agent_api_key", ""))
+            setText(savedKey)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
         contentRoot.addView(providerInput)
@@ -794,11 +810,11 @@ class MainActivity : Activity() {
         )
         contentRoot.addView(
             timelineCard(
-                "Current cloud profile",
+                "Stored profile",
                 buildString {
-                    appendLine("Provider URL: ${preferences.getString("agent_provider_url", "").orEmpty().ifBlank { "not set" }}")
-                    appendLine("Model: ${preferences.getString("agent_model", "").orEmpty().ifBlank { "not set" }}")
-                    append("API key: ${if (preferences.getString("agent_api_key", "").isNullOrBlank()) "not set" else "configured"}")
+                    appendLine("Provider: ${shortHost(savedProvider).ifBlank { "not set" }}")
+                    appendLine("Model: ${savedModel.ifBlank { "not set" }}")
+                    append("API key: ${if (savedKey.isBlank()) "not set" else "configured"}")
                 }
             )
         )
@@ -840,6 +856,114 @@ class MainActivity : Activity() {
                 }
             )
         }
+    }
+
+    private fun summaryCard(title: String, value: String, chipText: String, healthy: Boolean): View {
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = Theme.StrokeDark
+            strokeWidth = 1
+            radius = 18f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 16, 18, 16)
+        }
+        content.addView(
+            TextView(this).apply {
+                text = title
+                textSize = 12f
+                setTextColor(Theme.MutedText)
+            }
+        )
+        content.addView(
+            TextView(this).apply {
+                text = value
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 6, 0, 8)
+            }
+        )
+        content.addView(statusChip(chipText, healthy))
+        card.addView(content)
+        return card.withMargins(top = 10, right = 42, bottom = 10)
+    }
+
+    private fun statusChip(label: String, healthy: Boolean): View {
+        return TextView(this).apply {
+            text = label
+            textSize = 11f
+            setTextColor(if (healthy) Theme.OnAccent else Theme.BodyText)
+            background = rounded(
+                if (healthy) Theme.Accent else Theme.SurfaceRaised,
+                14,
+                if (healthy) Theme.Accent else Theme.StrokeDark
+            )
+            setPadding(14, 6, 14, 6)
+        }
+    }
+
+    private fun skillSelectRow(
+        title: String,
+        description: String,
+        selected: Boolean,
+        chipText: String? = null,
+        onClick: () -> Unit
+    ): View {
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = if (selected) Theme.Accent else Theme.StrokeDark
+            strokeWidth = if (selected) 2 else 1
+            radius = 16f
+            cardElevation = 0f
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        content.addView(
+            TextView(this).apply {
+                text = title
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            }
+        )
+        if (description.isNotBlank()) {
+            content.addView(
+                TextView(this).apply {
+                    text = description
+                    textSize = 12f
+                    setTextColor(Theme.BodyText)
+                    setPadding(0, 6, 0, 0)
+                }
+            )
+        }
+        if (!chipText.isNullOrBlank()) {
+            content.addView(
+                TextView(this).apply {
+                    text = chipText
+                    textSize = 11f
+                    setTextColor(Theme.OnAccent)
+                    background = rounded(Theme.Accent, 12, Theme.Accent)
+                    setPadding(10, 4, 10, 4)
+                }.withMargins(top = 8)
+            )
+        }
+        card.addView(content)
+        return card.withMargins(top = 8, right = 42, bottom = 6)
+    }
+
+    private fun shortHost(raw: String): String {
+        if (raw.isBlank()) return ""
+        return runCatching { Uri.parse(raw).host.orEmpty() }
+            .getOrElse { "" }
+            .ifBlank { raw.take(48) }
     }
 
     private var outputText: String = "No result yet."
@@ -1064,17 +1188,17 @@ class MainActivity : Activity() {
         manager.hideSoftInputFromWindow(anchor.windowToken, 0)
     }
 
-    private fun providerModeIndex(savedMode: String?): Int {
-        return when (savedMode) {
-            AgentProviderMode.LOCAL_MODEL.name -> 1
-            else -> 0
-        }
-    }
-
     private fun AgentProviderMode.label(): String {
         return when (this) {
             AgentProviderMode.LOCAL_MODEL -> "Local model with router fallback"
             AgentProviderMode.LOCAL_ROUTER -> "Local router"
+        }
+    }
+
+    private fun AgentProviderMode.description(): String {
+        return when (this) {
+            AgentProviderMode.LOCAL_MODEL -> "Use LiteRT local model first, then fallback to deterministic routing."
+            AgentProviderMode.LOCAL_ROUTER -> "Use deterministic local command routing only."
         }
     }
 
@@ -1196,7 +1320,6 @@ class MainActivity : Activity() {
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
-        val ProviderModeLabels = listOf("Local router", "Local model")
         val BottomNavSections = listOf(Section.CHAT, Section.TOOLS, Section.LOGS, Section.SETTINGS)
     }
 
