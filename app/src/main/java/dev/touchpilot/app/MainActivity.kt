@@ -64,6 +64,7 @@ class MainActivity : Activity() {
 
     private var activeSection = Section.CHAT
     private var selectedSkillId: String? = null
+    private var expandedSkillReferenceId: String? = null
     private val conversation = mutableListOf<ChatEvent>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -457,7 +458,11 @@ class MainActivity : Activity() {
     }
 
     private fun settingsBackButton(): View {
-        return secondaryButton("Back to Settings") { showSection(Section.SETTINGS) }
+        return primaryButton("← Back to Settings") { showSection(Section.SETTINGS) }.apply {
+            textSize = 13f
+            minHeight = 48
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        }
     }
 
     private fun renderSkillsSettingsPage() {
@@ -498,9 +503,23 @@ class MainActivity : Activity() {
                     ) {
                         selectedSkillId = skill.id
                         preferences.edit().putString("active_skill", selectedSkillId).apply()
+                        expandedSkillReferenceId = if (expandedSkillReferenceId == skill.id) null else skill.id
                         showSection(Section.SETTINGS_SKILLS)
                     }
                 )
+                if (expandedSkillReferenceId == skill.id) {
+                    contentRoot.addView(
+                        timelineCard(
+                            "Skill reference",
+                            buildString {
+                                appendLine(skill.markdown.trim())
+                                appendLine()
+                                appendLine("Allowed tools:")
+                                skill.allowedTools.forEach { appendLine("- $it") }
+                            }.trim()
+                        )
+                    )
+                }
             }
         }
     }
@@ -515,17 +534,6 @@ class MainActivity : Activity() {
                 current.label(),
                 if (localModelRuntime.status().available) "model ready" else "fallback",
                 localModelRuntime.status().available
-            )
-        )
-        contentRoot.addView(localModelStatusCard())
-        contentRoot.addView(
-            timelineCard(
-                "Runtime boundary",
-                """
-                LiteRT command routing is the first local model runtime target. If the model asset is unavailable, TouchPilot falls back to the deterministic local router.
-
-                Every local model command still goes through JSON parsing, tool validation, skill allowlists, safety policy, approval, and redacted logs.
-                """.trimIndent()
             )
         )
         contentRoot.addView(formLabel("Select runtime mode"))
