@@ -1,27 +1,24 @@
 package dev.touchpilot.app.security
 
 object SensitiveTextRedactor {
-    private val assignmentPatterns = listOf(
-        Regex("(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passcode|secret)\\s*[:=]\\s*[^\\s,;]+"),
-        Regex("(?i)(authorization:\\s*bearer\\s+)[^\\s,;]+")
+    private val redactionRules: List<RedactionRule> = listOf(
+        RedactionRule.KeyAssignment(
+            keyAlternation = "api[_-]?key|access[_-]?token|refresh[_-]?token|password|passcode|secret"
+        ),
+        RedactionRule.BearerHeader(),
+        RedactionRule.LiteralValue(Regex("\\b\\d{13,19}\\b")),
+        RedactionRule.LiteralValue(Regex("\\b\\d{6}\\b")),
+        RedactionRule.LiteralValue(Regex("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b"))
     )
-    private val valuePatterns = listOf(
-        Regex("\\b\\d{13,19}\\b"),
-        Regex("\\b\\d{6}\\b"),
-        Regex("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b")
+
+    private val sensitiveWords = Regex(
+        "(?i)\\b(password|passcode|otp|one-time code|api key|secret|token|credit card|card number)\\b"
     )
-    private val sensitiveWords = Regex("(?i)\\b(password|passcode|otp|one-time code|api key|secret|token|credit card|card number)\\b")
 
     fun redact(text: String): String {
         var redacted = text
-        assignmentPatterns.forEach { pattern ->
-            redacted = pattern.replace(redacted) { match ->
-                val prefix = match.value.substringBeforeAny(listOf(":", "="))
-                "$prefix=[REDACTED]"
-            }
-        }
-        valuePatterns.forEach { pattern ->
-            redacted = pattern.replace(redacted, "[REDACTED]")
+        for (rule in redactionRules) {
+            redacted = rule.apply(redacted)
         }
         return redacted
     }
@@ -29,7 +26,7 @@ object SensitiveTextRedactor {
     fun redact(args: Map<String, String>): Map<String, String> {
         return args.mapValues { (key, value) ->
             if (isSensitiveKey(key) || containsSensitiveText(value)) {
-                "[REDACTED]"
+                RedactionRule.RedactedToken
             } else {
                 redact(value)
             }
@@ -38,8 +35,7 @@ object SensitiveTextRedactor {
 
     fun containsSensitiveText(text: String): Boolean {
         return sensitiveWords.containsMatchIn(text) ||
-            assignmentPatterns.any { it.containsMatchIn(text) } ||
-            valuePatterns.any { it.containsMatchIn(text) }
+            redactionRules.any { rule -> rule.matches(text) }
     }
 
     private fun isSensitiveKey(key: String): Boolean {
@@ -47,12 +43,5 @@ object SensitiveTextRedactor {
             key.contains("token", ignoreCase = true) ||
             key.contains("secret", ignoreCase = true) ||
             key.contains("api_key", ignoreCase = true)
-    }
-
-    private fun String.substringBeforeAny(delimiters: List<String>): String {
-        val index = delimiters.mapNotNull { delimiter ->
-            indexOf(delimiter).takeIf { it >= 0 }
-        }.minOrNull()
-        return if (index == null) this else substring(0, index)
     }
 }
