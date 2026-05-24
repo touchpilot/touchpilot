@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.androidcontrol.TapResult
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -90,18 +91,35 @@ class AndroidToolExecutor(
                 val text = args["text"].orEmpty()
                 val nodeId = args["node_id"].orEmpty()
                 val bounds = args["bounds"].orEmpty()
-                val ok = when {
-                    nodeId.isNotBlank() -> AccessibilityBridge.tapByNodeId(nodeId)
-                    bounds.isNotBlank() -> AccessibilityBridge.tapByBounds(bounds)
-                    else -> AccessibilityBridge.tapByText(text)
+                when {
+                    nodeId.isNotBlank() -> {
+                        val ok = AccessibilityBridge.tapByNodeId(nodeId)
+                        val selector = "node_id=\"$nodeId\""
+                        record(name, selector, ok, "tap")
+                        ToolResult(ok, if (ok) "tap" else "No node found for $selector.", mapOf("selector" to selector))
+                    }
+                    bounds.isNotBlank() -> {
+                        val ok = AccessibilityBridge.tapByBounds(bounds)
+                        val selector = "bounds=\"$bounds\""
+                        record(name, selector, ok, "tap")
+                        ToolResult(ok, if (ok) "tap" else "No node found for $selector.", mapOf("selector" to selector))
+                    }
+                    else -> {
+                        val tapResult = AccessibilityBridge.tapByText(text)
+                        val selector = "text=\"$text\""
+                        val ok = tapResult is TapResult.Success
+                        val message = when (tapResult) {
+                            is TapResult.Success -> "tap"
+                            is TapResult.Failure -> tapResult.reason
+                        }
+                        val data = mutableMapOf("selector" to selector)
+                        if (tapResult is TapResult.Failure && tapResult.candidates.isNotEmpty()) {
+                            data["candidates"] = tapResult.candidates.size.toString()
+                        }
+                        record(name, selector, ok, message)
+                        ToolResult(ok, message, data)
+                    }
                 }
-                val selector = when {
-                    nodeId.isNotBlank() -> "node_id=\"$nodeId\""
-                    bounds.isNotBlank() -> "bounds=\"$bounds\""
-                    else -> "text=\"$text\""
-                }
-                record(name, selector, ok, "tap")
-                ToolResult(ok, "tap", mapOf("selector" to selector))
             }
             "type_text" -> {
                 val text = args["text"].orEmpty()

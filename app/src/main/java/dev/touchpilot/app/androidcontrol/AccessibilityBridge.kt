@@ -26,9 +26,9 @@ object AccessibilityBridge {
         return service?.observeScreenContext() ?: ScreenContext.Empty
     }
 
-    fun tapByText(text: String): Boolean {
-        if (text.isBlank()) return false
-        return service?.tapByText(text) ?: false
+    fun tapByText(text: String): TapResult {
+        if (text.isBlank()) return TapResult.Failure("text selector is blank.")
+        return service?.tapByText(text) ?: TapResult.Failure("AccessibilityService is not connected.")
     }
 
     fun tapByNodeId(nodeId: String): Boolean {

@@ -50,16 +50,28 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         )
     }
 
-    fun tapByText(text: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val node = findNode(root) { candidate ->
-            val label = candidate.text?.toString()
-                ?: candidate.contentDescription?.toString()
-                ?: ""
-            label.contains(text, ignoreCase = true)
-        } ?: return false
+    fun tapByText(text: String): TapResult {
+        val root = rootInActiveWindow
+            ?: return TapResult.Failure("No active window is available.")
 
-        return clickNodeOrParent(node)
+        return when (val resolution = TargetResolver.resolveByText(root, text)) {
+            is TargetResolution.Resolved -> {
+                val ok = clickNodeOrParent(resolution.candidate.node)
+                if (ok) TapResult.Success(resolution.candidate.nodeId)
+                else TapResult.Failure(
+                    "Found node ${resolution.candidate.nodeId} but click action failed.",
+                    candidates = listOf(resolution.candidate)
+                )
+            }
+            is TargetResolution.Ambiguous -> TapResult.Failure(
+                "Ambiguous target — ${resolution.candidates.size} candidates match " +
+                    "text=\"$text\": ${TargetResolver.summarizeCandidates(resolution.candidates)}",
+                candidates = resolution.candidates
+            )
+            is TargetResolution.NotFound -> TapResult.Failure(
+                "No node found for text=\"$text\"."
+            )
+        }
     }
 
     fun tapByNodeId(nodeId: String): Boolean {
