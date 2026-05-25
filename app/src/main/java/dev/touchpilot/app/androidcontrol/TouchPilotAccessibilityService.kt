@@ -140,7 +140,9 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             editable.size > 1 -> FocusResult(false, "Ambiguous input target.")
             else -> {
                 val node = editable[0]
-                val ok = node.performAction(AccessibilityNodeInfo.ACTION_CLICK) || tapNodeCenter(node)
+                val ok = node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) ||
+                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                    tapNodeCenter(node)
                 FocusResult(ok, if (ok) "focusInput" else "Failed to focus input.")
             }
         }
