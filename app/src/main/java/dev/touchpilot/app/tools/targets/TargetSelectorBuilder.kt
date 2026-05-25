@@ -51,9 +51,9 @@ object TargetSelectorBuilder {
      * Build a selector from a captured [ScreenNode].
      *
      * The node's raw text feeds [SelectorText.of] so sensitivity is computed
-     * consistently with how the rest of the agent treats screen text. When
-     * the node is explicitly flagged sensitive (e.g. a password field), the
-     * resulting [SelectorText] also reports it via the wrapped flag.
+     * consistently with how the rest of the agent treats screen text. Explicit
+     * node sensitivity is also carried onto the selector so password fields
+     * remain sensitive even when their visible label is generic.
      *
      * Bounds with zero area are dropped — they cannot identify a target and
      * the [TargetSelector] is still valid via [TargetSelector.nodeId] /
@@ -66,7 +66,10 @@ object TargetSelectorBuilder {
         confidence: Float? = null,
         source: SelectorSource = SelectorSource.OBSERVATION,
     ): TargetSelector {
-        val text = node.text.raw.takeIf { it.isNotBlank() }?.let { SelectorText.of(it) }
+        val sensitive = node.sensitive || node.text.isSensitive
+        val text = node.text.raw
+            .takeIf { it.isNotBlank() }
+            ?.let { SelectorText.of(it, forceSensitive = sensitive) }
         val bounds = TargetBounds(
             left = node.bounds.left,
             top = node.bounds.top,
@@ -84,6 +87,7 @@ object TargetSelectorBuilder {
             packageName = packageName,
             windowTitle = windowTitle,
             confidence = confidence,
+            sensitive = sensitive,
             source = source,
         )
     }

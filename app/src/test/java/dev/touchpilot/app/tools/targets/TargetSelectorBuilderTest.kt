@@ -161,6 +161,35 @@ class TargetSelectorBuilderTest {
     }
 
     @Test
+    fun fromScreenNode_explicitSensitiveNodeRedactsBenignLookingText() {
+        val node = ScreenNode(
+            nodeId = "0.4",
+            text = ScreenText.of("PIN"),
+            bounds = NodeBounds(0, 0, 100, 100),
+            sensitive = true,
+        )
+        val selector = TargetSelectorBuilder.fromScreenNode(node)
+        assertTrue(selector.sensitive)
+        assertTrue(selector.text!!.isSensitive)
+        assertEquals("[REDACTED]", selector.text!!.displaySafe)
+        assertTrue(selector.containsSensitiveText)
+    }
+
+    @Test
+    fun fromScreenNode_explicitSensitiveNodeWithoutTextStillFlagsSelector() {
+        val node = ScreenNode(
+            nodeId = "0.5",
+            text = ScreenText.Empty,
+            bounds = NodeBounds(0, 0, 100, 100),
+            sensitive = true,
+        )
+        val selector = TargetSelectorBuilder.fromScreenNode(node)
+        assertNull(selector.text)
+        assertTrue(selector.sensitive)
+        assertTrue(selector.containsSensitiveText)
+    }
+
+    @Test
     fun fromScreenNode_roleMappingCoversAllValues() {
         // Mapping must be total, otherwise a future NodeRole gets silently
         // dropped to null on selector emission.

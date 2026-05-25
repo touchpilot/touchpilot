@@ -14,9 +14,10 @@ import org.json.JSONObject
  * string (e.g. matching a label against a live Accessibility node).
  *
  * [isSensitive] is true whenever
- * [SensitiveTextRedactor.containsSensitiveText] matches the raw text — this is
- * the same heuristic the rest of the project already uses, so a "password"
- * label flagged here is consistent with what `ScreenContext` would flag.
+ * [SensitiveTextRedactor.containsSensitiveText] matches the raw text or the
+ * caller already knows the source view is sensitive. That keeps selector
+ * redaction consistent with `ScreenNode.sensitive`, including password fields
+ * whose labels do not trip text heuristics.
  */
 data class SelectorText(
     val raw: String,
@@ -54,9 +55,9 @@ data class SelectorText(
          * so the result matches what the rest of the agent would compute for
          * the same string.
          */
-        fun of(raw: String): SelectorText {
+        fun of(raw: String, forceSensitive: Boolean = false): SelectorText {
             if (raw.isEmpty()) return Empty
-            val sensitive = SensitiveTextRedactor.containsSensitiveText(raw)
+            val sensitive = forceSensitive || SensitiveTextRedactor.containsSensitiveText(raw)
             val displaySafe = if (sensitive) "[REDACTED]" else SensitiveTextRedactor.redact(raw)
             return SelectorText(raw = raw, displaySafe = displaySafe, isSensitive = sensitive)
         }

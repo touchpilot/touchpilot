@@ -29,6 +29,14 @@ class SelectorTextTest {
     }
 
     @Test
+    fun forceSensitiveRedactsBenignLookingLabel() {
+        val t = SelectorText.of("PIN", forceSensitive = true)
+        assertTrue(t.isSensitive)
+        assertEquals("PIN", t.raw)
+        assertEquals("[REDACTED]", t.displaySafe)
+    }
+
+    @Test
     fun sensitiveAssignmentValueIsRedactedInDisplay() {
         val t = SelectorText.of("api_key=sk-test-abc123")
         assertTrue(t.isSensitive)

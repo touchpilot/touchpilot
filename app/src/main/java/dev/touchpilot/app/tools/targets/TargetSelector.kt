@@ -49,6 +49,8 @@ enum class TargetRole {
  *   issue #77 can rank and explain ambiguity,
  * - keeps text fields wrapped in [SelectorText] so any log / trace / agent
  *   event renders the redacted view by default,
+ * - carries explicit sensitivity from the source node so password fields stay
+ *   sensitive even when their visible label looks harmless,
  * - exposes [isValid] so callers can refuse to dispatch a tap against an
  *   empty or under-specified selector (no more "blind taps").
  *
@@ -66,6 +68,7 @@ data class TargetSelector(
     val packageName: String? = null,
     val windowTitle: String? = null,
     val confidence: Float? = null,
+    val sensitive: Boolean = false,
     val source: SelectorSource = SelectorSource.UNSPECIFIED,
 ) {
     init {
@@ -98,7 +101,7 @@ data class TargetSelector(
      * surfaces the user did not opt into (logs, traces, agent events).
      */
     val containsSensitiveText: Boolean
-        get() = (text?.isSensitive == true) || (contentDescription?.isSensitive == true)
+        get() = sensitive || (text?.isSensitive == true) || (contentDescription?.isSensitive == true)
 
     /**
      * Copy that replaces sensitive text fields with their `[REDACTED]`
@@ -127,6 +130,7 @@ data class TargetSelector(
             putOrNull("packageName", view.packageName)
             putOrNull("windowTitle", view.windowTitle)
             putOrNull("confidence", view.confidence)
+            put("sensitive", view.sensitive)
             put("source", view.source.name)
             put("containsSensitiveText", view.containsSensitiveText)
         }
@@ -163,6 +167,7 @@ data class TargetSelector(
                     json.getString("windowTitle") else null,
                 confidence = if (json.has("confidence") && !json.isNull("confidence"))
                     json.getDouble("confidence").toFloat() else null,
+                sensitive = json.optBoolean("sensitive", false),
                 source = runCatching {
                     SelectorSource.valueOf(json.optString("source", SelectorSource.UNSPECIFIED.name))
                 }.getOrDefault(SelectorSource.UNSPECIFIED),

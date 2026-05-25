@@ -94,6 +94,12 @@ class TargetSelectorTest {
     }
 
     @Test
+    fun explicitSensitiveFlagFlagsSelector() {
+        val s = TargetSelector(nodeId = "0.1.2", sensitive = true)
+        assertTrue(s.containsSensitiveText)
+    }
+
+    @Test
     fun nonSensitiveTextDoesNotFlagSelector() {
         val s = TargetSelector(text = SelectorText.of("Battery"))
         assertFalse(s.containsSensitiveText)
@@ -176,6 +182,7 @@ class TargetSelectorTest {
             packageName = "com.android.settings",
             windowTitle = "Settings",
             confidence = 0.92f,
+            sensitive = true,
             source = SelectorSource.OBSERVATION,
         )
         val restored = TargetSelector.fromJson(original.toJson(redacted = false))
