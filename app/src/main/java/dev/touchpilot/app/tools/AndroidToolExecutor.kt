@@ -174,6 +174,21 @@ class AndroidToolExecutor(
                 record(name, "text=\"$text\", timeout_ms=$timeout", ok, "waitForText")
                 ToolResult(ok, "waitForText")
             }
+            "focus_input" -> {
+                val text = args["text"].orEmpty()
+                val nodeId = args["node_id"].orEmpty()
+                val bounds = args["bounds"].orEmpty()
+                val viewId = args["view_id"].orEmpty()
+                val result = AccessibilityBridge.focusInput(text, nodeId, bounds, viewId)
+                val selectorLog = when {
+                    nodeId.isNotBlank() -> "node_id=\"$nodeId\""
+                    bounds.isNotBlank() -> "bounds=\"$bounds\""
+                    viewId.isNotBlank() -> "view_id=\"$viewId\""
+                    else -> "text_length=${text.length}"
+                }
+                record(name, selectorLog, result.ok, result.message)
+                ToolResult(result.ok, result.message)
+            }
             else -> {
                 record(name, args.toString(), false, "unhandled tool")
                 ToolResult(false, "Unhandled tool: $name")

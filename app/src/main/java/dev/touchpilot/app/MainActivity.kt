@@ -666,6 +666,16 @@ class MainActivity : Activity() {
             }.apply { id = R.id.type_text_button }
         )
 
+        val focusInputField = editText("Text label of input field to focus").apply { id = R.id.focus_input_input }
+        contentRoot.addView(focusInputField)
+        contentRoot.addView(
+            secondaryButton("Focus Input Field") {
+                hideKeyboard(focusInputField)
+                executeAndRender("focus_input", mapOf("text" to focusInputField.text.toString()))
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.focus_input_button }
+        )
+
         val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actionRow.addView(
             secondaryButton("Back") {

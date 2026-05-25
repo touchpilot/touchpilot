@@ -15,6 +15,8 @@
     <item name="scroll_up_button" type="id" />
     <item name="wait_for_text_input" type="id" />
     <item name="wait_for_text_button" type="id" />
+    <item name="focus_input_input" type="id" />
+    <item name="focus_input_button" type="id" />
     <item name="agent_provider_url_input" type="id" />
     <item name="agent_model_input" type="id" />
     <item name="agent_api_key_input" type="id" />

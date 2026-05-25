@@ -2,6 +2,8 @@ package dev.touchpilot.app.androidcontrol
 
 import dev.touchpilot.app.screen.ScreenContext
 
+data class FocusResult(val ok: Boolean, val message: String)
+
 object AccessibilityBridge {
     @Volatile
     private var service: TouchPilotAccessibilityService? = null
@@ -79,5 +81,10 @@ object AccessibilityBridge {
 
     fun waitForIdle(timeoutMs: Long): Boolean {
         return service?.waitForIdle(timeoutMs) ?: false
+    }
+
+    fun focusInput(text: String, nodeId: String, bounds: String, viewId: String): FocusResult {
+        return service?.focusInput(text, nodeId, bounds, viewId)
+            ?: FocusResult(false, "TouchPilot Control is not enabled.")
     }
 }

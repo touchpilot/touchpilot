@@ -98,6 +98,18 @@ object AndroidToolCatalog {
                 "timeout_ms" to "Maximum wait time in milliseconds."
             ),
             requiredArguments = setOf("text")
+        ),
+        ToolSpec(
+            name = "focus_input",
+            description = "Focus a visible editable input field without typing text.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                "text" to "Visible text or content description of the input field.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "bounds" to "Bounds from observe_screen as left,top,right,bottom.",
+                "view_id" to "Resource ID of the view (e.g., dev.example.app:id/search_input)."
+            ),
+            requiredArguments = emptySet()
         )
     )
 
@@ -136,6 +148,14 @@ object AndroidToolCatalog {
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "focus_input") {
+            val selectors = listOf("text", "node_id", "bounds", "view_id")
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.size != 1) {
+                return "focus_input requires exactly one selector: text, node_id, bounds, or view_id"
             }
         }
 

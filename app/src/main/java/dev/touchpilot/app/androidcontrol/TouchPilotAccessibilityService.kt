@@ -91,6 +91,61 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return setNodeText(node, text)
     }
 
+    fun focusInput(text: String, nodeId: String, bounds: String, viewId: String): FocusResult {
+        val root = rootInActiveWindow ?: return FocusResult(false, "No active window is available.")
+
+        val candidates: List<AccessibilityNodeInfo> = when {
+            nodeId.isNotBlank() -> {
+                val node = findNodeById(root, nodeId)
+                    ?: return FocusResult(false, "No matching input target found.")
+                listOf(node)
+            }
+            bounds.isNotBlank() -> {
+                val targetBounds = parseBounds(bounds)
+                    ?: return FocusResult(false, "Invalid bounds format.")
+                findAllNodes(root) { candidate ->
+                    val b = Rect()
+                    candidate.getBoundsInScreen(b)
+                    b == targetBounds
+                }
+            }
+            viewId.isNotBlank() -> {
+                findAllNodes(root) { candidate ->
+                    candidate.viewIdResourceName == viewId
+                }
+            }
+            else -> {
+                findAllNodes(root) { candidate ->
+                    if (candidate.isEditable) {
+                        // Match editable fields by hint/label, not current typed content.
+                        val hint = candidate.hintText?.toString() ?: ""
+                        val desc = candidate.contentDescription?.toString() ?: ""
+                        hint.contains(text, ignoreCase = true) || desc.contains(text, ignoreCase = true)
+                    } else {
+                        val label = candidate.text?.toString()
+                            ?: candidate.contentDescription?.toString()
+                            ?: ""
+                        label.contains(text, ignoreCase = true)
+                    }
+                }
+            }
+        }
+
+        if (candidates.isEmpty()) return FocusResult(false, "No matching input target found.")
+
+        val editable = candidates.filter { it.isEditable }
+
+        return when {
+            editable.isEmpty() -> FocusResult(false, "Target is not an editable input field.")
+            editable.size > 1 -> FocusResult(false, "Ambiguous input target.")
+            else -> {
+                val node = editable[0]
+                val ok = node.performAction(AccessibilityNodeInfo.ACTION_CLICK) || tapNodeCenter(node)
+                FocusResult(ok, if (ok) "focusInput" else "Failed to focus input.")
+            }
+        }
+    }
+
     fun scroll(forward: Boolean): Boolean {
         val root = rootInActiveWindow ?: return false
         val action = scrollAction(forward)
@@ -217,6 +272,27 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         }
 
         return null
+    }
+
+    private fun findAllNodes(
+        node: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean
+    ): List<AccessibilityNodeInfo> {
+        val result = mutableListOf<AccessibilityNodeInfo>()
+        collectNodes(node, predicate, result)
+        return result
+    }
+
+    private fun collectNodes(
+        node: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean,
+        result: MutableList<AccessibilityNodeInfo>
+    ) {
+        if (predicate(node)) result.add(node)
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            collectNodes(child, predicate, result)
+        }
     }
 
     private fun findNodeById(root: AccessibilityNodeInfo, nodeId: String): AccessibilityNodeInfo? {
