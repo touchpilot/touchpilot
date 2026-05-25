@@ -139,9 +139,9 @@ class TargetResolverTest {
     fun returnsNotFoundWhenOnlyMatchingNodeIsDisabled() {
         val result = resolver.resolve(
             context = context(
-                node(nodeId = "0.0", text = "Continue", enabled = false),
+                node(nodeId = "0.0", text = "Search", role = NodeRole.INPUT, enabled = false),
             ),
-            selector = TargetSelector(text = SelectorText.of("Continue")),
+            selector = TargetSelector(text = SelectorText.of("Search"), role = TargetRole.INPUT),
         )
 
         val notFound = assertIs<TargetResolutionResult.NotFound>(result)
