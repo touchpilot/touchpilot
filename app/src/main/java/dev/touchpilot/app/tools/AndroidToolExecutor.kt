@@ -23,6 +23,7 @@ class AndroidToolExecutor(
     private val targetResolver: TargetResolver = TargetResolver(),
     private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver),
     private val retryPolicy: AndroidToolRetryPolicy = AndroidToolRetryPolicy(),
+    private val verifier: ToolVerifier = ToolVerifier(),
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     fun execute(
@@ -70,7 +71,7 @@ class AndroidToolExecutor(
         val config = retryPolicy.configFor(name)
 
         repeat(config.maxAttempts) { attemptIndex ->
-            val result = executeOnce(name, args)
+            val result = executeOnceVerified(name, args)
             val attempt = attemptIndex + 1
             val decision = retryPolicy.shouldRetry(name, result, attemptIndex)
             if (result.ok || !decision.retry) {
@@ -95,6 +96,29 @@ class AndroidToolExecutor(
             message = "${failed.message} after ${config.maxAttempts} attempt(s)",
             data = failed.data + ("attempts" to config.maxAttempts.toString())
         )
+    }
+
+    private fun executeOnceVerified(name: String, args: Map<String, String>): ToolResult {
+        val before = AccessibilityBridge.observeScreenContext()
+        val result = executeOnce(name, args)
+        val after = if (name == "observe_screen") {
+            before
+        } else {
+            AccessibilityBridge.observeScreenContext()
+        }
+        val verification = verifier.verify(
+            toolName = name,
+            args = args,
+            result = result,
+            before = before,
+            after = after,
+        )
+        val verified = result.withVerification(verification)
+        return if (result.ok && verification is ToolVerificationResult.Failed) {
+            verified.copy(ok = false, message = "Verification failed: ${verification.reason}")
+        } else {
+            verified
+        }
     }
 
     private fun executeOnce(name: String, args: Map<String, String>): ToolResult {
@@ -416,5 +440,14 @@ class AndroidToolExecutor(
 
     private fun record(name: String, args: String, ok: Boolean, message: String) {
         ToolExecutionLog.record(name, args, ok, message)
+    }
+
+    private fun ToolResult.withVerification(verification: ToolVerificationResult): ToolResult {
+        return copy(
+            data = data + verification.data + mapOf(
+                "verification_status" to verification.status.wireName,
+                "verification_reason" to SensitiveTextRedactor.redact(verification.reason),
+            )
+        )
     }
 }
