@@ -9,6 +9,9 @@ import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.tools.targets.ScrollResolution
+import dev.touchpilot.app.tools.targets.ScrollResolver
+import dev.touchpilot.app.tools.targets.ScrollTarget
 import dev.touchpilot.app.tools.targets.TargetResolutionResult
 import dev.touchpilot.app.tools.targets.TargetResolver
 import dev.touchpilot.app.tools.targets.TargetSelector
@@ -17,7 +20,8 @@ import dev.touchpilot.app.tools.targets.TypeTextTarget
 class AndroidToolExecutor(
     private val context: Context,
     private val policy: DefaultActionPolicy = DefaultActionPolicy(),
-    private val targetResolver: TargetResolver = TargetResolver()
+    private val targetResolver: TargetResolver = TargetResolver(),
+    private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver)
 ) {
     fun execute(
         name: String,
@@ -112,14 +116,7 @@ class AndroidToolExecutor(
                 executeTypeText(args)
             }
             "scroll" -> {
-                val direction = args["direction"].orEmpty()
-                val ok = if (direction.equals("backward", ignoreCase = true)) {
-                    AccessibilityBridge.scrollBackward()
-                } else {
-                    AccessibilityBridge.scrollForward()
-                }
-                record(name, "direction=\"$direction\"", ok, "scroll")
-                ToolResult(ok, "scroll")
+                executeScroll(args)
             }
             "press_back" -> {
                 val ok = AccessibilityBridge.pressBack()
@@ -208,6 +205,137 @@ class AndroidToolExecutor(
             }
         }
     }
+
+    private fun executeScroll(args: Map<String, String>): ToolResult {
+        val direction = args[ScrollTarget.DirectionArg].orEmpty()
+        val backward = ScrollTarget.isBackward(direction)
+        val forward = !backward
+        val hasTarget = ScrollTarget.hasTarget(args)
+        val selector = if (hasTarget) ScrollTarget.selectorFromArgs(args) else null
+
+        val beforeContext = AccessibilityBridge.observeScreenContext()
+        val resolution = scrollResolver.resolve(beforeContext, selector)
+
+        return when (resolution) {
+            is ScrollResolution.Resolved -> {
+                val node = resolution.node
+                val nodeId = node.nodeId
+                if (nodeId.isNullOrBlank()) {
+                    val message = "Resolved scroll target has no stable node id"
+                    record("scroll", scrollLogArgs(direction, "resolved_no_id"), false, message)
+                    return ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf("target" to resolution.selector.toRedactedJson())
+                    )
+                }
+                val attempted = AccessibilityBridge.scrollNode(nodeId, forward)
+                val verification = verifyScreenChanged(beforeContext, attempted)
+                val message = when {
+                    !attempted -> "Unable to perform scroll on resolved container"
+                    !verification.changed -> "Scroll performed but screen did not change"
+                    else -> "scroll"
+                }
+                val ok = attempted && verification.changed
+                record(
+                    "scroll",
+                    scrollLogArgs(direction, "node_id=$nodeId"),
+                    ok,
+                    message
+                )
+                ToolResult(
+                    ok = ok,
+                    message = message,
+                    data = mapOf(
+                        "node_id" to nodeId,
+                        "direction" to if (forward) "forward" else "backward",
+                        "confidence" to resolution.confidence.toString(),
+                        "screen_changed" to verification.changed.toString(),
+                    )
+                )
+            }
+            is ScrollResolution.Ambiguous -> {
+                val message = "Ambiguous scroll target: ${resolution.reason}"
+                record("scroll", scrollLogArgs(direction, "ambiguous"), false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                )
+            }
+            is ScrollResolution.NotFound -> {
+                val message = "Scroll target not found: ${resolution.reason}"
+                record("scroll", scrollLogArgs(direction, "not_found"), false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+            is ScrollResolution.NoScrollable -> {
+                record("scroll", scrollLogArgs(direction, "no_scrollable"), false, resolution.reason)
+                ToolResult(
+                    ok = false,
+                    message = resolution.reason,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+            is ScrollResolution.DirectionOnly -> {
+                val attempted = if (backward) {
+                    AccessibilityBridge.scrollBackward()
+                } else {
+                    AccessibilityBridge.scrollForward()
+                }
+                val verification = verifyScreenChanged(beforeContext, attempted)
+                val message = when {
+                    !attempted -> "Unable to perform direction-only scroll"
+                    !verification.changed -> "Scroll performed but screen did not change"
+                    else -> "scroll"
+                }
+                val ok = attempted && verification.changed
+                record(
+                    "scroll",
+                    scrollLogArgs(direction, "direction_only=${resolution.scrollableCount}"),
+                    ok,
+                    message
+                )
+                ToolResult(
+                    ok = ok,
+                    message = message,
+                    data = mapOf(
+                        "direction" to if (forward) "forward" else "backward",
+                        "scrollable_count" to resolution.scrollableCount.toString(),
+                        "screen_changed" to verification.changed.toString(),
+                    )
+                )
+            }
+        }
+    }
+
+    private fun verifyScreenChanged(
+        beforeContext: dev.touchpilot.app.screen.ScreenContext,
+        scrollAttempted: Boolean
+    ): ScrollVerification {
+        if (!scrollAttempted) return ScrollVerification(changed = false)
+        AccessibilityBridge.waitForIdle(ActionIdleTimeoutMs)
+        val after = AccessibilityBridge.observeScreenContext()
+        val changed = !sameSnapshot(beforeContext, after)
+        return ScrollVerification(changed = changed)
+    }
+
+    private fun sameSnapshot(
+        a: dev.touchpilot.app.screen.ScreenContext,
+        b: dev.touchpilot.app.screen.ScreenContext
+    ): Boolean {
+        if (a.nodes.size != b.nodes.size) return false
+        return a.toRedactedJson() == b.toRedactedJson()
+    }
+
+    private fun scrollLogArgs(direction: String, target: String): String {
+        return "direction=\"$direction\", target=$target"
+    }
+
+    private data class ScrollVerification(val changed: Boolean)
 
     private fun typeTextLogArgs(text: String, selector: TargetSelector): String {
         val label = selector.text?.displaySafe
