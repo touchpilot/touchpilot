@@ -47,7 +47,7 @@ class AndroidToolExecutor(
         }
 
         val result = executeWithRetry(name, args)
-        if (result.ok && name !in setOf("observe_screen", "wait_for_ui")) {
+        if (result.ok && name !in setOf("observe_screen", "observe_screen_context", "wait_for_ui")) {
             AccessibilityBridge.waitForIdle(ActionIdleTimeoutMs)
         }
         return result
@@ -79,6 +79,13 @@ class AndroidToolExecutor(
                 val snapshot = observeScreen()
                 record(name, "", AccessibilityBridge.isConnected(), "snapshot length=${snapshot.length}")
                 ToolResult(AccessibilityBridge.isConnected(), SensitiveTextRedactor.redact(snapshot))
+            }
+            "observe_screen_context" -> {
+                val connected = AccessibilityBridge.isConnected()
+                val context = AccessibilityBridge.observeScreenContext()
+                val json = context.toRedactedJson()
+                record(name, "", connected, "context nodes=${context.nodes.size}")
+                ToolResult(connected, json, mapOf("nodes" to context.nodes.size.toString()))
             }
             "open_app" -> {
                 val target = args["target"].orEmpty()
