@@ -12,6 +12,8 @@ class AndroidToolRetryPolicyTest {
     fun defaultPolicyDefinesToolSpecificAttemptsAndIdleWaits() {
         assertEquals(1, policy.configFor("observe_screen").maxAttempts)
         assertFalse(policy.configFor("observe_screen").retryable)
+        assertEquals(1, policy.configFor("get_foreground_app").maxAttempts)
+        assertFalse(policy.configFor("get_foreground_app").retryable)
 
         val tap = policy.configFor("tap")
         assertEquals(3, tap.maxAttempts)

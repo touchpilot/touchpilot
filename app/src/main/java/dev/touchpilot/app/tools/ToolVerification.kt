@@ -20,6 +20,7 @@ class ToolVerifier {
                 reason = "screen observation returned ${result.message.length} character(s)",
                 data = mapOf("snapshot_length" to result.message.length.toString())
             )
+            "get_foreground_app" -> verifyForegroundApp(result)
             "open_app" -> verifyOpenApp(args, after)
             "tap" -> verifyChangedOrFocused(before, after, "tap")
             "type_text" -> verifyTypeText(args, after)
@@ -28,6 +29,28 @@ class ToolVerifier {
             "press_home" -> verifyHome(after)
             "wait_for_ui" -> verifyWaitForUi(args, after)
             else -> ToolVerificationResult.Skipped("no verifier for $toolName")
+        }
+    }
+
+    private fun verifyForegroundApp(result: ToolResult): ToolVerificationResult {
+        val packageName = result.data["package_name"].orEmpty()
+        val appLabel = result.data["app_label"].orEmpty()
+        val connected = result.data["service_connected"] == "true"
+        return if (connected && packageName.isNotBlank()) {
+            ToolVerificationResult.Passed(
+                reason = "foreground app: $packageName",
+                data = mapOf("package" to packageName, "app_label" to appLabel).redactedValues()
+            )
+        } else if (!connected) {
+            ToolVerificationResult.Failed(
+                reason = "AccessibilityService is not connected",
+                data = mapOf("service_connected" to "false")
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "foreground app info is empty",
+                data = mapOf("package_name" to packageName)
+            )
         }
     }
 

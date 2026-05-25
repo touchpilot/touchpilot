@@ -128,6 +128,18 @@ class AndroidToolExecutor(
                 record(name, "", AccessibilityBridge.isConnected(), "snapshot length=${snapshot.length}")
                 ToolResult(AccessibilityBridge.isConnected(), SensitiveTextRedactor.redact(snapshot))
             }
+            "get_foreground_app" -> {
+                val ctx = AccessibilityBridge.observeScreenContext()
+                val connected = AccessibilityBridge.isConnected()
+                val data = mapOf(
+                    "package_name" to (ctx.packageName.orEmpty()),
+                    "app_label" to (ctx.appLabel.orEmpty()),
+                    "window_title" to (ctx.windowTitle.orEmpty()),
+                    "service_connected" to connected.toString(),
+                )
+                record(name, "", connected, "package=${ctx.packageName}")
+                ToolResult(connected, "getForegroundApp", data = data)
+            }
             "open_app" -> {
                 val target = args["target"].orEmpty()
                 val ok = openApp(target)

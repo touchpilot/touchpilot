@@ -85,6 +85,7 @@ class AndroidToolRetryPolicy(
             )
             return mapOf(
                 "observe_screen" to ToolRetryConfig(maxAttempts = 1, retryable = false),
+                "get_foreground_app" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "open_app" to action,
                 "tap" to action,
                 "type_text" to action,

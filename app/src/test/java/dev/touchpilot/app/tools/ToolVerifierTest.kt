@@ -125,6 +125,42 @@ class ToolVerifierTest {
     }
 
     @Test
+    fun getForegroundAppPassesWhenServiceConnectedAndPackagePresent() {
+        val result = verifier.verify(
+            toolName = "get_foreground_app",
+            args = emptyMap(),
+            result = ToolResult(ok = true, message = "getForegroundApp", data = mapOf(
+                "package_name" to "com.android.settings",
+                "app_label" to "Settings",
+                "window_title" to "Settings",
+                "service_connected" to "true",
+            )),
+            before = screen(),
+            after = screen(),
+        )
+
+        val passed = assertIs<ToolVerificationResult.Passed>(result)
+        assertEquals("passed", passed.status.wireName)
+    }
+
+    @Test
+    fun getForegroundAppFailsWhenServiceNotConnected() {
+        val result = verifier.verify(
+            toolName = "get_foreground_app",
+            args = emptyMap(),
+            result = ToolResult(ok = false, message = "getForegroundApp", data = mapOf(
+                "package_name" to "",
+                "service_connected" to "false",
+            )),
+            before = screen(),
+            after = screen(),
+        )
+
+        val failed = assertIs<ToolVerificationResult.Failed>(result)
+        assertTrue(failed.reason.contains("not connected"))
+    }
+
+    @Test
     fun skippedWhenToolAlreadyFailed() {
         val result = verifier.verify(
             toolName = "tap",

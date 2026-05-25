@@ -78,6 +78,12 @@ object AndroidToolCatalog {
             requiredArguments = setOf("direction")
         ),
         ToolSpec(
+            name = "get_foreground_app",
+            description = "Return the currently foreground Android app metadata (package name, app label, window title).",
+            risk = ToolRisk.LOW,
+            arguments = emptyMap()
+        ),
+        ToolSpec(
             name = "press_back",
             description = "Send Android back.",
             risk = ToolRisk.MEDIUM,
