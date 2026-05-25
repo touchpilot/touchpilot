@@ -23,6 +23,21 @@ data class ToolResult(
     val data: Map<String, String> = emptyMap()
 )
 
+/**
+ * Allowlist of Settings panels [open_settings_panel] may open. The agent must use
+ * one of these exact keys; unsupported panels are rejected with an explicit error
+ * rather than guessed. Keep this in sync with the intent mapping in
+ * AndroidToolExecutor.openSettingsPanel.
+ */
+val SupportedSettingsPanels = listOf(
+    "wifi",
+    "bluetooth",
+    "accessibility",
+    "app_info",
+    "notifications",
+    "system_settings"
+)
+
 object AndroidToolCatalog {
     val initialTools = listOf(
         ToolSpec(
@@ -36,6 +51,13 @@ object AndroidToolCatalog {
             description = "Launch an installed app by package name or visible label.",
             risk = ToolRisk.MEDIUM,
             arguments = mapOf("target" to "Package name or launcher label.")
+        ),
+        ToolSpec(
+            name = "open_settings_panel",
+            description = "Open a specific Android Settings panel via a native Settings intent. " +
+                "Supported panels: ${SupportedSettingsPanels.joinToString()}.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf("panel" to "One of: ${SupportedSettingsPanels.joinToString()}.")
         ),
         ToolSpec(
             name = "tap",
@@ -127,6 +149,14 @@ object AndroidToolCatalog {
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "open_settings_panel") {
+            val panel = args["panel"].orEmpty()
+            if (panel !in SupportedSettingsPanels) {
+                return "Unsupported settings panel: \"$panel\". " +
+                    "Supported panels: ${SupportedSettingsPanels.joinToString()}"
             }
         }
 

@@ -1,9 +1,11 @@
 package dev.touchpilot.app.security
 
+import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.ToolRisk
 import dev.touchpilot.app.tools.ToolSpec
 import kotlin.test.Test
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 class DefaultActionPolicyTest {
     private val policy = DefaultActionPolicy()
@@ -66,6 +68,21 @@ class DefaultActionPolicyTest {
         )
 
         assertIs<PolicyDecision.Allow>(decision)
+    }
+
+    @Test
+    fun requiresApprovalForOpenSettingsPanel() {
+        val tool = AndroidToolCatalog.find("open_settings_panel")
+        assertNotNull(tool)
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = tool,
+                args = mapOf("panel" to "wifi"),
+                source = ToolSource.LOCAL_MODEL
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
     }
 
     private fun mediumTool(name: String): ToolSpec {
