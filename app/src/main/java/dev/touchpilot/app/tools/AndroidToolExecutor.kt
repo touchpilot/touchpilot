@@ -21,7 +21,9 @@ class AndroidToolExecutor(
     private val context: Context,
     private val policy: DefaultActionPolicy = DefaultActionPolicy(),
     private val targetResolver: TargetResolver = TargetResolver(),
-    private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver)
+    private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver),
+    private val retryPolicy: AndroidToolRetryPolicy = AndroidToolRetryPolicy(),
+    private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     fun execute(
         name: String,
@@ -56,29 +58,42 @@ class AndroidToolExecutor(
         }
 
         val result = executeWithRetry(name, args)
-        if (result.ok && name !in setOf("observe_screen", "wait_for_ui")) {
-            AccessibilityBridge.waitForIdle(ActionIdleTimeoutMs)
+        val retryConfig = retryPolicy.configFor(name)
+        if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
+            AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
         }
         return result
     }
 
     private fun executeWithRetry(name: String, args: Map<String, String>): ToolResult {
         var lastResult: ToolResult? = null
+        val config = retryPolicy.configFor(name)
 
-        repeat(retryCountFor(name)) { attempt ->
+        repeat(config.maxAttempts) { attemptIndex ->
             val result = executeOnce(name, args)
-            if (result.ok || !shouldRetry(name)) {
-                return result.withAttemptData(attempt + 1)
+            val attempt = attemptIndex + 1
+            val decision = retryPolicy.shouldRetry(name, result, attemptIndex)
+            if (result.ok || !decision.retry) {
+                return result.withAttemptData(
+                    attempt = attempt,
+                    category = decision.category,
+                    retryReason = decision.reason,
+                )
             }
 
-            lastResult = result
-            Thread.sleep(RetryDelayMs)
+            lastResult = result.withAttemptData(
+                attempt = attempt,
+                category = decision.category,
+                retryReason = decision.reason,
+            )
+            record(name, "attempt=$attempt, retry_reason=\"${decision.reason}\"", false, "retrying")
+            sleeper(decision.delayMs)
         }
 
         val failed = lastResult ?: ToolResult(false, "Tool did not run")
         return failed.copy(
-            message = "${failed.message} after ${retryCountFor(name)} attempt(s)",
-            data = failed.data + ("attempts" to retryCountFor(name).toString())
+            message = "${failed.message} after ${config.maxAttempts} attempt(s)",
+            data = failed.data + ("attempts" to config.maxAttempts.toString())
         )
     }
 
@@ -317,7 +332,7 @@ class AndroidToolExecutor(
         scrollAttempted: Boolean
     ): ScrollVerification {
         if (!scrollAttempted) return ScrollVerification(changed = false)
-        AccessibilityBridge.waitForIdle(ActionIdleTimeoutMs)
+        AccessibilityBridge.waitForIdle(retryPolicy.configFor("scroll").idleTimeoutMs)
         val after = AccessibilityBridge.observeScreenContext()
         val changed = !sameSnapshot(beforeContext, after)
         return ScrollVerification(changed = changed)
@@ -384,29 +399,22 @@ class AndroidToolExecutor(
         return loadLabel(context.packageManager)?.toString().orEmpty()
     }
 
-    private fun shouldRetry(name: String): Boolean {
-        return name in setOf("open_app", "tap", "type_text", "scroll", "press_back", "press_home", "wait_for_ui")
-    }
-
-    private fun retryCountFor(name: String): Int {
-        return if (shouldRetry(name)) ActionRetryCount else 1
-    }
-
-    private fun ToolResult.withAttemptData(attempts: Int): ToolResult {
-        return if (attempts <= 1) {
-            this
-        } else {
-            copy(data = data + ("attempts" to attempts.toString()))
-        }
+    private fun ToolResult.withAttemptData(
+        attempt: Int,
+        category: ToolFailureCategory,
+        retryReason: String,
+    ): ToolResult {
+        if (attempt <= 1 && category == ToolFailureCategory.NONE) return this
+        return copy(
+            data = data + mapOf(
+                "attempt" to attempt.toString(),
+                "failure_category" to category.wireName,
+                "retry_reason" to retryReason,
+            )
+        )
     }
 
     private fun record(name: String, args: String, ok: Boolean, message: String) {
         ToolExecutionLog.record(name, args, ok, message)
-    }
-
-    private companion object {
-        const val ActionRetryCount = 3
-        const val RetryDelayMs = 250L
-        const val ActionIdleTimeoutMs = 1_500L
     }
 }
