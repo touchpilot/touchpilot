@@ -1596,8 +1596,6 @@ class MainActivity : Activity() {
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
-<<<<<<< HEAD
-=======
         val ProviderModeLabels = listOf("Local router", "Local model")
         val FocusInputSelectorLabels = listOf("Text", "Node ID", "View ID")
         val FocusInputSelectorHints = listOf(
@@ -1605,7 +1603,6 @@ class MainActivity : Activity() {
             "Node path  ·  e.g. 0.1.2",
             "Resource ID  ·  e.g. com.app:id/field"
         )
->>>>>>> 55531bc (feat: add focus_input tool and debug controls)
     }
 
     private object Theme {
