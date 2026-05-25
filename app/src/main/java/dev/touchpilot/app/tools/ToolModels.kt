@@ -1,5 +1,7 @@
 package dev.touchpilot.app.tools
 
+import dev.touchpilot.app.tools.targets.TypeTextTarget
+
 enum class ToolRisk {
     LOW,
     MEDIUM,
@@ -48,9 +50,17 @@ object AndroidToolCatalog {
         ),
         ToolSpec(
             name = "type_text",
-            description = "Type text into the currently focused input field.",
+            description = "Type text into the focused input field, or into a resolved visible input target.",
             risk = ToolRisk.MEDIUM,
-            arguments = mapOf("text" to "Text to enter.")
+            arguments = mapOf(
+                TypeTextTarget.TextArg to "Text to enter.",
+                TypeTextTarget.TargetTextArg to "Visible input label to focus before typing.",
+                TypeTextTarget.TargetNodeIdArg to "Stable input node_id from observe_screen.",
+                TypeTextTarget.TargetBoundsArg to "Input bounds from observe_screen as left,top,right,bottom.",
+                TypeTextTarget.TargetViewIdArg to "Input viewIdResourceName from observe_screen.",
+                TypeTextTarget.TargetContentDescriptionArg to "Input content description to focus before typing.",
+            ),
+            requiredArguments = setOf(TypeTextTarget.TextArg)
         ),
         ToolSpec(
             name = "scroll",
@@ -107,6 +117,16 @@ object AndroidToolCatalog {
                 .filter { args[it].isNullOrBlank().not() }
             if (selectors.size != 1) {
                 return "tap requires exactly one selector: text, node_id, or bounds"
+            }
+        }
+
+        if (name == "type_text") {
+            val malformedBounds = args[TypeTextTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
             }
         }
 

@@ -80,13 +80,15 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             ?: findNode(root) { it.isFocused }
             ?: return false
 
-        val args = Bundle().apply {
-            putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                text
-            )
-        }
-        return focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        return setNodeText(focused, text)
+    }
+
+    fun typeIntoNode(nodeId: String, text: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = findNodeById(root, nodeId) ?: return false
+        if (!node.isEnabled || !node.isEditableTarget()) return false
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        return setNodeText(node, text)
     }
 
     fun scroll(forward: Boolean): Boolean {
@@ -219,6 +221,21 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             current = current.parent
         }
         return false
+    }
+
+    private fun setNodeText(node: AccessibilityNodeInfo, text: String): Boolean {
+        if (!node.isEnabled || !node.isEditableTarget()) return false
+        val args = Bundle().apply {
+            putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                text
+            )
+        }
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+    }
+
+    private fun AccessibilityNodeInfo.isEditableTarget(): Boolean {
+        return isEditable || actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }
     }
 
     private fun tapNodeCenter(node: AccessibilityNodeInfo): Boolean {

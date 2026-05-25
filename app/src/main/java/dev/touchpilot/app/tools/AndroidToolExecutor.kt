@@ -9,10 +9,15 @@ import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.tools.targets.TargetResolutionResult
+import dev.touchpilot.app.tools.targets.TargetResolver
+import dev.touchpilot.app.tools.targets.TargetSelector
+import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 class AndroidToolExecutor(
     private val context: Context,
-    private val policy: DefaultActionPolicy = DefaultActionPolicy()
+    private val policy: DefaultActionPolicy = DefaultActionPolicy(),
+    private val targetResolver: TargetResolver = TargetResolver()
 ) {
     fun execute(
         name: String,
@@ -104,10 +109,7 @@ class AndroidToolExecutor(
                 ToolResult(ok, "tap", mapOf("selector" to selector))
             }
             "type_text" -> {
-                val text = args["text"].orEmpty()
-                val ok = AccessibilityBridge.typeIntoFocusedField(text)
-                record(name, "text_length=${text.length}", ok, "typeIntoFocusedField")
-                ToolResult(ok, "typeIntoFocusedField")
+                executeTypeText(args)
             }
             "scroll" -> {
                 val direction = args["direction"].orEmpty()
@@ -141,6 +143,80 @@ class AndroidToolExecutor(
                 ToolResult(false, "Unhandled tool: $name")
             }
         }
+    }
+
+    private fun executeTypeText(args: Map<String, String>): ToolResult {
+        val text = args[TypeTextTarget.TextArg].orEmpty()
+        if (!TypeTextTarget.hasTarget(args)) {
+            val ok = AccessibilityBridge.typeIntoFocusedField(text)
+            record("type_text", "text_length=${text.length}, target=focused", ok, "typeIntoFocusedField")
+            return ToolResult(ok, if (ok) "typeIntoFocusedField" else "No editable focused input is available")
+        }
+
+        val selector = TypeTextTarget.selectorFromArgs(args)
+        val resolution = targetResolver.resolve(
+            context = AccessibilityBridge.observeScreenContext(),
+            selector = selector
+        )
+
+        return when (resolution) {
+            is TargetResolutionResult.Resolved -> {
+                val node = resolution.candidate.node
+                val nodeId = node.nodeId
+                if (nodeId.isNullOrBlank() || !node.isInputField) {
+                    val message = "Resolved target is not an editable input"
+                    record("type_text", typeTextLogArgs(text, resolution.candidate.selector), false, message)
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf(
+                            "target" to resolution.candidate.selector.toRedactedJson(),
+                            "confidence" to resolution.candidate.confidence.toString(),
+                        )
+                    )
+                } else {
+                    val ok = AccessibilityBridge.typeIntoNode(nodeId, text)
+                    val message = if (ok) "typeIntoResolvedInput" else "Unable to focus or type into resolved input"
+                    record("type_text", typeTextLogArgs(text, resolution.candidate.selector), ok, message)
+                    ToolResult(
+                        ok = ok,
+                        message = message,
+                        data = mapOf(
+                            "node_id" to nodeId,
+                            "confidence" to resolution.candidate.confidence.toString(),
+                        )
+                    )
+                }
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous input target: ${resolution.reason}"
+                record("type_text", "text_length=${text.length}, target=ambiguous", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "Input target not found: ${resolution.reason}"
+                record("type_text", "text_length=${text.length}, target=not_found", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+        }
+    }
+
+    private fun typeTextLogArgs(text: String, selector: TargetSelector): String {
+        val label = selector.text?.displaySafe
+            ?: selector.contentDescription?.displaySafe
+            ?: selector.nodeId?.let { "node_id=$it" }
+            ?: selector.viewIdResourceName?.let { "view_id=$it" }
+            ?: selector.bounds?.let { "bounds=${it.toBoundsArg()}" }
+            ?: "resolved"
+        return "text_length=${text.length}, target=\"$label\""
     }
 
     fun validate(name: String, args: Map<String, String>): String? {

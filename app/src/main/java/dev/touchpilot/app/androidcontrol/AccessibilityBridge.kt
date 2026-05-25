@@ -46,6 +46,11 @@ object AccessibilityBridge {
         return service?.typeIntoFocusedField(text) ?: false
     }
 
+    fun typeIntoNode(nodeId: String, text: String): Boolean {
+        if (nodeId.isBlank() || text.isBlank()) return false
+        return service?.typeIntoNode(nodeId, text) ?: false
+    }
+
     fun scrollForward(): Boolean {
         return service?.scroll(forward = true) ?: false
     }
