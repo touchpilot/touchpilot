@@ -84,18 +84,71 @@ class ToolVerifierTest {
     }
 
     @Test
-    fun typeTextFailsWithoutRawTextInVerificationData() {
+    fun typeTextFailsWhenNonSecureInputStaysEmpty() {
         val result = verifier.verify(
             toolName = "type_text",
-            args = mapOf("text" to "user@example.com"),
+            args = mapOf("text" to "hello world"),
             result = ToolResult(ok = true, message = "typeIntoFocusedField"),
             before = screen(nodes = listOf(input("0", ""))),
             after = screen(nodes = listOf(input("0", "", focused = true))),
         )
 
+        // A plain, non-secure input that is still empty after typing means the
+        // text genuinely did not land — that must remain a verification failure.
         val failed = assertIs<ToolVerificationResult.Failed>(result)
-        assertEquals("16", failed.data["text_length"])
-        assertFalse(failed.data.values.any { "user@example.com" in it })
+        assertEquals("11", failed.data["text_length"])
+        assertFalse(failed.data.values.any { "hello world" in it })
+    }
+
+    @Test
+    fun typeTextPassesWhenInputContainsTypedTextAmongOtherContent() {
+        // Fields routinely keep prior text or surround the typed value with a
+        // hint/suffix, so verification must use containment, not exact equality
+        // (mirrors verifyWaitForUi).
+        val result = verifier.verify(
+            toolName = "type_text",
+            args = mapOf("text" to "hello"),
+            result = ToolResult(ok = true, message = "typeIntoFocusedField"),
+            before = screen(nodes = listOf(input("0", "Search: "))),
+            after = screen(nodes = listOf(input("0", "Search: hello", focused = true))),
+        )
+
+        assertIs<ToolVerificationResult.Passed>(result)
+    }
+
+    @Test
+    fun typeTextPassesForMaskedSecureFieldThatCannotEchoText() {
+        // Password / PIN fields never expose the typed secret via accessibility,
+        // so an exact read-back is impossible. A focused secure input is the best
+        // available evidence the text was delivered; reporting failure here would
+        // make the agent retry and double-enter the secret.
+        val result = verifier.verify(
+            toolName = "type_text",
+            args = mapOf("text" to "hunter2"),
+            result = ToolResult(ok = true, message = "typeIntoFocusedField"),
+            before = screen(nodes = listOf(secureInput("0", ""))),
+            after = screen(nodes = listOf(secureInput("0", "", focused = true))),
+        )
+
+        val passed = assertIs<ToolVerificationResult.Passed>(result)
+        assertEquals("7", passed.data["text_length"])
+        // The secret must never be echoed back into verification data.
+        assertFalse(passed.data.values.any { "hunter2" in it })
+    }
+
+    @Test
+    fun typeTextPassesForMaskedFieldShowingBulletCharacters() {
+        // Some IMEs report the masked bullet glyphs rather than empty text; the
+        // bullets still are not the typed value, so exact equality would fail.
+        val result = verifier.verify(
+            toolName = "type_text",
+            args = mapOf("text" to "1234"),
+            result = ToolResult(ok = true, message = "typeIntoResolvedInput"),
+            before = screen(nodes = listOf(secureInput("0", ""))),
+            after = screen(nodes = listOf(secureInput("0", "••••", focused = true))),
+        )
+
+        assertIs<ToolVerificationResult.Passed>(result)
     }
 
     @Test
@@ -167,6 +220,20 @@ class ToolVerifierTest {
             bounds = NodeBounds(0, 0, 100, 100),
             focused = focused,
             isInputField = true,
+        )
+    }
+
+    private fun secureInput(id: String, text: String, focused: Boolean = false): ScreenNode {
+        return ScreenNode(
+            nodeId = id,
+            role = NodeRole.INPUT,
+            text = ScreenText.of(text),
+            bounds = NodeBounds(0, 0, 100, 100),
+            focused = focused,
+            isInputField = true,
+            // Builders set this for TYPE_TEXT_VARIATION_PASSWORD and similar
+            // masked inputs whose contents accessibility never reveals.
+            sensitive = true,
         )
     }
 }
