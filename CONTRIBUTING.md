@@ -56,10 +56,13 @@ Issue titles should be clear and user-facing:
 - `Bug: Tap by node_id fails after screen transition`
 - `Feature: Add local runtime status screen`
 
-Pull request titles should use a short prefix:
+Pull request titles should use a short prefix, optionally with an area scope in
+parentheses (the scope should match one of the `area:` labels below):
 
 - `fix: handle missing accessibility root`
 - `feat: add local runtime screen`
+- `feat(android-control): add long_press tool`
+- `fix(settings): flip panel transition direction`
 - `docs: add live testing checklist`
 - `test: add emulator validation fixture`
 - `ci: add Android lint workflow`
