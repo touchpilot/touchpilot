@@ -1,5 +1,6 @@
 package dev.touchpilot.app.tools
 
+import dev.touchpilot.app.tools.targets.ScrollTarget
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 enum class ToolRisk {
@@ -86,9 +87,17 @@ object AndroidToolCatalog {
         ),
         ToolSpec(
             name = "scroll",
-            description = "Scroll the active screen forward or backward.",
+            description = "Scroll a specific container or the active screen forward or backward.",
             risk = ToolRisk.MEDIUM,
-            arguments = mapOf("direction" to "forward or backward.")
+            arguments = mapOf(
+                "direction" to "forward or backward.",
+                ScrollTarget.TargetTextArg to "Visible text of the scrollable container to scroll.",
+                ScrollTarget.TargetNodeIdArg to "Container node_id from observe_screen.",
+                ScrollTarget.TargetBoundsArg to "Container bounds from observe_screen as left,top,right,bottom.",
+                ScrollTarget.TargetViewIdArg to "Container viewIdResourceName from observe_screen.",
+                ScrollTarget.TargetContentDescriptionArg to "Container content description.",
+            ),
+            requiredArguments = setOf("direction")
         ),
         ToolSpec(
             name = "press_back",
@@ -166,6 +175,13 @@ object AndroidToolCatalog {
                 !direction.equals("backward", ignoreCase = true)
             ) {
                 return "Invalid scroll direction: $direction"
+            }
+            val malformedBounds = args[ScrollTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
             }
         }
 

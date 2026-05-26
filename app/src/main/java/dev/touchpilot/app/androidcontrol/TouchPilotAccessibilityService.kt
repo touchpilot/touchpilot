@@ -93,17 +93,38 @@ class TouchPilotAccessibilityService : AccessibilityService() {
 
     fun scroll(forward: Boolean): Boolean {
         val root = rootInActiveWindow ?: return false
-        val action = if (forward) {
-            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-        } else {
-            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-        }
+        val action = scrollAction(forward)
 
         val scrollable = findNode(root) { candidate ->
             candidate.isScrollable || candidate.actionList.any { it.id == action }
         } ?: return false
 
         return scrollable.performAction(action)
+    }
+
+    fun scrollNode(nodeId: String, forward: Boolean): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val target = findNodeById(root, nodeId) ?: return false
+        val action = scrollAction(forward)
+        // Walk up the tree until we find an ancestor that actually accepts the
+        // scroll action. Some apps mark a list item as scrollable through its
+        // parent ListView/RecyclerView rather than on the item itself.
+        var current: AccessibilityNodeInfo? = target
+        while (current != null) {
+            if (current.isScrollable || current.actionList.any { it.id == action }) {
+                return current.performAction(action)
+            }
+            current = current.parent
+        }
+        return false
+    }
+
+    private fun scrollAction(forward: Boolean): Int {
+        return if (forward) {
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        } else {
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        }
     }
 
     fun pressBack(): Boolean {

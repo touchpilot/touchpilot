@@ -12,6 +12,9 @@ import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.tools.targets.ScrollResolution
+import dev.touchpilot.app.tools.targets.ScrollResolver
+import dev.touchpilot.app.tools.targets.ScrollTarget
 import dev.touchpilot.app.tools.targets.TargetResolutionResult
 import dev.touchpilot.app.tools.targets.TargetResolver
 import dev.touchpilot.app.tools.targets.TargetSelector
@@ -20,7 +23,11 @@ import dev.touchpilot.app.tools.targets.TypeTextTarget
 class AndroidToolExecutor(
     private val context: Context,
     private val policy: DefaultActionPolicy = DefaultActionPolicy(),
-    private val targetResolver: TargetResolver = TargetResolver()
+    private val targetResolver: TargetResolver = TargetResolver(),
+    private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver),
+    private val retryPolicy: AndroidToolRetryPolicy = AndroidToolRetryPolicy(),
+    private val verifier: ToolVerifier = ToolVerifier(),
+    private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     fun execute(
         name: String,
@@ -55,30 +62,66 @@ class AndroidToolExecutor(
         }
 
         val result = executeWithRetry(name, args)
-        if (result.ok && name !in setOf("observe_screen", "wait_for_ui")) {
-            AccessibilityBridge.waitForIdle(ActionIdleTimeoutMs)
+        val retryConfig = retryPolicy.configFor(name)
+        if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
+            AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
         }
         return result
     }
 
     private fun executeWithRetry(name: String, args: Map<String, String>): ToolResult {
         var lastResult: ToolResult? = null
+        val config = retryPolicy.configFor(name)
 
-        repeat(retryCountFor(name)) { attempt ->
-            val result = executeOnce(name, args)
-            if (result.ok || !shouldRetry(name)) {
-                return result.withAttemptData(attempt + 1)
+        repeat(config.maxAttempts) { attemptIndex ->
+            val result = executeOnceVerified(name, args)
+            val attempt = attemptIndex + 1
+            val decision = retryPolicy.shouldRetry(name, result, attemptIndex)
+            if (result.ok || !decision.retry) {
+                return result.withAttemptData(
+                    attempt = attempt,
+                    category = decision.category,
+                    retryReason = decision.reason,
+                )
             }
 
-            lastResult = result
-            Thread.sleep(RetryDelayMs)
+            lastResult = result.withAttemptData(
+                attempt = attempt,
+                category = decision.category,
+                retryReason = decision.reason,
+            )
+            record(name, "attempt=$attempt, retry_reason=\"${decision.reason}\"", false, "retrying")
+            sleeper(decision.delayMs)
         }
 
         val failed = lastResult ?: ToolResult(false, "Tool did not run")
         return failed.copy(
-            message = "${failed.message} after ${retryCountFor(name)} attempt(s)",
-            data = failed.data + ("attempts" to retryCountFor(name).toString())
+            message = "${failed.message} after ${config.maxAttempts} attempt(s)",
+            data = failed.data + ("attempts" to config.maxAttempts.toString())
         )
+    }
+
+    private fun executeOnceVerified(name: String, args: Map<String, String>): ToolResult {
+        val before = AccessibilityBridge.observeScreenContext()
+        val result = executeOnce(name, args)
+        val after = if (name == "observe_screen") {
+            before
+        } else {
+            AccessibilityBridge.observeScreenContext()
+        }
+        val verification = verifier.verify(
+            toolName = name,
+            args = args,
+            result = result,
+            before = before,
+            after = after,
+        )
+        val verified = result.withVerification(verification)
+        return if (result.ok && verification is ToolVerificationResult.Failed) {
+            verified.copy(ok = false, message = "Verification failed: ${verification.reason}")
+        } else {
+            verified
+        }
     }
 
     private fun executeOnce(name: String, args: Map<String, String>): ToolResult {
@@ -122,14 +165,7 @@ class AndroidToolExecutor(
                 executeTypeText(args)
             }
             "scroll" -> {
-                val direction = args["direction"].orEmpty()
-                val ok = if (direction.equals("backward", ignoreCase = true)) {
-                    AccessibilityBridge.scrollBackward()
-                } else {
-                    AccessibilityBridge.scrollForward()
-                }
-                record(name, "direction=\"$direction\"", ok, "scroll")
-                ToolResult(ok, "scroll")
+                executeScroll(args)
             }
             "press_back" -> {
                 val ok = AccessibilityBridge.pressBack()
@@ -218,6 +254,137 @@ class AndroidToolExecutor(
             }
         }
     }
+
+    private fun executeScroll(args: Map<String, String>): ToolResult {
+        val direction = args[ScrollTarget.DirectionArg].orEmpty()
+        val backward = ScrollTarget.isBackward(direction)
+        val forward = !backward
+        val hasTarget = ScrollTarget.hasTarget(args)
+        val selector = if (hasTarget) ScrollTarget.selectorFromArgs(args) else null
+
+        val beforeContext = AccessibilityBridge.observeScreenContext()
+        val resolution = scrollResolver.resolve(beforeContext, selector)
+
+        return when (resolution) {
+            is ScrollResolution.Resolved -> {
+                val node = resolution.node
+                val nodeId = node.nodeId
+                if (nodeId.isNullOrBlank()) {
+                    val message = "Resolved scroll target has no stable node id"
+                    record("scroll", scrollLogArgs(direction, "resolved_no_id"), false, message)
+                    return ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf("target" to resolution.selector.toRedactedJson())
+                    )
+                }
+                val attempted = AccessibilityBridge.scrollNode(nodeId, forward)
+                val verification = verifyScreenChanged(beforeContext, attempted)
+                val message = when {
+                    !attempted -> "Unable to perform scroll on resolved container"
+                    !verification.changed -> "Scroll performed but screen did not change"
+                    else -> "scroll"
+                }
+                val ok = attempted && verification.changed
+                record(
+                    "scroll",
+                    scrollLogArgs(direction, "node_id=$nodeId"),
+                    ok,
+                    message
+                )
+                ToolResult(
+                    ok = ok,
+                    message = message,
+                    data = mapOf(
+                        "node_id" to nodeId,
+                        "direction" to if (forward) "forward" else "backward",
+                        "confidence" to resolution.confidence.toString(),
+                        "screen_changed" to verification.changed.toString(),
+                    )
+                )
+            }
+            is ScrollResolution.Ambiguous -> {
+                val message = "Ambiguous scroll target: ${resolution.reason}"
+                record("scroll", scrollLogArgs(direction, "ambiguous"), false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                )
+            }
+            is ScrollResolution.NotFound -> {
+                val message = "Scroll target not found: ${resolution.reason}"
+                record("scroll", scrollLogArgs(direction, "not_found"), false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+            is ScrollResolution.NoScrollable -> {
+                record("scroll", scrollLogArgs(direction, "no_scrollable"), false, resolution.reason)
+                ToolResult(
+                    ok = false,
+                    message = resolution.reason,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+            is ScrollResolution.DirectionOnly -> {
+                val attempted = if (backward) {
+                    AccessibilityBridge.scrollBackward()
+                } else {
+                    AccessibilityBridge.scrollForward()
+                }
+                val verification = verifyScreenChanged(beforeContext, attempted)
+                val message = when {
+                    !attempted -> "Unable to perform direction-only scroll"
+                    !verification.changed -> "Scroll performed but screen did not change"
+                    else -> "scroll"
+                }
+                val ok = attempted && verification.changed
+                record(
+                    "scroll",
+                    scrollLogArgs(direction, "direction_only=${resolution.scrollableCount}"),
+                    ok,
+                    message
+                )
+                ToolResult(
+                    ok = ok,
+                    message = message,
+                    data = mapOf(
+                        "direction" to if (forward) "forward" else "backward",
+                        "scrollable_count" to resolution.scrollableCount.toString(),
+                        "screen_changed" to verification.changed.toString(),
+                    )
+                )
+            }
+        }
+    }
+
+    private fun verifyScreenChanged(
+        beforeContext: dev.touchpilot.app.screen.ScreenContext,
+        scrollAttempted: Boolean
+    ): ScrollVerification {
+        if (!scrollAttempted) return ScrollVerification(changed = false)
+        AccessibilityBridge.waitForIdle(retryPolicy.configFor("scroll").idleTimeoutMs)
+        val after = AccessibilityBridge.observeScreenContext()
+        val changed = !sameSnapshot(beforeContext, after)
+        return ScrollVerification(changed = changed)
+    }
+
+    private fun sameSnapshot(
+        a: dev.touchpilot.app.screen.ScreenContext,
+        b: dev.touchpilot.app.screen.ScreenContext
+    ): Boolean {
+        if (a.nodes.size != b.nodes.size) return false
+        return a.toRedactedJson() == b.toRedactedJson()
+    }
+
+    private fun scrollLogArgs(direction: String, target: String): String {
+        return "direction=\"$direction\", target=$target"
+    }
+
+    private data class ScrollVerification(val changed: Boolean)
 
     private fun typeTextLogArgs(text: String, selector: TargetSelector): String {
         val label = selector.text?.displaySafe
@@ -321,15 +488,31 @@ class AndroidToolExecutor(
         } else {
             copy(data = data + ("attempts" to attempts.toString()))
         }
+    private fun ToolResult.withAttemptData(
+        attempt: Int,
+        category: ToolFailureCategory,
+        retryReason: String,
+    ): ToolResult {
+        if (attempt <= 1 && category == ToolFailureCategory.NONE) return this
+        return copy(
+            data = data + mapOf(
+                "attempt" to attempt.toString(),
+                "failure_category" to category.wireName,
+                "retry_reason" to retryReason,
+            )
+        )
     }
 
     private fun record(name: String, args: String, ok: Boolean, message: String) {
         ToolExecutionLog.record(name, args, ok, message)
     }
 
-    private companion object {
-        const val ActionRetryCount = 3
-        const val RetryDelayMs = 250L
-        const val ActionIdleTimeoutMs = 1_500L
+    private fun ToolResult.withVerification(verification: ToolVerificationResult): ToolResult {
+        return copy(
+            data = data + verification.data + mapOf(
+                "verification_status" to verification.status.wireName,
+                "verification_reason" to SensitiveTextRedactor.redact(verification.reason),
+            )
+        )
     }
 }

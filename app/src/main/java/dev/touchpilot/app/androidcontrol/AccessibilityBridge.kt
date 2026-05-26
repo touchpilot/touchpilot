@@ -59,6 +59,11 @@ object AccessibilityBridge {
         return service?.scroll(forward = false) ?: false
     }
 
+    fun scrollNode(nodeId: String, forward: Boolean): Boolean {
+        if (nodeId.isBlank()) return false
+        return service?.scrollNode(nodeId, forward) ?: false
+    }
+
     fun pressBack(): Boolean {
         return service?.pressBack() ?: false
     }
