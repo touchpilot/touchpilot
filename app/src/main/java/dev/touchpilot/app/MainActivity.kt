@@ -654,6 +654,16 @@ class MainActivity : Activity() {
             }.apply { id = R.id.tap_text_button }
         )
 
+        val longPressInput = editText("Visible text to long-press").apply { id = R.id.long_press_text_input }
+        contentRoot.addView(longPressInput)
+        contentRoot.addView(
+            secondaryButton("Long Press Text") {
+                hideKeyboard(longPressInput)
+                executeAndRender("long_press", mapOf("text" to longPressInput.text.toString()))
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.long_press_text_button }
+        )
+
         val typeInput = editText("Text to type into focused field").apply { id = R.id.type_text_input }
         contentRoot.addView(typeInput)
         contentRoot.addView(

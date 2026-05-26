@@ -40,6 +40,9 @@ Launch TouchPilot:
 - [x] `Observe Current Screen` returns a non-empty UI tree.
 - [x] `Open App` opens Settings by label.
 - [x] `Tap Text` taps a visible target.
+- [ ] `Long Press Text` long-presses a visible target (e.g. opens a launcher
+      icon context menu or enters list selection mode). Added in Milestone 4
+      (issue #85); pending a live emulator pass.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
 - [x] `Back` and `Home` work.

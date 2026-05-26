@@ -19,7 +19,32 @@ class AndroidToolRetryPolicyTest {
         assertEquals(1_500L, tap.idleTimeoutMs)
         assertTrue(tap.waitForIdleAfterSuccess)
 
+        val longPress = policy.configFor("long_press")
+        assertEquals(3, longPress.maxAttempts)
+        assertTrue(longPress.retryable)
+        assertTrue(longPress.waitForIdleAfterSuccess)
+
         assertFalse(policy.configFor("wait_for_ui").waitForIdleAfterSuccess)
+    }
+
+    @Test
+    fun unableToPerformLongPressIsRetryableTransient() {
+        val result = ToolResult(ok = false, message = "Unable to perform long-press on resolved target")
+
+        val decision = policy.shouldRetry("long_press", result, attempt = 0)
+
+        assertTrue(decision.retry)
+        assertEquals(ToolFailureCategory.RETRYABLE_TRANSIENT, decision.category)
+    }
+
+    @Test
+    fun ambiguousLongPressTargetIsNotRetryable() {
+        val result = ToolResult(ok = false, message = "Ambiguous long-press target: two matches")
+
+        val decision = policy.shouldRetry("long_press", result, attempt = 0)
+
+        assertFalse(decision.retry)
+        assertEquals(ToolFailureCategory.NON_RETRYABLE, decision.category)
     }
 
     @Test

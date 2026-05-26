@@ -1,6 +1,8 @@
 package dev.touchpilot.app.tools
 
+import dev.touchpilot.app.tools.targets.LongPressTarget
 import dev.touchpilot.app.tools.targets.ScrollTarget
+import dev.touchpilot.app.tools.targets.TargetBounds
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 enum class ToolRisk {
@@ -46,6 +48,18 @@ object AndroidToolCatalog {
                 "text" to "Visible text or content description to tap.",
                 "node_id" to "Stable node_id from observe_screen.",
                 "bounds" to "Bounds from observe_screen as left,top,right,bottom."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
+            name = "long_press",
+            description = "Long-press a visible UI target by semantic text, node_id, view_id, or bounds.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                LongPressTarget.TextArg to "Visible text or content description to long-press.",
+                LongPressTarget.NodeIdArg to "Stable node_id from observe_screen.",
+                LongPressTarget.ViewIdArg to "viewIdResourceName from observe_screen.",
+                LongPressTarget.BoundsArg to "Bounds from observe_screen as left,top,right,bottom."
             ),
             requiredArguments = emptySet()
         ),
@@ -129,10 +143,23 @@ object AndroidToolCatalog {
             }
         }
 
+        if (name == "long_press") {
+            if (!LongPressTarget.hasTarget(args)) {
+                return "long_press requires a target: text, node_id, view_id, or bounds"
+            }
+            val malformedBounds = args[LongPressTarget.BoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "bounds must be left,top,right,bottom"
+            }
+        }
+
         if (name == "type_text") {
             val malformedBounds = args[TypeTextTarget.TargetBoundsArg]
                 ?.takeIf { it.isNotBlank() }
-                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?.let { TargetBounds.parse(it) == null }
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
@@ -148,7 +175,7 @@ object AndroidToolCatalog {
             }
             val malformedBounds = args[ScrollTarget.TargetBoundsArg]
                 ?.takeIf { it.isNotBlank() }
-                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?.let { TargetBounds.parse(it) == null }
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"

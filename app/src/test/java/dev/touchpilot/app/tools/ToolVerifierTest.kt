@@ -70,6 +70,33 @@ class ToolVerifierTest {
     }
 
     @Test
+    fun longPressPassesWhenScreenChanges() {
+        val result = verifier.verify(
+            toolName = "long_press",
+            args = mapOf("text" to "Photo"),
+            result = ToolResult(ok = true, message = "long_press"),
+            before = screen(nodes = listOf(button("0", "Photo"))),
+            after = screen(nodes = listOf(button("0", "Photo"), button("1", "Share"))),
+        )
+
+        assertIs<ToolVerificationResult.Passed>(result)
+    }
+
+    @Test
+    fun longPressFailsWhenScreenAndFocusDoNotChange() {
+        val before = screen(nodes = listOf(button("0", "Photo")))
+        val result = verifier.verify(
+            toolName = "long_press",
+            args = mapOf("text" to "Photo"),
+            result = ToolResult(ok = true, message = "long_press"),
+            before = before,
+            after = before,
+        )
+
+        assertIs<ToolVerificationResult.Failed>(result)
+    }
+
+    @Test
     fun typeTextPassesWhenInputContainsTypedText() {
         val result = verifier.verify(
             toolName = "type_text",
