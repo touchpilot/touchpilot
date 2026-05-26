@@ -1,5 +1,6 @@
 package dev.touchpilot.app.androidcontrol
 
+import dev.touchpilot.app.screen.NodeBounds
 import dev.touchpilot.app.screen.ScreenContext
 
 object AccessibilityBridge {
@@ -39,6 +40,14 @@ object AccessibilityBridge {
     fun tapByBounds(bounds: String): Boolean {
         if (bounds.isBlank()) return false
         return service?.tapByBounds(bounds) ?: false
+    }
+
+    fun activeWindowBounds(): NodeBounds? {
+        return service?.activeWindowBounds()
+    }
+
+    fun swipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Long): Boolean {
+        return service?.swipe(startX, startY, endX, endY, durationMs) ?: false
     }
 
     fun typeIntoFocusedField(text: String): Boolean {

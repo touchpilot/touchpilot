@@ -698,6 +698,40 @@ class MainActivity : Activity() {
         )
         contentRoot.addView(scrollRow)
 
+        val swipeHorizontalRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        swipeHorizontalRow.addView(
+            secondaryButton("Swipe Left") {
+                executeAndRender("swipe", mapOf("direction" to "left"))
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.swipe_left_button },
+            rowButtonParams()
+        )
+        swipeHorizontalRow.addView(
+            secondaryButton("Swipe Right") {
+                executeAndRender("swipe", mapOf("direction" to "right"))
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.swipe_right_button },
+            rowButtonParams()
+        )
+        contentRoot.addView(swipeHorizontalRow)
+
+        val swipeVerticalRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        swipeVerticalRow.addView(
+            secondaryButton("Swipe Up") {
+                executeAndRender("swipe", mapOf("direction" to "up"))
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.swipe_up_button },
+            rowButtonParams()
+        )
+        swipeVerticalRow.addView(
+            secondaryButton("Swipe Down") {
+                executeAndRender("swipe", mapOf("direction" to "down"))
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.swipe_down_button },
+            rowButtonParams()
+        )
+        contentRoot.addView(swipeVerticalRow)
+
         val waitInput = editText("Text to wait for").apply { id = R.id.wait_for_text_input }
         contentRoot.addView(waitInput)
         contentRoot.addView(

@@ -112,6 +112,33 @@ class ToolVerifierTest {
     }
 
     @Test
+    fun swipeUsesExistingScreenChangedData() {
+        val result = verifier.verify(
+            toolName = "swipe",
+            args = mapOf("direction" to "left"),
+            result = ToolResult(ok = true, message = "swipe", data = mapOf("screen_changed" to "true")),
+            before = screen(),
+            after = screen(),
+        )
+
+        assertIs<ToolVerificationResult.Passed>(result)
+    }
+
+    @Test
+    fun swipeFailsWhenScreenDidNotChange() {
+        val before = screen(nodes = listOf(button("0", "Page 1")))
+        val result = verifier.verify(
+            toolName = "swipe",
+            args = mapOf("direction" to "left"),
+            result = ToolResult(ok = true, message = "swipe", data = mapOf("screen_changed" to "false")),
+            before = before,
+            after = before,
+        )
+
+        assertIs<ToolVerificationResult.Failed>(result)
+    }
+
+    @Test
     fun waitForUiPassesWhenExpectedTextIsPresent() {
         val result = verifier.verify(
             toolName = "wait_for_ui",

@@ -1,6 +1,9 @@
 package dev.touchpilot.app.tools
 
 import dev.touchpilot.app.tools.targets.ScrollTarget
+import dev.touchpilot.app.tools.targets.SwipeDirection
+import dev.touchpilot.app.tools.targets.SwipeTarget
+import dev.touchpilot.app.tools.targets.TargetBounds
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 enum class ToolRisk {
@@ -78,6 +81,25 @@ object AndroidToolCatalog {
             requiredArguments = setOf("direction")
         ),
         ToolSpec(
+            name = "swipe",
+            description = "Swipe a gesture surface (pager, carousel, drawer, map) by direction, or between explicit start/end coordinates.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                SwipeTarget.DirectionArg to "left, right, up, or down (direction the finger travels).",
+                SwipeTarget.StartXArg to "Optional gesture start x in screen pixels.",
+                SwipeTarget.StartYArg to "Optional gesture start y in screen pixels.",
+                SwipeTarget.EndXArg to "Optional gesture end x in screen pixels.",
+                SwipeTarget.EndYArg to "Optional gesture end y in screen pixels.",
+                SwipeTarget.DurationArg to "Optional gesture duration in milliseconds.",
+                SwipeTarget.TargetTextArg to "Visible text of the container to swipe within.",
+                SwipeTarget.TargetNodeIdArg to "Container node_id from observe_screen.",
+                SwipeTarget.TargetBoundsArg to "Container bounds from observe_screen as left,top,right,bottom.",
+                SwipeTarget.TargetViewIdArg to "Container viewIdResourceName from observe_screen.",
+                SwipeTarget.TargetContentDescriptionArg to "Container content description.",
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "press_back",
             description = "Send Android back.",
             risk = ToolRisk.MEDIUM,
@@ -149,6 +171,26 @@ object AndroidToolCatalog {
             val malformedBounds = args[ScrollTarget.TargetBoundsArg]
                 ?.takeIf { it.isNotBlank() }
                 ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "swipe") {
+            val direction = args[SwipeTarget.DirectionArg]?.takeIf { it.isNotBlank() }
+            val hasCoordinate = SwipeTarget.hasAnyCoordinate(args)
+            if (direction == null && !hasCoordinate) {
+                return "swipe requires a direction (left, right, up, down) or explicit start/end coordinates"
+            }
+            if (direction != null && SwipeDirection.parse(direction) == null) {
+                return "Invalid swipe direction: $direction. Use left, right, up, or down."
+            }
+            SwipeTarget.validateCoordinates(args)?.let { return it }
+            SwipeTarget.validateDuration(args)?.let { return it }
+            val malformedBounds = args[SwipeTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { TargetBounds.parse(it) == null }
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"

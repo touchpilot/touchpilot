@@ -63,14 +63,16 @@ jobs:
         env:
           TITLE: ${{ steps.title.outputs.title }}
         run: |
-          pattern='^(fix|feat|docs|test|ci|refactor|chore): .+'
+          pattern='^(fix|feat|docs|test|ci|refactor|chore)(\([a-z0-9-]+\))?: .+'
           if [[ ! "$TITLE" =~ $pattern ]]; then
             cat <<'EOF'
           Pull request title must follow CONTRIBUTING.md.
 
-          Use one of:
+          Use a prefix, optionally with an area scope in parentheses:
           - fix: handle missing accessibility root
           - feat: add local runtime screen
+          - feat(android-control): add swipe tool
+          - fix(settings): flip panel transition direction
           - docs: add live testing checklist
           - test: add emulator validation fixture
           - ci: add Android lint workflow

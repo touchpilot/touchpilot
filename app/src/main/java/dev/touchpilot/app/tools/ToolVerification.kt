@@ -24,6 +24,7 @@ class ToolVerifier {
             "tap" -> verifyChangedOrFocused(before, after, "tap")
             "type_text" -> verifyTypeText(args, after)
             "scroll" -> verifyScroll(result, before, after)
+            "swipe" -> verifySwipe(result, before, after)
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
             "wait_for_ui" -> verifyWaitForUi(args, after)
@@ -132,6 +133,26 @@ class ToolVerifier {
         } else {
             ToolVerificationResult.Failed(
                 reason = "scroll reported success but screen content did not change",
+                data = mapOf("screen_changed" to "false")
+            )
+        }
+    }
+
+    private fun verifySwipe(
+        result: ToolResult,
+        before: ScreenContext,
+        after: ScreenContext,
+    ): ToolVerificationResult {
+        val resultChanged = result.data["screen_changed"]?.toBooleanStrictOrNull()
+        val changed = resultChanged ?: !sameSnapshot(before, after)
+        return if (changed) {
+            ToolVerificationResult.Passed(
+                reason = "swipe changed visible screen content",
+                data = mapOf("screen_changed" to "true")
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "swipe reported success but screen content did not change",
                 data = mapOf("screen_changed" to "false")
             )
         }

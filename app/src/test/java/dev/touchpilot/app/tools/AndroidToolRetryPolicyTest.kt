@@ -19,7 +19,32 @@ class AndroidToolRetryPolicyTest {
         assertEquals(1_500L, tap.idleTimeoutMs)
         assertTrue(tap.waitForIdleAfterSuccess)
 
+        val swipe = policy.configFor("swipe")
+        assertEquals(3, swipe.maxAttempts)
+        assertTrue(swipe.retryable)
+        assertTrue(swipe.waitForIdleAfterSuccess)
+
         assertFalse(policy.configFor("wait_for_ui").waitForIdleAfterSuccess)
+    }
+
+    @Test
+    fun unableToPerformSwipeIsRetryableTransient() {
+        val result = ToolResult(ok = false, message = "Unable to perform swipe")
+
+        val decision = policy.shouldRetry("swipe", result, attempt = 0)
+
+        assertTrue(decision.retry)
+        assertEquals(ToolFailureCategory.RETRYABLE_TRANSIENT, decision.category)
+    }
+
+    @Test
+    fun ambiguousSwipeTargetIsNotRetryable() {
+        val result = ToolResult(ok = false, message = "Ambiguous swipe target: two matches")
+
+        val decision = policy.shouldRetry("swipe", result, attempt = 0)
+
+        assertFalse(decision.retry)
+        assertEquals(ToolFailureCategory.NON_RETRYABLE, decision.category)
     }
 
     @Test

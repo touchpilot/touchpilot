@@ -42,6 +42,12 @@ Launch TouchPilot:
 - [x] `Tap Text` taps a visible target.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
+- [ ] `Swipe Left` and `Swipe Right` advance a horizontal pager/carousel (e.g.
+      the launcher home screens or a photo viewer). Added in Milestone 4
+      (issue #86); pending a live emulator pass.
+- [ ] `Swipe Up` and `Swipe Down` move a vertical gesture surface (e.g. the
+      notification shade or a bottom sheet). Added in Milestone 4 (issue #86);
+      pending a live emulator pass.
 - [x] `Back` and `Home` work.
 - [x] Medium-risk model-selected tools show inline approval prompts.
 - [x] Denied approvals stop execution and log the denial.
