@@ -102,15 +102,17 @@ object TargetResolver {
      */
     fun summarizeCandidates(candidates: List<ResolvedCandidate>): String {
         return candidates.joinToString("; ") { c ->
-            val truncated = c.label.take(40).let { if (c.label.length > 40) "$it…" else it }
-            "node_id=${c.nodeId} label=\"$truncated\" bounds=${c.bounds.toShortString()}"
+            val redacted = dev.touchpilot.app.security.SensitiveTextRedactor.redact(c.label)
+                .take(40).let { if (it.length == 40) "$it…" else it }
+            "node_id=${c.nodeId} label=\"$redacted\" bounds=${c.bounds.toShortString()}"
         }
     }
 
     fun summarizeFlatCandidates(candidates: List<FlatCandidate>): String {
         return candidates.joinToString("; ") { c ->
-            val truncated = c.label.take(40).let { if (c.label.length > 40) "$it…" else it }
-            "node_id=${c.nodeId} label=\"$truncated\""
+            val redacted = dev.touchpilot.app.security.SensitiveTextRedactor.redact(c.label)
+                .take(40).let { if (it.length == 40) "$it…" else it }
+            "node_id=${c.nodeId} label=\"$redacted\""
         }
     }
 }

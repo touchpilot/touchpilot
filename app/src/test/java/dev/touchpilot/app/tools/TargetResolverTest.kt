@@ -80,10 +80,13 @@ class TargetResolverTest {
     }
 
     @Test
-    fun `sensitive label is not leaked beyond 40 chars in summary`() {
+    fun `sensitive label is redacted in candidate summary`() {
         val sensitiveLabel = "password=hunter2 api_key=sk-secret-12345678"
         val c = FlatCandidate.of("0.0", sensitiveLabel, "password", true)
         val summary = TargetResolver.summarizeFlatCandidates(listOf(c))
-        assertTrue("sk-secret-12345678" !in summary)
+        // Sensitive values must be replaced by [REDACTED], not merely truncated
+        assertTrue("[REDACTED]" in summary, "Expected [REDACTED] in summary: $summary")
+        assertTrue("hunter2" !in summary, "Raw secret leaked into summary: $summary")
+        assertTrue("sk-secret-12345678" !in summary, "Raw api_key leaked into summary: $summary")
     }
 }
