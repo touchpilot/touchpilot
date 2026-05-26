@@ -43,6 +43,27 @@ class WeakContextResponseTest {
     }
 
     @Test
+    fun recognizedSensitiveTextIsRedactedBeforeSurfacing() {
+        // OCR output is untrusted and may read secrets straight off the screen
+        // (passwords, OTPs, tokens). The OcrFallback contract requires callers
+        // to run Recognized text through the sensitive-text redactor before
+        // surfacing or tracing it.
+        val message = WeakContextResponse.forWeak(
+            quality = ContextQuality.Weak(WeakReason.MOSTLY_EMPTY),
+            fallback = OcrFallbackResult.Recognized(
+                text = listOf("password: hunter2", "Your code is 123456"),
+                confidence = 0.61f,
+            ),
+        )
+
+        assertFalse("hunter2" in message)
+        assertFalse("123456" in message)
+        assertTrue("[REDACTED]" in message)
+        // The untrusted framing must remain so the agent never acts on it.
+        assertTrue("will not act on it without confirmation" in message)
+    }
+
+    @Test
     fun recognizedEmptyTextFallsBackToGenericWeakMessage() {
         val message = WeakContextResponse.forWeak(
             quality = ContextQuality.Weak(WeakReason.NO_VISIBLE_TEXT),
