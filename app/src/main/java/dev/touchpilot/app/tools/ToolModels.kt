@@ -1,5 +1,8 @@
 package dev.touchpilot.app.tools
 
+import dev.touchpilot.app.tools.targets.ScrollTarget
+import dev.touchpilot.app.tools.targets.TypeTextTarget
+
 enum class ToolRisk {
     LOW,
     MEDIUM,
@@ -56,15 +59,31 @@ object AndroidToolCatalog {
         ),
         ToolSpec(
             name = "type_text",
-            description = "Type text into the currently focused input field.",
+            description = "Type text into the focused input field, or into a resolved visible input target.",
             risk = ToolRisk.MEDIUM,
-            arguments = mapOf("text" to "Text to enter.")
+            arguments = mapOf(
+                TypeTextTarget.TextArg to "Text to enter.",
+                TypeTextTarget.TargetTextArg to "Visible input label to focus before typing.",
+                TypeTextTarget.TargetNodeIdArg to "Stable input node_id from observe_screen.",
+                TypeTextTarget.TargetBoundsArg to "Input bounds from observe_screen as left,top,right,bottom.",
+                TypeTextTarget.TargetViewIdArg to "Input viewIdResourceName from observe_screen.",
+                TypeTextTarget.TargetContentDescriptionArg to "Input content description to focus before typing.",
+            ),
+            requiredArguments = setOf(TypeTextTarget.TextArg)
         ),
         ToolSpec(
             name = "scroll",
-            description = "Scroll the active screen forward or backward.",
+            description = "Scroll a specific container or the active screen forward or backward.",
             risk = ToolRisk.MEDIUM,
-            arguments = mapOf("direction" to "forward or backward.")
+            arguments = mapOf(
+                "direction" to "forward or backward.",
+                ScrollTarget.TargetTextArg to "Visible text of the scrollable container to scroll.",
+                ScrollTarget.TargetNodeIdArg to "Container node_id from observe_screen.",
+                ScrollTarget.TargetBoundsArg to "Container bounds from observe_screen as left,top,right,bottom.",
+                ScrollTarget.TargetViewIdArg to "Container viewIdResourceName from observe_screen.",
+                ScrollTarget.TargetContentDescriptionArg to "Container content description.",
+            ),
+            requiredArguments = setOf("direction")
         ),
         ToolSpec(
             name = "press_back",
@@ -118,12 +137,29 @@ object AndroidToolCatalog {
             }
         }
 
+        if (name == "type_text") {
+            val malformedBounds = args[TypeTextTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
         if (name == "scroll") {
             val direction = args["direction"].orEmpty()
             if (!direction.equals("forward", ignoreCase = true) &&
                 !direction.equals("backward", ignoreCase = true)
             ) {
                 return "Invalid scroll direction: $direction"
+            }
+            val malformedBounds = args[ScrollTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
             }
         }
 

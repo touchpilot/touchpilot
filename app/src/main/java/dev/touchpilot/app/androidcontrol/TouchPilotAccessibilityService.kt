@@ -80,28 +80,51 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             ?: findNode(root) { it.isFocused }
             ?: return false
 
-        val args = Bundle().apply {
-            putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                text
-            )
-        }
-        return focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        return setNodeText(focused, text)
+    }
+
+    fun typeIntoNode(nodeId: String, text: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = findNodeById(root, nodeId) ?: return false
+        if (!node.isEnabled || !node.isEditableTarget()) return false
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        return setNodeText(node, text)
     }
 
     fun scroll(forward: Boolean): Boolean {
         val root = rootInActiveWindow ?: return false
-        val action = if (forward) {
-            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-        } else {
-            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-        }
+        val action = scrollAction(forward)
 
         val scrollable = findNode(root) { candidate ->
             candidate.isScrollable || candidate.actionList.any { it.id == action }
         } ?: return false
 
         return scrollable.performAction(action)
+    }
+
+    fun scrollNode(nodeId: String, forward: Boolean): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val target = findNodeById(root, nodeId) ?: return false
+        val action = scrollAction(forward)
+        // Walk up the tree until we find an ancestor that actually accepts the
+        // scroll action. Some apps mark a list item as scrollable through its
+        // parent ListView/RecyclerView rather than on the item itself.
+        var current: AccessibilityNodeInfo? = target
+        while (current != null) {
+            if (current.isScrollable || current.actionList.any { it.id == action }) {
+                return current.performAction(action)
+            }
+            current = current.parent
+        }
+        return false
+    }
+
+    private fun scrollAction(forward: Boolean): Int {
+        return if (forward) {
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        } else {
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        }
     }
 
     fun pressBack(): Boolean {
@@ -219,6 +242,21 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             current = current.parent
         }
         return false
+    }
+
+    private fun setNodeText(node: AccessibilityNodeInfo, text: String): Boolean {
+        if (!node.isEnabled || !node.isEditableTarget()) return false
+        val args = Bundle().apply {
+            putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                text
+            )
+        }
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+    }
+
+    private fun AccessibilityNodeInfo.isEditableTarget(): Boolean {
+        return isEditable || actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }
     }
 
     private fun tapNodeCenter(node: AccessibilityNodeInfo): Boolean {
