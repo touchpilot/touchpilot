@@ -110,6 +110,12 @@ object AndroidToolCatalog {
                 "view_id" to "Resource ID of the view (e.g., dev.example.app:id/search_input)."
             ),
             requiredArguments = emptySet()
+        ),
+        ToolSpec(
+            name = "get_foreground_app",
+            description = "Return the foreground app's package, label, window title, and activity for post-action verification.",
+            risk = ToolRisk.LOW,
+            arguments = emptyMap()
         )
     )
 

@@ -28,6 +28,10 @@ object AccessibilityBridge {
         return service?.observeScreenContext() ?: ScreenContext.Empty
     }
 
+    fun getForegroundApp(): ForegroundAppInfo {
+        return service?.getForegroundApp() ?: ForegroundAppInfo.Disconnected
+    }
+
     fun tapByText(text: String): Boolean {
         if (text.isBlank()) return false
         return service?.tapByText(text) ?: false

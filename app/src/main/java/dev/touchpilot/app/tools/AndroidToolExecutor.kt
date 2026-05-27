@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -188,6 +189,21 @@ class AndroidToolExecutor(
                 }
                 record(name, selectorLog, result.ok, result.message)
                 ToolResult(result.ok, result.message)
+            }
+            "get_foreground_app" -> {
+                val info = AccessibilityBridge.getForegroundApp()
+                val ok = info.accessibilityConnected
+                record(
+                    name,
+                    "package=\"${info.packageName.orEmpty()}\", connected=${info.accessibilityConnected}",
+                    ok,
+                    info.summarize()
+                )
+                ToolResult(
+                    ok = ok,
+                    message = info.summarize(),
+                    data = foregroundAppData(info)
+                )
             }
             else -> {
                 record(name, args.toString(), false, "unhandled tool")
@@ -390,6 +406,17 @@ class AndroidToolExecutor(
     }
 
     private data class ScrollVerification(val changed: Boolean)
+
+    private fun foregroundAppData(info: ForegroundAppInfo): Map<String, String> {
+        return buildMap {
+            put("accessibility_connected", info.accessibilityConnected.toString())
+            info.packageName?.takeIf { it.isNotBlank() }?.let { put("package_name", it) }
+            info.appLabel?.takeIf { it.isNotBlank() }?.let { put("app_label", it) }
+            info.windowTitle?.takeIf { it.isNotBlank() }?.let { put("window_title", it) }
+            info.activityClass?.takeIf { it.isNotBlank() }?.let { put("activity_class", it) }
+            put("json", info.toJson().toString())
+        }
+    }
 
     private fun typeTextLogArgs(text: String, selector: TargetSelector): String {
         val label = selector.text?.displaySafe
