@@ -36,18 +36,31 @@ object AgentRunDetailFormatter {
         if (result == null) {
             return "Run data unavailable."
         }
-        val stepCount = result.events.size
-        val toolCount = result.events.count {
-            it.type == AgentEventType.TOOL_SUCCEEDED || it.type == AgentEventType.TOOL_FAILED
-        }
         val stopReason = deriveStopReason(record)
-        return buildString {
-            append("$stepCount event(s)")
-            if (toolCount > 0) append(" · $toolCount tool result(s)")
-            appendLine()
-            append("Stop: $stopReason")
-            appendLine()
-            append("Tap to inspect full run details.")
+        return if (result.steps.isNotEmpty()) {
+            val toolResults = result.steps.count {
+                it.type == AgentStepType.ACT && it.toolCall?.result != null
+            }
+            buildString {
+                append("${result.steps.size} step(s)")
+                if (toolResults > 0) append(" · $toolResults tool result(s)")
+                appendLine()
+                append("Stop: $stopReason")
+                appendLine()
+                append("Tap to inspect full run details.")
+            }
+        } else {
+            val toolCount = result.events.count {
+                it.type == AgentEventType.TOOL_SUCCEEDED || it.type == AgentEventType.TOOL_FAILED
+            }
+            buildString {
+                append("${result.events.size} event(s)")
+                if (toolCount > 0) append(" · $toolCount tool result(s)")
+                appendLine()
+                append("Stop: $stopReason")
+                appendLine()
+                append("Tap to inspect full run details.")
+            }
         }
     }
 
@@ -56,34 +69,16 @@ object AgentRunDetailFormatter {
             return "Error: ${SensitiveTextRedactor.redact(error)}"
         }
         val result = record.result ?: return "Run data unavailable"
-        val events = result.events
-        if (events.isEmpty()) return "No events recorded"
-
-        val last = events.last()
-        result.finalAnswer?.let { answer ->
-            return "Completed: ${SensitiveTextRedactor.redact(answer)}"
-        }
-        return when (last) {
-            is AgentEvent.PolicyBlocked -> "Blocked: ${SensitiveTextRedactor.redact(last.reason)}"
-            is AgentEvent.ToolFailed -> "Tool failed: ${SensitiveTextRedactor.redact(last.message)}"
-            is AgentEvent.AssistantMessage -> "Awaiting clarification"
-            is AgentEvent.FinalAnswer -> "Completed: ${SensitiveTextRedactor.redact(last.text)}"
-            else -> "Run ended without final answer"
-        }
+        deriveStopReasonFromResult(result)?.let { return it }
+        return deriveStopReasonFromEvents(result)
     }
 
     fun formatSteps(record: AgentRunRecord): List<AgentRunDisplayStep> {
-        val events = record.result?.events.orEmpty()
-        if (events.isEmpty()) return emptyList()
-        return events.mapIndexed { index, event ->
-            AgentRunDisplayStep(
-                index = index + 1,
-                status = statusFor(event),
-                title = titleFor(event),
-                detail = detailFor(event),
-                timestampMillis = event.timestampMillis
-            )
+        val result = record.result ?: return emptyList()
+        if (result.steps.isNotEmpty()) {
+            return formatStepsFromStructured(result.steps)
         }
+        return formatStepsFromEvents(result.events)
     }
 
     fun formatTimestamp(timestampMillis: Long): String {
@@ -97,22 +92,170 @@ object AgentRunDetailFormatter {
             appendLine("task=${SensitiveTextRedactor.redact(record.task)}")
             appendLine("started_at=${formatTimestamp(record.startedAtMillis)}")
             appendLine("completed_at=${formatTimestamp(record.completedAtMillis)}")
-            appendLine("stop_reason=${deriveStopReason(record)}")
+            appendLine("derived_stop_reason=${deriveStopReason(record)}")
             appendLine()
             record.errorMessage?.let { error ->
                 appendLine("error=${SensitiveTextRedactor.redact(error)}")
                 appendLine()
             }
-            val events = record.result?.events.orEmpty()
-            if (events.isEmpty()) {
-                appendLine("No structured events recorded for this run.")
+            val result = record.result
+            if (result == null) {
+                appendLine("No run result recorded.")
+                return@buildString
+            }
+            appendLine("canonical_stop_reason=${result.stopReason?.wireName ?: "none"}")
+            appendLine(
+                "canonical_stop_message=${
+                    SensitiveTextRedactor.redact(
+                        result.stopMessage.ifBlank {
+                            result.stopReason?.userMessage.orEmpty()
+                        }
+                    )
+                }"
+            )
+            appendLine()
+            if (result.steps.isEmpty()) {
+                appendLine("steps: none")
+            } else {
+                appendLine("steps:")
+                result.steps.forEach { step ->
+                    appendLine(step.toJson(redactSensitive = true).toString())
+                }
+            }
+            appendLine()
+            if (result.events.isEmpty()) {
+                appendLine("events: none")
             } else {
                 appendLine("events:")
-                events.forEach { event ->
+                result.events.forEach { event ->
                     appendLine(event.toJson(redactSensitive = true).toString())
                 }
             }
         }
+    }
+
+    private fun deriveStopReasonFromResult(result: AgentRunResult): String? {
+        val reason = result.stopReason ?: return null
+        val message = result.stopMessage.ifBlank { reason.userMessage }
+        return SensitiveTextRedactor.redact(message)
+    }
+
+    private fun deriveStopReasonFromEvents(result: AgentRunResult): String {
+        val events = result.events
+        if (events.isEmpty()) return "No run data recorded"
+
+        result.finalAnswer?.let { answer ->
+            return "Completed: ${SensitiveTextRedactor.redact(answer)}"
+        }
+        return when (val last = events.last()) {
+            is AgentEvent.PolicyBlocked -> "Blocked: ${SensitiveTextRedactor.redact(last.reason)}"
+            is AgentEvent.ToolFailed -> "Tool failed: ${SensitiveTextRedactor.redact(last.message)}"
+            is AgentEvent.AssistantMessage -> "Awaiting clarification"
+            is AgentEvent.FinalAnswer -> "Completed: ${SensitiveTextRedactor.redact(last.text)}"
+            else -> "Run ended without final answer"
+        }
+    }
+
+    private fun formatStepsFromStructured(steps: List<AgentStep>): List<AgentRunDisplayStep> {
+        return steps.map { step ->
+            AgentRunDisplayStep(
+                index = step.sequenceNumber,
+                status = statusFor(step),
+                title = titleFor(step),
+                detail = detailFor(step),
+                timestampMillis = step.startedAtMillis
+            )
+        }
+    }
+
+    private fun formatStepsFromEvents(events: List<AgentEvent>): List<AgentRunDisplayStep> {
+        if (events.isEmpty()) return emptyList()
+        return events.mapIndexed { index, event ->
+            AgentRunDisplayStep(
+                index = index + 1,
+                status = statusFor(event),
+                title = titleFor(event),
+                detail = detailFor(event),
+                timestampMillis = event.timestampMillis
+            )
+        }
+    }
+
+    private fun statusFor(step: AgentStep): AgentRunStepStatus {
+        return when (step.status) {
+            AgentStepStatus.PENDING -> AgentRunStepStatus.PENDING
+            AgentStepStatus.RUNNING -> AgentRunStepStatus.RUNNING
+            AgentStepStatus.OK -> when (step.type) {
+                AgentStepType.STOP -> AgentRunStepStatus.COMPLETE
+                else -> AgentRunStepStatus.SUCCESS
+            }
+            AgentStepStatus.FAILED -> AgentRunStepStatus.FAILED
+            AgentStepStatus.BLOCKED -> AgentRunStepStatus.BLOCKED
+            AgentStepStatus.CLARIFIED -> AgentRunStepStatus.WAITING
+            AgentStepStatus.STOPPED -> AgentRunStepStatus.COMPLETE
+        }
+    }
+
+    private fun titleFor(step: AgentStep): String {
+        return when (step.type) {
+            AgentStepType.OBSERVE -> "Observe"
+            AgentStepType.DECIDE -> "Decide"
+            AgentStepType.ACT -> "Act: ${step.toolCall?.tool.orEmpty()}"
+            AgentStepType.VERIFY -> "Verify"
+            AgentStepType.CLARIFY -> "Clarify"
+            AgentStepType.STOP -> "Stop: ${step.stopReason?.wireName ?: "ended"}"
+        }
+    }
+
+    private fun detailFor(step: AgentStep): String {
+        return buildString {
+            if (step.inputSummary.isNotBlank()) {
+                appendLine("input: ${step.inputSummary}")
+            }
+            if (step.outputSummary.isNotBlank()) {
+                appendLine("output: ${step.outputSummary}")
+            }
+            step.toolCall?.let { call ->
+                appendLine("tool: ${call.tool}")
+                appendLine("source: ${call.source}")
+                if (call.args.isNotEmpty()) {
+                    append("args:")
+                    appendLine(formatStringMap(call.args))
+                }
+                call.result?.let { result ->
+                    appendLine("result: ${if (result.ok) "ok" else "failed"}")
+                    appendLine("message: ${result.message}")
+                    if (result.data.isNotEmpty()) {
+                        append("data:")
+                        appendLine(formatStringMap(result.data))
+                    }
+                }
+            }
+            step.verification?.let { verification ->
+                appendLine("verification: ${verification.status}")
+                appendLine("verification reason: ${verification.reason}")
+                if (verification.data.isNotEmpty()) {
+                    append("verification data:")
+                    appendLine(formatStringMap(verification.data))
+                }
+            }
+            step.clarification?.let { clarification ->
+                appendLine("clarification: ${clarification.reason.wireName}")
+                appendLine("question: ${clarification.question}")
+                if (clarification.detail.isNotBlank()) {
+                    appendLine("detail: ${clarification.detail}")
+                }
+                if (clarification.candidateLabels.isNotEmpty()) {
+                    appendLine("candidates: ${clarification.candidateLabels.joinToString(", ")}")
+                }
+            }
+            step.stopReason?.let { reason ->
+                appendLine("stop: ${reason.wireName}")
+            }
+            step.durationMillis?.let { duration ->
+                appendLine("duration: ${duration}ms")
+            }
+        }.trimEnd()
     }
 
     private fun statusFor(event: AgentEvent): AgentRunStepStatus {
