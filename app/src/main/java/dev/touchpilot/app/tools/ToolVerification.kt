@@ -49,6 +49,13 @@ class ToolVerifier {
                     "package_name" to (result.data["package_name"] ?: ""),
                 )
             )
+            "find_element" -> ToolVerificationResult.Passed(
+                reason = "find_element is a read-only lookup",
+                data = mapOf(
+                    "count" to (result.data["count"] ?: "0"),
+                    "match_mode" to (result.data["match_mode"] ?: ""),
+                )
+            )
             "clear_text" -> verifyClearText(after)
             "dismiss_keyboard" -> verifyDismissKeyboard(result)
             else -> ToolVerificationResult.Skipped("no verifier for $toolName")

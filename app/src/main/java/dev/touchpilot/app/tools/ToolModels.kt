@@ -141,6 +141,20 @@ object AndroidToolCatalog {
             arguments = emptyMap()
         ),
         ToolSpec(
+            name = "find_element",
+            description = "Search the current screen for elements matching a structured query and return ranked candidates.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                "text" to "Visible text query.",
+                "content_description" to "Accessibility content description query.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "class_name" to "Android class name filter (e.g. android.widget.Button).",
+                "match" to "Match mode: exact, contains, or semantic. Defaults to contains.",
+                "limit" to "Maximum number of candidates to return (1-25). Defaults to 5."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "clear_text",
             description = "Clear the focused or resolved editable input field.",
             risk = ToolRisk.MEDIUM,
@@ -249,6 +263,25 @@ object AndroidToolCatalog {
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "find_element") {
+            val filters = listOf("text", "content_description", "node_id", "class_name")
+                .filter { args[it].isNullOrBlank().not() }
+            if (filters.isEmpty()) {
+                return "find_element requires at least one filter: text, content_description, node_id, or class_name"
+            }
+            val match = args["match"]
+            if (!match.isNullOrBlank() && MatchMode.fromWire(match) == null) {
+                return "find_element match must be one of: exact, contains, semantic"
+            }
+            val limit = args["limit"]
+            if (!limit.isNullOrBlank()) {
+                val parsed = limit.toIntOrNull()
+                if (parsed == null || parsed < 1 || parsed > FindElementQuery.MaxLimit) {
+                    return "find_element limit must be an integer between 1 and ${FindElementQuery.MaxLimit}"
+                }
             }
         }
 

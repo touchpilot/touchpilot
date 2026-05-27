@@ -27,6 +27,7 @@ class AndroidToolExecutor(
     private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver),
     private val retryPolicy: AndroidToolRetryPolicy = AndroidToolRetryPolicy(),
     private val verifier: ToolVerifier = ToolVerifier(),
+    private val findElementMatcher: FindElementMatcher = FindElementMatcher(),
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     fun execute(
@@ -216,6 +217,9 @@ class AndroidToolExecutor(
                     data = foregroundAppData(info)
                 )
             }
+            "find_element" -> {
+                executeFindElement(args)
+            }
             "clear_text" -> {
                 executeClearText(args)
             }
@@ -224,6 +228,45 @@ class AndroidToolExecutor(
                 ToolResult(false, "Unhandled tool: $name")
             }
         }
+    }
+
+    private fun executeFindElement(args: Map<String, String>): ToolResult {
+        val query = FindElementQuery(
+            text = args["text"]?.takeIf { it.isNotBlank() },
+            contentDescription = args["content_description"]?.takeIf { it.isNotBlank() },
+            nodeId = args["node_id"]?.takeIf { it.isNotBlank() },
+            className = args["class_name"]?.takeIf { it.isNotBlank() },
+            match = MatchMode.fromWire(args["match"]) ?: MatchMode.Default,
+            limit = args["limit"]?.toIntOrNull() ?: FindElementQuery.DefaultLimit,
+        )
+        val screen = AccessibilityBridge.observeScreenContext()
+        val candidates = findElementMatcher.match(screen, query)
+        val payload = FindElementResultEncoder.encode(candidates, query)
+        val message = "find_element matched ${candidates.size} candidate(s)"
+        val logArgs = "match=\"${query.match.wireName}\", limit=${query.effectiveLimit()}, " +
+            "filters=${findElementFilterSummary(query)}"
+        record("find_element", logArgs, true, message)
+        return ToolResult(
+            ok = true,
+            message = message,
+            data = mapOf(
+                "count" to candidates.size.toString(),
+                "candidates_json" to payload,
+                "match_mode" to query.match.wireName,
+                "limit" to query.effectiveLimit().toString(),
+            )
+        )
+    }
+
+    private fun findElementFilterSummary(query: FindElementQuery): String {
+        val parts = mutableListOf<String>()
+        if (!query.text.isNullOrBlank()) parts += "text_length=${query.text.length}"
+        if (!query.contentDescription.isNullOrBlank()) {
+            parts += "content_description_length=${query.contentDescription.length}"
+        }
+        if (!query.nodeId.isNullOrBlank()) parts += "node_id=\"${query.nodeId}\""
+        if (!query.className.isNullOrBlank()) parts += "class_name=\"${query.className}\""
+        return parts.joinToString(prefix = "[", postfix = "]")
     }
 
     private fun executeWaitForIdle(args: Map<String, String>): ToolResult {
