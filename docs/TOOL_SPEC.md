@@ -26,10 +26,11 @@ Tools are the only way an agent may affect the Android device.
 - `press_back`: send Android back.
 - `press_home`: return to launcher.
 - `wait_for_ui`: wait for a screen change or expected text.
+- `wait_for_app`: wait until a package name or launcher label is foreground.
 
 The app implements `observe_screen`, `open_app`, `tap`, `type_text`, `scroll`,
-`press_back`, `press_home`, and `wait_for_ui` from the Android Tools screen and
-the agent command-provider loop.
+`press_back`, `press_home`, `wait_for_ui`, and `wait_for_app` from the Android
+Tools screen and the agent command-provider loop.
 
 All command providers return one JSON command at a time:
 

@@ -39,6 +39,8 @@ Launch TouchPilot:
 - [x] Accessibility status shows connected.
 - [x] `Observe Current Screen` returns a non-empty UI tree.
 - [x] `Open App` opens Settings by label.
+- [ ] `Open App` followed by `wait_for_app({label=Settings})` confirms
+  Settings is foreground before follow-up actions.
 - [x] `Tap Text` taps a visible target.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.

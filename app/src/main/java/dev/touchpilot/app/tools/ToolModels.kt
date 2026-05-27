@@ -100,6 +100,17 @@ object AndroidToolCatalog {
             requiredArguments = setOf("text")
         ),
         ToolSpec(
+            name = "wait_for_app",
+            description = "Wait until a package name or launcher label becomes the foreground app.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                WaitForApp.PackageArg to "Expected Android package name.",
+                WaitForApp.LabelArg to "Expected launcher/app label.",
+                WaitForApp.TimeoutArg to "Maximum wait time in milliseconds."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "focus_input",
             description = "Focus a visible editable input field without typing text.",
             risk = ToolRisk.MEDIUM,
@@ -162,6 +173,14 @@ object AndroidToolCatalog {
                 .filter { args[it].isNullOrBlank().not() }
             if (selectors.size != 1) {
                 return "focus_input requires exactly one selector: text, node_id, bounds, or view_id"
+            }
+        }
+
+        if (name == "wait_for_app") {
+            val selectors = listOf(WaitForApp.PackageArg, WaitForApp.LabelArg)
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.isEmpty()) {
+                return "wait_for_app requires package or label"
             }
         }
 
