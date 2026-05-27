@@ -653,6 +653,7 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
+                // Set agent run state based on outcome
                 if (agentCancellationSignal.get()) {
                     setAgentRunState(AgentRunState.CANCELLED)
                 } else if (runOutcome.isFailure ||
