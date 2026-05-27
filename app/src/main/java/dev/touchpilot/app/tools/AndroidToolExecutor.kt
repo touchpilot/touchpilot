@@ -10,6 +10,7 @@ import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollResolution
 import dev.touchpilot.app.tools.targets.ScrollResolver
 import dev.touchpilot.app.tools.targets.ScrollTarget
@@ -204,6 +205,9 @@ class AndroidToolExecutor(
                     message = info.summarize(),
                     data = foregroundAppData(info)
                 )
+            }
+            "clear_text" -> {
+                executeClearText(args)
             }
             else -> {
                 record(name, args.toString(), false, "unhandled tool")
@@ -418,6 +422,78 @@ class AndroidToolExecutor(
         }
     }
 
+    private fun executeClearText(args: Map<String, String>): ToolResult {
+        if (!ClearTextTarget.hasTarget(args)) {
+            val ok = AccessibilityBridge.clearFocusedField()
+            record("clear_text", "target=focused", ok, if (ok) "clearFocusedField" else "No editable focused input is available")
+            return ToolResult(ok, if (ok) "clearFocusedField" else "No editable focused input is available")
+        }
+
+        val selector = ClearTextTarget.selectorFromArgs(args)
+        val resolution = targetResolver.resolve(
+            context = AccessibilityBridge.observeScreenContext(),
+            selector = selector
+        )
+
+        return when (resolution) {
+            is TargetResolutionResult.Resolved -> {
+                val node = resolution.candidate.node
+                val nodeId = node.nodeId
+                if (nodeId.isNullOrBlank() || !node.isInputField) {
+                    val message = "Resolved target is not an editable input"
+                    record("clear_text", clearTextLogArgs(resolution.candidate.selector), false, message)
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf(
+                            "target" to resolution.candidate.selector.toRedactedJson(),
+                            "confidence" to resolution.candidate.confidence.toString(),
+                        )
+                    )
+                } else {
+                    val ok = AccessibilityBridge.clearNode(nodeId)
+                    val message = if (ok) "clearResolvedInput" else "Unable to focus or clear resolved input"
+                    record("clear_text", clearTextLogArgs(resolution.candidate.selector), ok, message)
+                    ToolResult(
+                        ok = ok,
+                        message = message,
+                        data = mapOf(
+                            "node_id" to nodeId,
+                            "confidence" to resolution.candidate.confidence.toString(),
+                        )
+                    )
+                }
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous input target: ${resolution.reason}"
+                record("clear_text", "target=ambiguous", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "Input target not found: ${resolution.reason}"
+                record("clear_text", "target=not_found", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+        }
+    }
+
+    private fun clearTextLogArgs(selector: TargetSelector): String {
+        val label = selector.text?.displaySafe
+            ?: selector.contentDescription?.displaySafe
+            ?: selector.nodeId?.let { "node_id=$it" }
+            ?: selector.viewIdResourceName?.let { "view_id=$it" }
+            ?: selector.bounds?.let { "bounds=${it.toBoundsArg()}" }
+            ?: "resolved"
+        return "target=\"$label\""
+    }
     private fun typeTextLogArgs(text: String, selector: TargetSelector): String {
         val label = selector.text?.displaySafe
             ?: selector.contentDescription?.displaySafe

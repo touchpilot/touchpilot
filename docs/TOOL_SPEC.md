@@ -26,10 +26,12 @@ Tools are the only way an agent may affect the Android device.
 - `press_back`: send Android back.
 - `press_home`: return to launcher.
 - `wait_for_ui`: wait for a screen change or expected text.
+- `focus_input`: focus a visible editable input field without typing.
+- `clear_text`: clear the focused or resolved editable input field.
 
 The app implements `observe_screen`, `open_app`, `tap`, `type_text`, `scroll`,
-`press_back`, `press_home`, and `wait_for_ui` from the Android Tools screen and
-the agent command-provider loop.
+`press_back`, `press_home`, `wait_for_ui`, `focus_input`, and `clear_text` from
+the Android Tools screen and the agent command-provider loop.
 
 All command providers return one JSON command at a time:
 
