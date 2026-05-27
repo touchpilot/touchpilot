@@ -18,6 +18,7 @@ class AgentRunner(
     private val skill: Skill? = null,
     private val source: ToolSource = ToolSource.LOCAL_ROUTER,
     private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false),
     private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
     fun run(
@@ -51,6 +52,7 @@ class AgentRunner(
             skill = skill,
             source = source,
             policy = policy,
+            cancellationSignal = cancellationSignal,
             clarificationDecider = clarificationDecider
         ).run(
             task = task,

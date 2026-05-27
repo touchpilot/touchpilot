@@ -208,6 +208,18 @@ sealed class AgentEvent(
         }
     }
 
+    data class RunCancelled(
+        val reason: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.RUN_CANCELLED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf("reason" to reason.redacted(redactSensitive))
+        }
+    }
+
     companion object {
         private var sequence = 0L
 
@@ -296,5 +308,6 @@ enum class AgentEventType(val wireName: String) {
     APPROVAL_REQUIRED("approval_required"),
     POLICY_BLOCKED("policy_blocked"),
     CLARIFICATION("clarification"),
-    FINAL_ANSWER("final_answer")
+    FINAL_ANSWER("final_answer"),
+    RUN_CANCELLED("run_cancelled")
 }

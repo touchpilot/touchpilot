@@ -134,4 +134,14 @@ class AgentEventTest {
         assertFalse("hunter2" in event.toJson().toString())
         assertTrue("hunter2" in event.toJson(redactSensitive = false).toString())
     }
+
+    @Test
+    fun runCancelledEventSerializesCorrectly() {
+        val event = AgentEvent.RunCancelled(reason = "Cancelled by user")
+        val json = event.toJson()
+
+        assertEquals("run_cancelled", json.getString("type"))
+        assertEquals("Cancelled by user", json.getJSONObject("payload").getString("reason"))
+        assertEquals(AgentEventType.RUN_CANCELLED, event.type)
+    }
 }
