@@ -177,6 +177,9 @@ class AndroidToolExecutor(
                 record(name, "text=\"$text\", timeout_ms=$timeout", ok, "waitForText")
                 ToolResult(ok, "waitForText")
             }
+            "wait_for_app" -> {
+                executeWaitForApp(args)
+            }
             "focus_input" -> {
                 val text = args["text"].orEmpty()
                 val nodeId = args["node_id"].orEmpty()
@@ -218,6 +221,38 @@ class AndroidToolExecutor(
                 ToolResult(false, "Unhandled tool: $name")
             }
         }
+    }
+
+    private fun executeWaitForApp(args: Map<String, String>): ToolResult {
+        val timeout = WaitForApp.timeoutMs(args)
+        val deadline = System.currentTimeMillis() + timeout
+        var latest = AccessibilityBridge.getForegroundApp()
+
+        while (System.currentTimeMillis() <= deadline) {
+            val match = WaitForApp.matches(args, latest)
+            if (match.matched) {
+                record(
+                    "wait_for_app",
+                    "${WaitForApp.expectedSummary(args)}, timeout_ms=$timeout",
+                    true,
+                    "waitForApp"
+                )
+                return WaitForApp.successResult(args, latest, match.matchedBy)
+            }
+            val remainingMs = deadline - System.currentTimeMillis()
+            if (remainingMs <= 0L) break
+            sleeper(minOf(150L, remainingMs))
+            latest = AccessibilityBridge.getForegroundApp()
+        }
+
+        val result = WaitForApp.timeoutResult(args, latest, timeout)
+        record(
+            "wait_for_app",
+            "${WaitForApp.expectedSummary(args)}, timeout_ms=$timeout",
+            false,
+            result.message
+        )
+        return result
     }
 
     private fun executeTypeText(args: Map<String, String>): ToolResult {
