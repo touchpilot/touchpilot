@@ -1,8 +1,11 @@
 package dev.touchpilot.app.tools
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
+import android.net.Uri
+import android.provider.Settings
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.PolicyDecision
@@ -133,6 +136,13 @@ class AndroidToolExecutor(
                 val ok = openApp(target)
                 record(name, "target=\"$target\"", ok, "openApp")
                 ToolResult(ok, "openApp")
+            }
+            "open_settings_panel" -> {
+                val panel = args["panel"].orEmpty()
+                val ok = openSettingsPanel(panel)
+                val message = if (ok) "openSettingsPanel" else "No settings activity for panel \"$panel\""
+                record(name, "panel=\"$panel\"", ok, message)
+                ToolResult(ok, message, mapOf("panel" to panel))
             }
             "tap" -> {
                 val text = args["text"].orEmpty()
@@ -419,10 +429,65 @@ class AndroidToolExecutor(
         return true
     }
 
+    /**
+     * Open a Settings panel from the [SupportedSettingsPanels] allowlist using a native
+     * Settings intent. Returns false for unsupported panels or when no Settings activity
+     * can handle the intent; this tool never toggles a setting, it only navigates there.
+     */
+    fun openSettingsPanel(panel: String): Boolean {
+        val intent = settingsIntentFor(panel) ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    private fun settingsIntentFor(panel: String): Intent? {
+        return when (panel) {
+            "wifi" -> Intent(Settings.ACTION_WIFI_SETTINGS)
+            "bluetooth" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+            "accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            "app_info" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+            }
+            "notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            }
+            "system_settings" -> Intent(Settings.ACTION_SETTINGS)
+            else -> null
+        }
+    }
+
     private fun ResolveInfo.launcherLabel(): String {
         return loadLabel(context.packageManager)?.toString().orEmpty()
     }
 
+    private fun shouldRetry(name: String): Boolean {
+        return name in setOf(
+            "open_app",
+            "open_settings_panel",
+            "tap",
+            "type_text",
+            "scroll",
+            "press_back",
+            "press_home",
+            "wait_for_ui"
+        )
+    }
+
+    private fun retryCountFor(name: String): Int {
+        return if (shouldRetry(name)) ActionRetryCount else 1
+    }
+
+    private fun ToolResult.withAttemptData(attempts: Int): ToolResult {
+        return if (attempts <= 1) {
+            this
+        } else {
+            copy(data = data + ("attempts" to attempts.toString()))
+        }
     private fun ToolResult.withAttemptData(
         attempt: Int,
         category: ToolFailureCategory,
