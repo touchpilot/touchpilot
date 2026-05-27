@@ -67,7 +67,9 @@ class DefaultLocalReasoningCore(
             return AgentRunResult(
                 transcript = "Conversational reply",
                 finalAnswer = canned.message,
-                events = listOf(userEvent, finalEvent)
+                events = listOf(userEvent, finalEvent),
+                stopReason = AgentStepStopReason.COMPLETED,
+                stopMessage = AgentStepStopReason.COMPLETED.userMessage
             )
         }
 
@@ -143,7 +145,9 @@ class DefaultLocalReasoningCore(
         return AgentRunResult(
             transcript = "Blocked by intent gate: ${intent.reason}",
             finalAnswer = intent.userMessage,
-            events = listOf(userEvent, blocked, finalEvent)
+            events = listOf(userEvent, blocked, finalEvent),
+            stopReason = AgentStepStopReason.POLICY_BLOCKED,
+            stopMessage = blocked.userMessage
         )
     }
 
@@ -162,7 +166,9 @@ class DefaultLocalReasoningCore(
         return AgentRunResult(
             transcript = "Clarification requested: ${intent.reason}",
             finalAnswer = intent.clarification,
-            events = listOf(userEvent, assistant)
+            events = listOf(userEvent, assistant),
+            stopReason = AgentStepStopReason.CLARIFICATION_NEEDED,
+            stopMessage = intent.clarification
         )
     }
 
@@ -191,7 +197,9 @@ class DefaultLocalReasoningCore(
         return AgentRunResult(
             transcript = transcript,
             finalAnswer = summary.sentence,
-            events = listOf(userEvent, assistant, finalEvent)
+            events = listOf(userEvent, assistant, finalEvent),
+            stopReason = AgentStepStopReason.COMPLETED,
+            stopMessage = AgentStepStopReason.COMPLETED.userMessage
         )
     }
 
