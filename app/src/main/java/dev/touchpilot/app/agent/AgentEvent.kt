@@ -167,6 +167,42 @@ sealed class AgentEvent(
         }
     }
 
+    /**
+     * The agent stopped the loop to ask the user a clarifying question. This
+     * is the structured complement to a freeform `AssistantMessage` and is
+     * deliberately separate from [PolicyBlocked]: clarification means
+     * "safe but uncertain", policy-block means "unsafe and refused".
+     */
+    data class Clarification(
+        val reason: ClarificationReason,
+        val question: String,
+        val detail: String = "",
+        val candidates: List<NextStepCandidate> = emptyList(),
+        val tool: String? = null,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.CLARIFICATION
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "tool" to tool,
+                "reason" to reason.wireName,
+                "question" to question.redacted(redactSensitive),
+                "detail" to detail.redacted(redactSensitive),
+                "candidates" to candidates.map { candidate ->
+                    mapOf(
+                        "node_id" to candidate.nodeId,
+                        "label" to candidate.displayLabel.redacted(redactSensitive),
+                        "role" to candidate.role,
+                        "confidence" to candidate.confidence,
+                        "sensitive" to candidate.sensitive,
+                    )
+                }
+            )
+        }
+    }
+
     companion object {
         private var sequence = 0L
 
@@ -254,5 +290,6 @@ enum class AgentEventType(val wireName: String) {
     TOOL_FAILED("tool_failed"),
     APPROVAL_REQUIRED("approval_required"),
     POLICY_BLOCKED("policy_blocked"),
+    CLARIFICATION("clarification"),
     FINAL_ANSWER("final_answer")
 }

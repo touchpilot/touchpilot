@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.screen.ScreenContextBuilder
 import java.util.concurrent.CountDownLatch
@@ -14,6 +15,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class TouchPilotAccessibilityService : AccessibilityService() {
+    @Volatile
+    private var lastWindowPackage: String? = null
+
+    @Volatile
+    private var lastWindowActivity: String? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         AccessibilityBridge.attach(this)
@@ -25,7 +32,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // The first spike is pull-based from the debug screen.
+        if (event == null) return
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            // package + class on TYPE_WINDOW_STATE_CHANGED reflect the
+            // foreground activity. We cache the class because
+            // rootInActiveWindow alone cannot recover it later.
+            val pkg = event.packageName?.toString()
+            val cls = event.className?.toString()
+            if (!pkg.isNullOrBlank()) lastWindowPackage = pkg
+            if (!cls.isNullOrBlank()) lastWindowActivity = cls
+        }
     }
 
     override fun onInterrupt() {
@@ -38,6 +54,33 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             appendLine("TouchPilot screen snapshot")
             appendNode(root, depth = 0, maxDepth = 8, nodeId = "0")
         }
+    }
+
+    fun getForegroundApp(): ForegroundAppInfo {
+        val root = rootInActiveWindow
+        val rootPackage = root?.packageName?.toString()
+        val packageName = rootPackage?.takeIf { it.isNotBlank() } ?: lastWindowPackage
+        val windowTitle = root?.window?.title?.toString()?.takeIf { it.isNotBlank() }
+        val activityClass = lastWindowActivity
+            ?.takeIf { it.isNotBlank() }
+            ?.takeIf { lastWindowPackage == null || lastWindowPackage == packageName }
+            ?: root?.className?.toString()?.takeIf { it.isNotBlank() }
+        val appLabel = packageName?.let { loadAppLabel(it) }
+        return ForegroundAppInfo(
+            packageName = packageName,
+            appLabel = appLabel,
+            windowTitle = windowTitle,
+            activityClass = activityClass,
+            accessibilityConnected = true,
+        )
+    }
+
+    private fun loadAppLabel(packageName: String): String? {
+        return runCatching {
+            val pm = applicationContext.packageManager
+            val info = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(info).toString().takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     fun observeScreenContext(): ScreenContext {
@@ -106,6 +149,80 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return setNodeText(node, text)
     }
 
+    fun clearFocusedField(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            ?: findNode(root) { it.isFocused }
+            ?: return false
+        if (!focused.isEnabled || !focused.isEditableTarget()) return false
+        return setNodeText(focused, "")
+    }
+
+    fun clearNode(nodeId: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = findNodeById(root, nodeId) ?: return false
+        if (!node.isEnabled || !node.isEditableTarget()) return false
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        return setNodeText(node, "")
+    }
+
+    fun focusInput(text: String, nodeId: String, bounds: String, viewId: String): FocusResult {
+        val root = rootInActiveWindow ?: return FocusResult(false, "No active window is available.")
+
+        val candidates: List<AccessibilityNodeInfo> = when {
+            nodeId.isNotBlank() -> {
+                val node = findNodeById(root, nodeId)
+                    ?: return FocusResult(false, "No matching input target found.")
+                listOf(node)
+            }
+            bounds.isNotBlank() -> {
+                val targetBounds = parseBounds(bounds)
+                    ?: return FocusResult(false, "Invalid bounds format.")
+                findAllNodes(root) { candidate ->
+                    val b = Rect()
+                    candidate.getBoundsInScreen(b)
+                    b == targetBounds
+                }
+            }
+            viewId.isNotBlank() -> {
+                findAllNodes(root) { candidate ->
+                    candidate.viewIdResourceName == viewId
+                }
+            }
+            else -> {
+                findAllNodes(root) { candidate ->
+                    if (candidate.isEditable) {
+                        // Match editable fields by hint/label, not current typed content.
+                        val hint = candidate.hintText?.toString() ?: ""
+                        val desc = candidate.contentDescription?.toString() ?: ""
+                        hint.contains(text, ignoreCase = true) || desc.contains(text, ignoreCase = true)
+                    } else {
+                        val label = candidate.text?.toString()
+                            ?: candidate.contentDescription?.toString()
+                            ?: ""
+                        label.contains(text, ignoreCase = true)
+                    }
+                }
+            }
+        }
+
+        if (candidates.isEmpty()) return FocusResult(false, "No matching input target found.")
+
+        val editable = candidates.filter { it.isEditable }
+
+        return when {
+            editable.isEmpty() -> FocusResult(false, "Target is not an editable input field.")
+            editable.size > 1 -> FocusResult(false, "Ambiguous input target.")
+            else -> {
+                val node = editable[0]
+                val ok = node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) ||
+                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                    tapNodeCenter(node)
+                FocusResult(ok, if (ok) "focusInput" else "Failed to focus input.")
+            }
+        }
+    }
+
     fun scroll(forward: Boolean): Boolean {
         val root = rootInActiveWindow ?: return false
         val action = scrollAction(forward)
@@ -148,6 +265,44 @@ class TouchPilotAccessibilityService : AccessibilityService() {
 
     fun pressHome(): Boolean {
         return performGlobalAction(GLOBAL_ACTION_HOME)
+    }
+
+    fun isKeyboardVisible(): Boolean {
+        // flagRetrieveInteractiveWindows is already declared in the service
+        // config, so getWindows() surfaces the IME window when it is showing.
+        return windows?.any { it?.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
+    }
+
+    /**
+     * Hides the soft keyboard when it is visible. The implementation
+     * deliberately avoids [GLOBAL_ACTION_BACK]: a stale window-list
+     * observation paired with Back would silently navigate the foreground
+     * app. Instead the soft keyboard show mode is flipped to
+     * [AccessibilityService.SHOW_MODE_HIDDEN], which routes through
+     * InputMethodManagerService and cannot navigate.
+     *
+     * The previous show mode is restored after a brief settle so subsequent
+     * taps on an editable field bring the keyboard back as usual.
+     *
+     * Note: we deliberately do not gate success on [getWindows] returning a
+     * cleared window list. `TYPE_INPUT_METHOD` can linger in that list for
+     * seconds after the IME has visibly hidden — especially on emulators —
+     * so polling it would produce false negatives. The show-mode change
+     * itself is synchronous in IMMS, so we trust the action.
+     */
+    fun dismissKeyboard(timeoutMs: Long): DismissKeyboardOutcome {
+        if (!isKeyboardVisible()) {
+            return DismissKeyboardOutcome.AlreadyHidden
+        }
+        val controller = softKeyboardController
+        val previousMode = controller.showMode
+        controller.showMode = SHOW_MODE_HIDDEN
+        // Brief settle so the IME hide animation can complete before the
+        // tool returns and the agent inspects the screen.
+        val settle = timeoutMs.coerceIn(50L, 5_000L).coerceAtMost(500L)
+        Thread.sleep(settle)
+        controller.showMode = previousMode
+        return DismissKeyboardOutcome.Hidden
     }
 
     fun waitForText(text: String, timeoutMs: Long): Boolean {
@@ -232,6 +387,27 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         }
 
         return null
+    }
+
+    private fun findAllNodes(
+        node: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean
+    ): List<AccessibilityNodeInfo> {
+        val result = mutableListOf<AccessibilityNodeInfo>()
+        collectNodes(node, predicate, result)
+        return result
+    }
+
+    private fun collectNodes(
+        node: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean,
+        result: MutableList<AccessibilityNodeInfo>
+    ) {
+        if (predicate(node)) result.add(node)
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            collectNodes(child, predicate, result)
+        }
     }
 
     private fun findNodeById(root: AccessibilityNodeInfo, nodeId: String): AccessibilityNodeInfo? {

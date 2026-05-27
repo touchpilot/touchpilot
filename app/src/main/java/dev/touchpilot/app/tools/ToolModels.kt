@@ -1,6 +1,7 @@
 package dev.touchpilot.app.tools
 
 import dev.touchpilot.app.tools.targets.LongPressTarget
+import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollTarget
 import dev.touchpilot.app.tools.targets.TargetBounds
 import dev.touchpilot.app.tools.targets.TypeTextTarget
@@ -112,6 +113,46 @@ object AndroidToolCatalog {
                 "timeout_ms" to "Maximum wait time in milliseconds."
             ),
             requiredArguments = setOf("text")
+        ),
+        ToolSpec(
+            name = "focus_input",
+            description = "Focus a visible editable input field without typing text.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                "text" to "Visible text or content description of the input field.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "bounds" to "Bounds from observe_screen as left,top,right,bottom.",
+                "view_id" to "Resource ID of the view (e.g., dev.example.app:id/search_input)."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
+            name = "get_foreground_app",
+            description = "Return the foreground app's package, label, window title, and activity for post-action verification.",
+            risk = ToolRisk.LOW,
+            arguments = emptyMap()
+        ),
+        ToolSpec(
+            name = "clear_text",
+            description = "Clear the focused or resolved editable input field.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                ClearTextTarget.TargetTextArg to "Visible input label to focus and clear.",
+                ClearTextTarget.TargetNodeIdArg to "Stable input node_id from observe_screen.",
+                ClearTextTarget.TargetBoundsArg to "Input bounds from observe_screen as left,top,right,bottom.",
+                ClearTextTarget.TargetViewIdArg to "Input viewIdResourceName from observe_screen.",
+                ClearTextTarget.TargetContentDescriptionArg to "Input content description to focus and clear.",
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
+            name = "dismiss_keyboard",
+            description = "Hide the soft keyboard when it is visible. No-op when it is already hidden.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                "timeout_ms" to "Maximum wait for the keyboard to disappear after dismissal."
+            ),
+            requiredArguments = emptySet()
         )
     )
 
@@ -160,6 +201,28 @@ object AndroidToolCatalog {
             val malformedBounds = args[TypeTextTarget.TargetBoundsArg]
                 ?.takeIf { it.isNotBlank() }
                 ?.let { TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "focus_input") {
+            val selectors = listOf("text", "node_id", "bounds", "view_id")
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.size != 1) {
+                return "focus_input requires exactly one selector: text, node_id, bounds, or view_id"
+            }
+        }
+
+        if (name == "clear_text") {
+            val selectors = ClearTextTarget.selectorArgs.filter { args[it].isNullOrBlank().not() }
+            if (selectors.size > 1) {
+                return "clear_text requires at most one selector: target_text, target_node_id, target_bounds, target_view_id, or target_content_description"
+            }
+            val malformedBounds = args[ClearTextTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"

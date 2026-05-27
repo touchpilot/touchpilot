@@ -28,6 +28,15 @@ class ToolVerifier {
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
             "wait_for_ui" -> verifyWaitForUi(args, after)
+            "get_foreground_app" -> ToolVerificationResult.Passed(
+                reason = "foreground app inspection is read-only",
+                data = mapOf(
+                    "accessibility_connected" to (result.data["accessibility_connected"] ?: "false"),
+                    "package_name" to (result.data["package_name"] ?: ""),
+                )
+            )
+            "clear_text" -> verifyClearText(after)
+            "dismiss_keyboard" -> verifyDismissKeyboard(result)
             else -> ToolVerificationResult.Skipped("no verifier for $toolName")
         }
     }
@@ -170,6 +179,44 @@ class ToolVerifier {
             ToolVerificationResult.Failed(
                 reason = "expected UI text is not present after wait",
                 data = mapOf("text" to SensitiveTextRedactor.redact(expected))
+            )
+        }
+    }
+
+    private fun verifyClearText(after: ScreenContext): ToolVerificationResult {
+        val focused = after.nodes.firstOrNull { it.focused && it.isInputField }
+            ?: return ToolVerificationResult.Skipped("no focused input field in snapshot after clear")
+        return if (focused.text.raw.isEmpty()) {
+            ToolVerificationResult.Passed(
+                reason = "focused input field is empty after clear",
+                data = mapOf("node_id" to focused.nodeId.orEmpty())
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "focused input field still contains text after clear",
+                data = mapOf("node_id" to focused.nodeId.orEmpty())
+            )
+        }
+    }
+
+    private fun verifyDismissKeyboard(result: ToolResult): ToolVerificationResult {
+        val stillVisible = result.data["still_visible_after"]?.toBooleanStrictOrNull() ?: false
+        val wasVisible = result.data["was_visible_before"]?.toBooleanStrictOrNull() ?: false
+        return if (!stillVisible) {
+            ToolVerificationResult.Passed(
+                reason = if (wasVisible) "soft keyboard is no longer visible" else "soft keyboard was already hidden",
+                data = mapOf(
+                    "was_visible_before" to wasVisible.toString(),
+                    "still_visible_after" to "false",
+                )
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "soft keyboard is still visible after dismiss",
+                data = mapOf(
+                    "was_visible_before" to wasVisible.toString(),
+                    "still_visible_after" to "true",
+                )
             )
         }
     }

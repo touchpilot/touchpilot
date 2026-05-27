@@ -3,6 +3,7 @@
     <item name="touchpilot_status" type="id" />
     <item name="open_accessibility_settings_button" type="id" />
     <item name="observe_screen_button" type="id" />
+    <item name="get_foreground_app_button" type="id" />
     <item name="open_app_input" type="id" />
     <item name="open_app_button" type="id" />
     <item name="tap_text_input" type="id" />
@@ -11,12 +12,16 @@
     <item name="long_press_text_button" type="id" />
     <item name="type_text_input" type="id" />
     <item name="type_text_button" type="id" />
+    <item name="dismiss_keyboard_button" type="id" />
     <item name="back_button" type="id" />
     <item name="home_button" type="id" />
     <item name="scroll_down_button" type="id" />
     <item name="scroll_up_button" type="id" />
     <item name="wait_for_text_input" type="id" />
     <item name="wait_for_text_button" type="id" />
+    <item name="focus_input_input" type="id" />
+    <item name="focus_input_button" type="id" />
+    <item name="clear_text_button" type="id" />
     <item name="agent_provider_url_input" type="id" />
     <item name="agent_model_input" type="id" />
     <item name="agent_api_key_input" type="id" />
@@ -41,5 +46,6 @@
     <item name="settings_panel_cloud_button" type="id" />
     <item name="settings_panel_runtime_button" type="id" />
     <item name="save_cloud_api_button" type="id" />
-    <item name="save_skill_button" type="id" />
+    <item name="export_run_trace_button" type="id" />
+    <item name="run_detail_back_button" type="id" />
 </resources>

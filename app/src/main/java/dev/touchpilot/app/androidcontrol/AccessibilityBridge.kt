@@ -2,6 +2,8 @@ package dev.touchpilot.app.androidcontrol
 
 import dev.touchpilot.app.screen.ScreenContext
 
+data class FocusResult(val ok: Boolean, val message: String)
+
 object AccessibilityBridge {
     @Volatile
     private var service: TouchPilotAccessibilityService? = null
@@ -24,6 +26,10 @@ object AccessibilityBridge {
 
     fun observeScreenContext(): ScreenContext {
         return service?.observeScreenContext() ?: ScreenContext.Empty
+    }
+
+    fun getForegroundApp(): ForegroundAppInfo {
+        return service?.getForegroundApp() ?: ForegroundAppInfo.Disconnected
     }
 
     fun tapByText(text: String): Boolean {
@@ -82,6 +88,14 @@ object AccessibilityBridge {
         return service?.pressHome() ?: false
     }
 
+    fun isKeyboardVisible(): Boolean {
+        return service?.isKeyboardVisible() ?: false
+    }
+
+    fun dismissKeyboard(timeoutMs: Long): DismissKeyboardOutcome {
+        return service?.dismissKeyboard(timeoutMs) ?: DismissKeyboardOutcome.NotConnected
+    }
+
     fun waitForText(text: String, timeoutMs: Long): Boolean {
         if (text.isBlank()) return false
         return service?.waitForText(text, timeoutMs) ?: false
@@ -89,5 +103,19 @@ object AccessibilityBridge {
 
     fun waitForIdle(timeoutMs: Long): Boolean {
         return service?.waitForIdle(timeoutMs) ?: false
+    }
+
+    fun focusInput(text: String, nodeId: String, bounds: String, viewId: String): FocusResult {
+        return service?.focusInput(text, nodeId, bounds, viewId)
+            ?: FocusResult(false, "TouchPilot Control is not enabled.")
+    }
+
+    fun clearFocusedField(): Boolean {
+        return service?.clearFocusedField() ?: false
+    }
+
+    fun clearNode(nodeId: String): Boolean {
+        if (nodeId.isBlank()) return false
+        return service?.clearNode(nodeId) ?: false
     }
 }
