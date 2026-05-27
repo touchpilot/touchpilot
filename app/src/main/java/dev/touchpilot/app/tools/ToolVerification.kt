@@ -27,6 +27,13 @@ class ToolVerifier {
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
             "wait_for_ui" -> verifyWaitForUi(args, after)
+            "wait_for_idle" -> ToolVerificationResult.Passed(
+                reason = "screen context stayed stable for requested idle window",
+                data = mapOf(
+                    "stable_ms" to (result.data["stable_ms"] ?: ""),
+                    "required_stable_ms" to (result.data["required_stable_ms"] ?: ""),
+                )
+            )
             "wait_for_app" -> ToolVerificationResult.Passed(
                 reason = "foreground app matched requested target",
                 data = mapOf(

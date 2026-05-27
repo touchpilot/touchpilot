@@ -177,6 +177,9 @@ class AndroidToolExecutor(
                 record(name, "text=\"$text\", timeout_ms=$timeout", ok, "waitForText")
                 ToolResult(ok, "waitForText")
             }
+            "wait_for_idle" -> {
+                executeWaitForIdle(args)
+            }
             "wait_for_app" -> {
                 executeWaitForApp(args)
             }
@@ -221,6 +224,22 @@ class AndroidToolExecutor(
                 ToolResult(false, "Unhandled tool: $name")
             }
         }
+    }
+
+    private fun executeWaitForIdle(args: Map<String, String>): ToolResult {
+        val result = WaitForIdle.waitUntilIdle(
+            args = args,
+            observe = { AccessibilityBridge.observeScreenContext() },
+            sleeper = sleeper
+        )
+        record(
+            "wait_for_idle",
+            "stable_ms=${WaitForIdle.stableMs(args)}, timeout_ms=${WaitForIdle.timeoutMs(args)}, " +
+                "include_bounds=${WaitForIdle.includeBounds(args)}",
+            result.ok,
+            result.message
+        )
+        return result
     }
 
     private fun executeWaitForApp(args: Map<String, String>): ToolResult {

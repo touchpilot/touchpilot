@@ -959,6 +959,23 @@ class MainActivity : Activity() {
             }.apply { id = R.id.wait_for_text_button }
         )
 
+        contentRoot.addView(
+            secondaryButton("Wait For Idle") {
+                Thread {
+                    val result = toolExecutor.execute(
+                        "wait_for_idle",
+                        emptyMap(),
+                        ToolSource.DIRECT_DEBUG
+                    )
+                    runOnUiThread {
+                        outputText = SensitiveTextRedactor.redact("wait_for_idle -> ${result.ok}: ${result.message}")
+                        refreshExecutionLog()
+                        showSection(Section.TOOLS)
+                    }
+                }.start()
+            }.apply { id = R.id.wait_for_idle_button }
+        )
+
         contentRoot.addView(latestResultCard())
 
         // Tail spacer so the Focus / Dismiss row can scroll above the soft

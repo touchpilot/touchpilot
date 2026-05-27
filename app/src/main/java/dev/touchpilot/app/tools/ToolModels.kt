@@ -101,6 +101,17 @@ object AndroidToolCatalog {
             requiredArguments = setOf("text")
         ),
         ToolSpec(
+            name = "wait_for_idle",
+            description = "Wait until the redacted screen context remains stable for a bounded window.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                WaitForIdle.StableArg to "Milliseconds the screen context must remain stable.",
+                WaitForIdle.TimeoutArg to "Maximum wait time in milliseconds.",
+                WaitForIdle.IncludeBoundsArg to "true if bounds changes should count as instability."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "wait_for_app",
             description = "Wait until a package name or launcher label becomes the foreground app.",
             risk = ToolRisk.LOW,
@@ -197,6 +208,10 @@ object AndroidToolCatalog {
             if (selectors.size != 1) {
                 return "focus_input requires exactly one selector: text, node_id, bounds, or view_id"
             }
+        }
+
+        if (name == "wait_for_idle") {
+            return WaitForIdle.validate(args)
         }
 
         if (name == "clear_text") {

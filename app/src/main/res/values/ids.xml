@@ -19,6 +19,7 @@
     <item name="scroll_up_button" type="id" />
     <item name="wait_for_text_input" type="id" />
     <item name="wait_for_text_button" type="id" />
+    <item name="wait_for_idle_button" type="id" />
     <item name="focus_input_input" type="id" />
     <item name="focus_input_button" type="id" />
     <item name="clear_text_button" type="id" />
