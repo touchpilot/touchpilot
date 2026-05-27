@@ -18,7 +18,8 @@ class BoundedLocalAgentLoop(
     private val commandProvider: AgentCommandProvider,
     private val skill: Skill? = null,
     private val source: ToolSource = ToolSource.LOCAL_ROUTER,
-    private val policy: ActionPolicy = DefaultActionPolicy()
+    private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
     fun run(task: String, limits: AgentRunLimits = AgentRunLimits()): AgentRunResult {
         val transcript = StringBuilder()
@@ -26,6 +27,7 @@ class BoundedLocalAgentLoop(
         val steps = mutableListOf<AgentStep>()
         var currentScreen = tools.observeScreen()
         var context = initialContext(task, currentScreen)
+        var nextStepContext = NextStepContext.initial(task)
         var consecutiveFailures = 0
 
         repeat(limits.maxSteps) { step ->
@@ -64,6 +66,41 @@ class BoundedLocalAgentLoop(
                     stopReason = AgentStepStopReason.COMPLETED,
                     stopMessage = AgentStepStopReason.COMPLETED.userMessage
                 )
+            }
+
+            when (val clarification = clarificationDecider.decide(nextStepContext, command)) {
+                is ClarificationDecision.Clarify -> {
+                    transcript.appendLine(
+                        "Clarification: ${clarification.clarificationReason.wireName} - ${clarification.question}"
+                    )
+                    events += AgentEvent.Clarification(
+                        reason = clarification.clarificationReason,
+                        question = clarification.question,
+                        detail = clarification.detail,
+                        candidates = clarification.candidates,
+                        tool = command.tool
+                    )
+                    steps += AgentStepFactory.clarify(
+                        sequenceNumber = stepIndex,
+                        clarification = AgentStepClarification(
+                            reason = clarification.clarificationReason.toAgentStepReason(),
+                            question = clarification.question,
+                            detail = clarification.detail,
+                            candidateLabels = clarification.candidates.map { it.displayLabel }
+                        ),
+                        inputSummary = "agent paused before dispatching the next action",
+                        endedAtMillis = System.currentTimeMillis()
+                    )
+                    return AgentRunResult(
+                        transcript = transcript.toString(),
+                        finalAnswer = clarification.question,
+                        events = events,
+                        steps = steps,
+                        stopReason = AgentStepStopReason.CLARIFICATION_NEEDED,
+                        stopMessage = clarification.question
+                    )
+                }
+                ClarificationDecision.Continue -> Unit
             }
 
             val toolName = command.tool
@@ -203,6 +240,13 @@ class BoundedLocalAgentLoop(
                 }
                 currentScreen = tools.observeScreen()
                 context = recoveryContext(task, transcript.toString(), currentScreen)
+                nextStepContext = NextStepContext(
+                    task = task,
+                    stepNumber = stepIndex,
+                    previousCommand = command,
+                    previousToolResult = ToolResult(ok = false, message = message),
+                    failureReason = message
+                )
                 return@repeat
             }
             events += AgentEvent.toolResult(toolName, result)
@@ -246,6 +290,13 @@ class BoundedLocalAgentLoop(
 
             currentScreen = verificationScreen
             context = nextContext(task, transcript.toString(), verificationScreen)
+            nextStepContext = NextStepContext(
+                task = task,
+                stepNumber = stepIndex,
+                previousCommand = command,
+                previousToolResult = result,
+                failureReason = if (result.ok) null else result.message
+            )
         }
 
         return stopped(transcript, events, steps, AgentStepStopReason.MAX_STEPS)
@@ -334,6 +385,16 @@ class BoundedLocalAgentLoop(
                 stopReason = stopReason
             )
         )
+    }
+
+    private fun ClarificationReason.toAgentStepReason(): AgentStepClarificationReason {
+        return when (this) {
+            ClarificationReason.MULTIPLE_TARGETS -> AgentStepClarificationReason.MULTIPLE_TARGETS
+            ClarificationReason.MISSING_TARGET -> AgentStepClarificationReason.MISSING_TARGET
+            ClarificationReason.AMBIGUOUS_REQUEST -> AgentStepClarificationReason.AMBIGUOUS_REQUEST
+            ClarificationReason.LOW_CONFIDENCE -> AgentStepClarificationReason.LOW_CONFIDENCE
+            ClarificationReason.NEEDS_USER_CHOICE -> AgentStepClarificationReason.NEEDS_USER_CHOICE
+        }
     }
 }
 

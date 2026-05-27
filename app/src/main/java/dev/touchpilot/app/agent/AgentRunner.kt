@@ -17,7 +17,8 @@ class AgentRunner(
     private val commandProvider: AgentCommandProvider,
     private val skill: Skill? = null,
     private val source: ToolSource = ToolSource.LOCAL_ROUTER,
-    private val policy: ActionPolicy = DefaultActionPolicy()
+    private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
     fun run(task: String, maxSteps: Int = AgentRunLimits.DefaultMaxSteps): AgentRunResult {
         return run(task, AgentRunLimits(maxSteps = maxSteps))
@@ -30,7 +31,8 @@ class AgentRunner(
             commandProvider = commandProvider,
             skill = skill,
             source = source,
-            policy = policy
+            policy = policy,
+            clarificationDecider = clarificationDecider
         ).run(task, limits)
     }
 

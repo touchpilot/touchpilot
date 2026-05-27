@@ -151,6 +151,7 @@ object AgentRunDetailFormatter {
             is AgentEvent.PolicyBlocked -> "Blocked: ${SensitiveTextRedactor.redact(last.reason)}"
             is AgentEvent.ToolFailed -> "Tool failed: ${SensitiveTextRedactor.redact(last.message)}"
             is AgentEvent.AssistantMessage -> "Awaiting clarification"
+            is AgentEvent.Clarification -> "Clarification needed: ${SensitiveTextRedactor.redact(last.question)}"
             is AgentEvent.FinalAnswer -> "Completed: ${SensitiveTextRedactor.redact(last.text)}"
             else -> "Run ended without final answer"
         }
@@ -268,6 +269,7 @@ object AgentRunDetailFormatter {
             is AgentEvent.ToolFailed -> AgentRunStepStatus.FAILED
             is AgentEvent.ApprovalRequired -> AgentRunStepStatus.WAITING
             is AgentEvent.PolicyBlocked -> AgentRunStepStatus.BLOCKED
+            is AgentEvent.Clarification -> AgentRunStepStatus.WAITING
             is AgentEvent.FinalAnswer -> AgentRunStepStatus.COMPLETE
         }
     }
@@ -285,6 +287,7 @@ object AgentRunDetailFormatter {
                 val tool = event.tool?.let { " ($it)" }.orEmpty()
                 "Policy blocked$tool"
             }
+            is AgentEvent.Clarification -> "Clarification needed"
             is AgentEvent.FinalAnswer -> "Final answer"
         }
     }
@@ -307,6 +310,7 @@ object AgentRunDetailFormatter {
             is AgentEvent.ToolFailed -> formatToolResult(payload)
             is AgentEvent.ApprovalRequired -> formatApproval(payload)
             is AgentEvent.PolicyBlocked -> formatPolicyBlock(payload)
+            is AgentEvent.Clarification -> formatClarification(payload)
             is AgentEvent.FinalAnswer -> payload.getString("text")
         }
     }
@@ -353,6 +357,29 @@ object AgentRunDetailFormatter {
             appendLine("reason: ${payload.getString("reason")}")
             append("user message: ${payload.getString("user_message")}")
         }
+    }
+
+    private fun formatClarification(payload: JSONObject): String {
+        return buildString {
+            payload.optString("tool").takeIf { it.isNotBlank() }?.let { appendLine("tool: $it") }
+            appendLine("reason: ${payload.getString("reason")}")
+            appendLine("question: ${payload.getString("question")}")
+            payload.optString("detail").takeIf { it.isNotBlank() }?.let { appendLine("detail: $it") }
+            val candidates = payload.optJSONArray("candidates")
+            if (candidates != null && candidates.length() > 0) {
+                appendLine("candidates:")
+                for (index in 0 until candidates.length()) {
+                    val candidate = candidates.optJSONObject(index) ?: continue
+                    append("  - ")
+                    append(candidate.optString("label", "unknown"))
+                    candidate.optString("role").takeIf { it.isNotBlank() }?.let { append(" ($it)") }
+                    candidate.optString("confidence").takeIf { it.isNotBlank() }?.let {
+                        append(" confidence=$it")
+                    }
+                    appendLine()
+                }
+            }
+        }.trimEnd()
     }
 
     private fun StringBuilder.appendVerificationDetails(data: JSONObject?) {

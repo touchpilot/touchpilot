@@ -8,6 +8,7 @@ import dev.touchpilot.app.tools.ToolSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 
 class BoundedLocalAgentLoopTest {
     @Test
@@ -75,6 +76,36 @@ class BoundedLocalAgentLoopTest {
         assertEquals(2, result.steps.size)
         assertEquals(listOf(AgentStepStatus.FAILED, AgentStepStatus.FAILED), result.steps.map { it.status })
         assertEquals(AgentStepStopReason.REPEATED_TOOL_FAILURE, result.steps.last().stopReason)
+    }
+
+    @Test
+    fun asksForClarificationWhenCommandHasNoAction() {
+        val result = loop(
+            commands = listOf("""{"args":{}}"""),
+            results = emptyList()
+        ).run("do the thing", AgentRunLimits(maxSteps = 2))
+
+        assertEquals(AgentStepStopReason.CLARIFICATION_NEEDED, result.stopReason)
+        assertEquals(AgentStepStatus.CLARIFIED, result.steps.single().status)
+        assertEquals(AgentStepType.CLARIFY, result.steps.single().type)
+        assertIs<AgentEvent.Clarification>(result.events.last())
+    }
+
+    @Test
+    fun asksForClarificationAfterAmbiguousToolResult() {
+        val result = loop(
+            commands = listOf(
+                """{"tool":"tap","args":{"text":"Settings"}}""",
+                """{"tool":"tap","args":{"text":"Settings"}}"""
+            ),
+            results = listOf(
+                ToolResult(ok = false, message = "Ambiguous input target: 2 candidates")
+            )
+        ).run("tap Settings", AgentRunLimits(maxSteps = 3, maxConsecutiveFailures = 2))
+
+        assertEquals(AgentStepStopReason.CLARIFICATION_NEEDED, result.stopReason)
+        assertEquals(listOf(AgentStepStatus.FAILED, AgentStepStatus.CLARIFIED), result.steps.map { it.status })
+        assertEquals(ClarificationReason.MULTIPLE_TARGETS, assertIs<AgentEvent.Clarification>(result.events.last()).reason)
     }
 
     private fun loop(
