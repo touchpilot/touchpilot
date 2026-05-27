@@ -25,25 +25,28 @@ class AgentRunner(
         task: String,
         maxSteps: Int = AgentRunLimits.DefaultMaxSteps,
         listener: AgentEventListener = AgentEventListener {},
-        timeline: AgentStepTimelineBuilder? = null
+        timeline: AgentStepTimelineBuilder? = null,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
     ): AgentRunResult {
         return run(
             task = task,
             limits = AgentRunLimits(maxSteps = maxSteps),
             listener = listener,
-            timeline = timeline
+            timeline = timeline,
+            cancellationSignal = cancellationSignal
         )
     }
 
     fun run(task: String, limits: AgentRunLimits): AgentRunResult {
-        return run(task, limits, AgentEventListener {}, null)
+        return run(task, limits, AgentEventListener {}, null, java.util.concurrent.atomic.AtomicBoolean(false))
     }
 
     fun run(
         task: String,
         limits: AgentRunLimits,
         listener: AgentEventListener,
-        timeline: AgentStepTimelineBuilder?
+        timeline: AgentStepTimelineBuilder?,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
     ): AgentRunResult {
         return BoundedLocalAgentLoop(
             tools = AndroidLoopTools(toolExecutor),
@@ -58,7 +61,8 @@ class AgentRunner(
             task = task,
             limits = limits,
             listener = listener,
-            onStepsUpdated = timeline?.let { builder -> { steps -> builder.replaceAll(steps) } }
+            onStepsUpdated = timeline?.let { builder -> { steps -> builder.replaceAll(steps) } },
+            cancellationSignal = cancellationSignal
         )
     }
 

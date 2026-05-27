@@ -41,6 +41,7 @@ class AgentStepTimelineBuilder {
             is AgentEvent.PolicyBlocked -> onPolicyBlocked(event)
             is AgentEvent.FinalAnswer -> onFinalAnswer(event)
             is AgentEvent.Clarification -> onClarification(event)
+            is AgentEvent.RunCancelled -> onRunCancelled(event)
         }
     }
 
@@ -222,6 +223,21 @@ class AgentStepTimelineBuilder {
                     candidateLabels = event.candidates.map { it.displayLabel },
                 ),
             )
+        )
+    }
+
+    private fun onRunCancelled(event: AgentEvent.RunCancelled) {
+        completeActiveDecide(success = false, outputSummary = "Cancelled by user")
+        activeVerifySeq?.let { updateCompleted(it, AgentStepStatus.BLOCKED, "Cancelled") }
+        activeVerifySeq = null
+        activeToolStepSeq?.let { updateCompleted(it, AgentStepStatus.BLOCKED, "Cancelled") }
+        activeToolStepSeq = null
+        append(
+            AgentStepFactory.stop(
+                sequenceNumber = nextSequence(),
+                reason = AgentStepStopReason.USER_CANCELLED,
+                outputSummary = event.reason,
+            ).copy(status = AgentStepStatus.BLOCKED)
         )
     }
 

@@ -19,13 +19,15 @@ class BoundedLocalAgentLoop(
     private val skill: Skill? = null,
     private val source: ToolSource = ToolSource.LOCAL_ROUTER,
     private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false),
     private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
     fun run(
         task: String,
         limits: AgentRunLimits = AgentRunLimits(),
         listener: AgentEventListener = AgentEventListener {},
-        onStepsUpdated: ((List<AgentStep>) -> Unit)? = null
+        onStepsUpdated: ((List<AgentStep>) -> Unit)? = null,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
     ): AgentRunResult {
         val transcript = StringBuilder()
         val events = mutableListOf<AgentEvent>()
