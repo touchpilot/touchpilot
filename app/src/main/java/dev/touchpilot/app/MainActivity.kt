@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -13,6 +14,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.view.animation.DecelerateInterpolator
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
@@ -733,7 +735,9 @@ class MainActivity : Activity() {
 
         contentRoot.addView(selectorRow)
         contentRoot.addView(focusInputField)
-        contentRoot.addView(
+
+        val focusDismissRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        focusDismissRow.addView(
             secondaryButton("Focus Input Field") {
                 hideKeyboard(focusInputField)
                 val args = mapOf(focusInputSelectorKey(focusSelectorIndex) to focusInputField.text.toString())
@@ -743,8 +747,18 @@ class MainActivity : Activity() {
                 } else {
                     lastFocusInputArgs = null
                 }
-            }.apply { id = R.id.focus_input_button }
+            }.apply { id = R.id.focus_input_button },
+            rowButtonParams()
         )
+        focusDismissRow.addView(
+            secondaryButton("Dismiss Keyboard") {
+                executeAndRender("dismiss_keyboard", emptyMap())
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.dismiss_keyboard_button },
+            rowButtonParams()
+        )
+        contentRoot.addView(focusDismissRow)
+
         contentRoot.addView(
             secondaryButton("Clear Focused Field") {
                 executeAndRender("clear_text", emptyMap())
@@ -804,6 +818,48 @@ class MainActivity : Activity() {
         )
 
         contentRoot.addView(latestResultCard())
+
+        // Tail spacer so the Focus / Dismiss row can scroll above the soft
+        // keyboard when an input is focused (adjustResize alone leaves them
+        // flush against the IME). The spacer is 0 dp tall when the keyboard
+        // is hidden and grows only while the IME is visible, so it does not
+        // add visible whitespace in the resting layout.
+        val keyboardScrollSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0
+            )
+        }
+        contentRoot.addView(keyboardScrollSpacer)
+        bindKeyboardScrollSpacer(keyboardScrollSpacer)
+    }
+
+    private fun bindKeyboardScrollSpacer(spacer: View) {
+        val rootView = window.decorView
+        val expandedHeight = (320 * resources.displayMetrics.density).toInt()
+        val visibleRect = Rect()
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            rootView.getWindowVisibleDisplayFrame(visibleRect)
+            val screenHeight = rootView.height
+            if (screenHeight <= 0) return@OnGlobalLayoutListener
+            val occluded = screenHeight - visibleRect.bottom
+            // Anything above ~15% of screen height is conservatively treated
+            // as the soft keyboard rather than a tall status/nav bar.
+            val keyboardVisible = occluded > screenHeight * 0.15
+            val target = if (keyboardVisible) expandedHeight else 0
+            val params = spacer.layoutParams as? LinearLayout.LayoutParams ?: return@OnGlobalLayoutListener
+            if (params.height != target) {
+                params.height = target
+                spacer.layoutParams = params
+            }
+        }
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        spacer.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) {
+                rootView.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+            }
+        })
     }
 
     private fun renderMcpPanel() {

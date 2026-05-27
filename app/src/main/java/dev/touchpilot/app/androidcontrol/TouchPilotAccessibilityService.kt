@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.screen.ScreenContextBuilder
 import java.util.concurrent.CountDownLatch
@@ -249,6 +250,44 @@ class TouchPilotAccessibilityService : AccessibilityService() {
 
     fun pressHome(): Boolean {
         return performGlobalAction(GLOBAL_ACTION_HOME)
+    }
+
+    fun isKeyboardVisible(): Boolean {
+        // flagRetrieveInteractiveWindows is already declared in the service
+        // config, so getWindows() surfaces the IME window when it is showing.
+        return windows?.any { it?.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
+    }
+
+    /**
+     * Hides the soft keyboard when it is visible. The implementation
+     * deliberately avoids [GLOBAL_ACTION_BACK]: a stale window-list
+     * observation paired with Back would silently navigate the foreground
+     * app. Instead the soft keyboard show mode is flipped to
+     * [AccessibilityService.SHOW_MODE_HIDDEN], which routes through
+     * InputMethodManagerService and cannot navigate.
+     *
+     * The previous show mode is restored after a brief settle so subsequent
+     * taps on an editable field bring the keyboard back as usual.
+     *
+     * Note: we deliberately do not gate success on [getWindows] returning a
+     * cleared window list. `TYPE_INPUT_METHOD` can linger in that list for
+     * seconds after the IME has visibly hidden — especially on emulators —
+     * so polling it would produce false negatives. The show-mode change
+     * itself is synchronous in IMMS, so we trust the action.
+     */
+    fun dismissKeyboard(timeoutMs: Long): DismissKeyboardOutcome {
+        if (!isKeyboardVisible()) {
+            return DismissKeyboardOutcome.AlreadyHidden
+        }
+        val controller = softKeyboardController
+        val previousMode = controller.showMode
+        controller.showMode = SHOW_MODE_HIDDEN
+        // Brief settle so the IME hide animation can complete before the
+        // tool returns and the agent inspects the screen.
+        val settle = timeoutMs.coerceIn(50L, 5_000L).coerceAtMost(500L)
+        Thread.sleep(settle)
+        controller.showMode = previousMode
+        return DismissKeyboardOutcome.Hidden
     }
 
     fun waitForText(text: String, timeoutMs: Long): Boolean {

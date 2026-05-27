@@ -35,6 +35,7 @@ class ToolVerifier {
                 )
             )
             "clear_text" -> verifyClearText(after)
+            "dismiss_keyboard" -> verifyDismissKeyboard(result)
             else -> ToolVerificationResult.Skipped("no verifier for $toolName")
         }
     }
@@ -193,6 +194,28 @@ class ToolVerifier {
             ToolVerificationResult.Failed(
                 reason = "focused input field still contains text after clear",
                 data = mapOf("node_id" to focused.nodeId.orEmpty())
+            )
+        }
+    }
+
+    private fun verifyDismissKeyboard(result: ToolResult): ToolVerificationResult {
+        val stillVisible = result.data["still_visible_after"]?.toBooleanStrictOrNull() ?: false
+        val wasVisible = result.data["was_visible_before"]?.toBooleanStrictOrNull() ?: false
+        return if (!stillVisible) {
+            ToolVerificationResult.Passed(
+                reason = if (wasVisible) "soft keyboard is no longer visible" else "soft keyboard was already hidden",
+                data = mapOf(
+                    "was_visible_before" to wasVisible.toString(),
+                    "still_visible_after" to "false",
+                )
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "soft keyboard is still visible after dismiss",
+                data = mapOf(
+                    "was_visible_before" to wasVisible.toString(),
+                    "still_visible_after" to "true",
+                )
             )
         }
     }

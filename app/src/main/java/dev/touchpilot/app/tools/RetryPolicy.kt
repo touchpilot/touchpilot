@@ -94,6 +94,14 @@ class AndroidToolRetryPolicy(
                 "wait_for_ui" to action.copy(waitForIdleAfterSuccess = false),
                 "focus_input" to action,
                 "get_foreground_app" to ToolRetryConfig(maxAttempts = 1, retryable = false),
+                // Single attempt only. The tool flips the IME show mode via
+                // softKeyboardController, which is idempotent and has no
+                // navigation hazard, but retrying would still spend extra
+                // wall-clock time for no behavioral benefit.
+                "dismiss_keyboard" to ToolRetryConfig(
+                    maxAttempts = 1,
+                    retryable = false,
+                ),
             )
         }
     }

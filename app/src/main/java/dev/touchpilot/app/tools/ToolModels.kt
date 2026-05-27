@@ -130,6 +130,15 @@ object AndroidToolCatalog {
                 ClearTextTarget.TargetContentDescriptionArg to "Input content description to focus and clear.",
             ),
             requiredArguments = emptySet()
+        ),
+        ToolSpec(
+            name = "dismiss_keyboard",
+            description = "Hide the soft keyboard when it is visible. No-op when it is already hidden.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                "timeout_ms" to "Maximum wait for the keyboard to disappear after dismissal."
+            ),
+            requiredArguments = emptySet()
         )
     )
 

@@ -78,6 +78,14 @@ object AccessibilityBridge {
         return service?.pressHome() ?: false
     }
 
+    fun isKeyboardVisible(): Boolean {
+        return service?.isKeyboardVisible() ?: false
+    }
+
+    fun dismissKeyboard(timeoutMs: Long): DismissKeyboardOutcome {
+        return service?.dismissKeyboard(timeoutMs) ?: DismissKeyboardOutcome.NotConnected
+    }
+
     fun waitForText(text: String, timeoutMs: Long): Boolean {
         if (text.isBlank()) return false
         return service?.waitForText(text, timeoutMs) ?: false

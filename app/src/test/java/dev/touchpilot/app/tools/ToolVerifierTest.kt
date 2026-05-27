@@ -125,6 +125,75 @@ class ToolVerifierTest {
     }
 
     @Test
+    fun dismissKeyboardPassesWhenKeyboardWasHidden() {
+        val result = verifier.verify(
+            toolName = "dismiss_keyboard",
+            args = emptyMap(),
+            result = ToolResult(
+                ok = true,
+                message = "dismissKeyboard",
+                data = mapOf(
+                    "was_visible_before" to "true",
+                    "still_visible_after" to "false",
+                )
+            ),
+            before = screen(),
+            after = screen(),
+        )
+
+        val passed = assertIs<ToolVerificationResult.Passed>(result)
+        assertEquals("true", passed.data["was_visible_before"])
+        assertEquals("false", passed.data["still_visible_after"])
+    }
+
+    @Test
+    fun dismissKeyboardPassesWhenKeyboardWasAlreadyHidden() {
+        val result = verifier.verify(
+            toolName = "dismiss_keyboard",
+            args = emptyMap(),
+            result = ToolResult(
+                ok = true,
+                message = "Keyboard already hidden",
+                data = mapOf(
+                    "was_visible_before" to "false",
+                    "still_visible_after" to "false",
+                )
+            ),
+            before = screen(),
+            after = screen(),
+        )
+
+        val passed = assertIs<ToolVerificationResult.Passed>(result)
+        assertTrue(passed.reason.contains("already hidden"))
+    }
+
+    @Test
+    fun dismissKeyboardVerifierFailsDefensivelyIfStillVisibleSurfaces() {
+        // The executor cannot currently produce still_visible_after=true:
+        // softKeyboardController.showMode = HIDDEN is synchronous in IMMS
+        // and the action does not poll for window-list confirmation.
+        // The verifier branch is kept defensively so a future regression
+        // that resurrects a polled-failure code path is still surfaced.
+        val result = verifier.verify(
+            toolName = "dismiss_keyboard",
+            args = emptyMap(),
+            result = ToolResult(
+                ok = true,
+                message = "dismissKeyboard",
+                data = mapOf(
+                    "was_visible_before" to "true",
+                    "still_visible_after" to "true",
+                )
+            ),
+            before = screen(),
+            after = screen(),
+        )
+
+        val failed = assertIs<ToolVerificationResult.Failed>(result)
+        assertTrue(failed.reason.contains("still visible"))
+    }
+
+    @Test
     fun skippedWhenToolAlreadyFailed() {
         val result = verifier.verify(
             toolName = "tap",

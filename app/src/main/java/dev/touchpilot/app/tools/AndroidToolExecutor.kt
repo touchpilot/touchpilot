@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.androidcontrol.DismissKeyboardOutcome
 import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.PolicyDecision
@@ -190,6 +191,9 @@ class AndroidToolExecutor(
                 }
                 record(name, selectorLog, result.ok, result.message)
                 ToolResult(result.ok, result.message)
+            }
+            "dismiss_keyboard" -> {
+                executeDismissKeyboard(args)
             }
             "get_foreground_app" -> {
                 val info = AccessibilityBridge.getForegroundApp()
@@ -410,6 +414,35 @@ class AndroidToolExecutor(
     }
 
     private data class ScrollVerification(val changed: Boolean)
+
+    private fun executeDismissKeyboard(args: Map<String, String>): ToolResult {
+        val timeoutMs = args["timeout_ms"]?.toLongOrNull() ?: 500L
+        val outcome = AccessibilityBridge.dismissKeyboard(timeoutMs)
+        val ok = when (outcome) {
+            is DismissKeyboardOutcome.Hidden,
+            is DismissKeyboardOutcome.AlreadyHidden -> true
+            is DismissKeyboardOutcome.NotConnected -> false
+        }
+        val message = when (outcome) {
+            is DismissKeyboardOutcome.Hidden -> "dismissKeyboard"
+            is DismissKeyboardOutcome.AlreadyHidden -> "Keyboard already hidden"
+            is DismissKeyboardOutcome.NotConnected -> "TouchPilot Control is not enabled."
+        }
+        record(
+            "dismiss_keyboard",
+            "timeout_ms=$timeoutMs",
+            ok,
+            "${outcome.javaClass.simpleName}",
+        )
+        return ToolResult(
+            ok = ok,
+            message = message,
+            data = mapOf(
+                "was_visible_before" to outcome.wasVisibleBefore.toString(),
+                "still_visible_after" to outcome.stillVisibleAfter.toString(),
+            )
+        )
+    }
 
     private fun foregroundAppData(info: ForegroundAppInfo): Map<String, String> {
         return buildMap {

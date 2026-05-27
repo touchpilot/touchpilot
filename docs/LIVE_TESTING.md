@@ -43,6 +43,11 @@ Launch TouchPilot:
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
 - [x] `Back` and `Home` work.
+- [ ] `dismiss_keyboard` hides the soft keyboard when it is visible.
+- [ ] `dismiss_keyboard` is a no-op when the keyboard is not visible and does
+      not navigate the foreground app.
+- [ ] `dismiss_keyboard` reports `was_visible_before` and
+      `still_visible_after` in the tool log.
 - [x] Medium-risk model-selected tools show inline approval prompts.
 - [x] Denied approvals stop execution and log the denial.
 - [x] Active skill allowlists deny disallowed tools.
