@@ -36,6 +36,9 @@ import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
+import dev.touchpilot.app.agent.ToolCallCardModel
+import dev.touchpilot.app.agent.ToolCallPolicyStatus
+import dev.touchpilot.app.agent.ToolCallResultStatus
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
@@ -431,8 +434,72 @@ class MainActivity : Activity() {
                 actionHint = event.runId?.let { "Tap for run details" },
                 onClick = event.runId?.let { runId -> { openRunDetail(runId) } }
             )
+            is ChatEvent.ToolCall -> toolCallCard(event.card)
             is ChatEvent.ApprovalPrompt -> approvalCard(event)
         }
+    }
+
+    private fun toolCallCard(cardModel: ToolCallCardModel): View {
+        val blocked = cardModel.policyStatus == ToolCallPolicyStatus.BLOCKED ||
+            cardModel.resultStatus == ToolCallResultStatus.BLOCKED
+        val failed = cardModel.resultStatus == ToolCallResultStatus.FAILED
+        val needsApproval = cardModel.policyStatus == ToolCallPolicyStatus.APPROVAL_REQUIRED
+        val stroke = when {
+            blocked || failed -> Theme.Danger
+            needsApproval -> Theme.Warning
+            cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED -> Theme.Accent
+            else -> Theme.StrokeDark
+        }
+
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = stroke
+            strokeWidth = if (blocked || failed || needsApproval) 2 else 1
+            radius = 8f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(
+            TextView(this).apply {
+                text = cardModel.tool
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        header.addView(
+            statusChip(cardModel.resultStatus.label, accent = cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED)
+        )
+        content.addView(header)
+
+        content.addView(
+            TextView(this).apply {
+                text = "Policy: ${cardModel.policyStatus.label}"
+                textSize = 11.5f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(stroke)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+
+        content.addView(
+            TextView(this).apply {
+                text = formatToolCallBody(cardModel)
+                textSize = 12.5f
+                setTextColor(Theme.BodyText)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+        card.addView(content)
+        return card.withMargins(top = 6, right = 24, bottom = 6)
     }
 
     private fun approvalCard(event: ChatEvent.ApprovalPrompt): View {
@@ -547,6 +614,11 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 agentRunHistory += record
+                record.result?.events
+                    ?.let(ToolCallCardModel::fromEvents)
+                    ?.forEach { card ->
+                        conversation += ChatEvent.ToolCall(card)
+                    }
                 conversation += ChatEvent.Timeline(
                     title = "Action timeline",
                     body = AgentRunDetailFormatter.compactSummary(record),
@@ -1670,6 +1742,36 @@ class MainActivity : Activity() {
         """.trimIndent()
     }
 
+    private fun formatToolCallBody(cardModel: ToolCallCardModel): String {
+        return buildString {
+            appendLine("Arguments:")
+            append(formatToolArgs(cardModel.args))
+            if (cardModel.message.isNotBlank()) {
+                appendLine()
+                appendLine()
+                append("Result: ")
+                append(cardModel.message)
+            }
+            if (!cardModel.verificationStatus.isNullOrBlank()) {
+                appendLine()
+                appendLine()
+                append("Verification: ")
+                append(cardModel.verificationStatus)
+                if (!cardModel.verificationReason.isNullOrBlank()) {
+                    append(" - ")
+                    append(cardModel.verificationReason)
+                }
+            }
+        }
+    }
+
+    private fun formatToolArgs(args: Map<String, String>): String {
+        if (args.isEmpty()) return "none"
+        return args.entries.joinToString(separator = "\n") { entry ->
+            "${entry.key}: ${entry.value.take(MaxToolCardFieldLength)}"
+        }
+    }
+
     private fun openRunDetail(runId: String) {
         activeRunDetailId = runId
         showSection(activeSection)
@@ -1904,6 +2006,7 @@ class MainActivity : Activity() {
         data class User(val text: String) : ChatEvent()
         data class Agent(val text: String, val detail: String) : ChatEvent()
         data class Timeline(val title: String, val body: String, val runId: String? = null) : ChatEvent()
+        data class ToolCall(val card: ToolCallCardModel) : ChatEvent()
         class ApprovalPrompt(
             val request: ToolApprovalRequest,
             val onDecision: (Boolean) -> Unit
@@ -1943,6 +2046,7 @@ class MainActivity : Activity() {
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
+        const val MaxToolCardFieldLength = 700
         val ProviderModeLabels = listOf("Local router", "Local model")
         val FocusInputSelectorLabels = listOf("Text", "Node ID", "View ID")
         val FocusInputSelectorHints = listOf(
@@ -1958,6 +2062,8 @@ class MainActivity : Activity() {
         val Card: Int = Color.rgb(17, 25, 33)
         val StrokeDark: Int = Color.rgb(32, 45, 55)
         val Accent: Int = Color.rgb(47, 220, 105)
+        val Warning: Int = Color.rgb(242, 183, 74)
+        val Danger: Int = Color.rgb(239, 97, 97)
         val OnAccent: Int = Color.rgb(4, 28, 12)
         val BodyText: Int = Color.rgb(214, 223, 231)
         val MutedText: Int = Color.rgb(137, 151, 164)
