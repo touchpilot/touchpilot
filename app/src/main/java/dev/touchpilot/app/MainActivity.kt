@@ -26,12 +26,20 @@ import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
+import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunIds
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentRunStepStatus
+import dev.touchpilot.app.agent.AgentStep
+import dev.touchpilot.app.agent.AgentStepStatus
+import dev.touchpilot.app.agent.AgentStepTimelineBuilder
+import dev.touchpilot.app.agent.timelineChipAccent
+import dev.touchpilot.app.agent.timelineChipLabel
+import dev.touchpilot.app.agent.timelineDetail
+import dev.touchpilot.app.agent.timelineLabel
 import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
@@ -434,6 +442,7 @@ class MainActivity : Activity() {
                 actionHint = event.runId?.let { "Tap for run details" },
                 onClick = event.runId?.let { runId -> { openRunDetail(runId) } }
             )
+            is ChatEvent.StepTimeline -> stepTimelineCard(event)
             is ChatEvent.ToolCall -> toolCallCard(event.card)
             is ChatEvent.ApprovalPrompt -> approvalCard(event)
         }
@@ -585,13 +594,26 @@ class MainActivity : Activity() {
         }
 
         conversation += ChatEvent.Agent("Working on it.", "Runtime: ${currentProviderMode().label()}")
+        val stepTimeline = ChatEvent.StepTimeline()
+        conversation += stepTimeline
         showSection(Section.CHAT)
 
         val runId = AgentRunIds.next()
         val startedAtMillis = System.currentTimeMillis()
 
         Thread {
-            val runOutcome = runCatching { reasoningCore.run(task) }
+            val timelineBuilder = AgentStepTimelineBuilder()
+            val runOutcome = runCatching {
+                reasoningCore.run(
+                    task = task,
+                    timeline = timelineBuilder,
+                    listener = AgentEventListener {
+                        runOnUiThread {
+                            refreshStepTimeline(stepTimeline, timelineBuilder.snapshot)
+                        }
+                    }
+                )
+            }
             val completedAtMillis = System.currentTimeMillis()
             val record = if (runOutcome.isSuccess) {
                 AgentRunRecord(
@@ -613,6 +635,14 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
+                val steps = if (runOutcome.isFailure) {
+                    timelineBuilder.snapshot + timelineBuilder.failureStop(
+                        "Agent failed: ${runOutcome.exceptionOrNull()?.message.orEmpty()}"
+                    )
+                } else {
+                    timelineBuilder.snapshot
+                }
+                refreshStepTimeline(stepTimeline, steps, complete = true)
                 agentRunHistory += record
                 record.result?.events
                     ?.let(ToolCallCardModel::fromEvents)
@@ -624,15 +654,30 @@ class MainActivity : Activity() {
                     body = AgentRunDetailFormatter.compactSummary(record),
                     runId = runId
                 )
-                conversation += ChatEvent.Agent(
-                    "Done.",
-                    "Tap the timeline card to inspect tool calls, verification, and stop reason."
-                )
+                val finalAnswer = runOutcome.getOrNull()?.finalAnswer
+                val doneDetail = when {
+                    finalAnswer != null -> finalAnswer
+                    runOutcome.isFailure -> record.errorMessage ?: "Agent failed."
+                    steps.isEmpty() -> "No steps recorded."
+                    else -> "Tap the timeline card to inspect tool calls, verification, and stop reason."
+                }
+                conversation += ChatEvent.Agent("Done.", doneDetail)
                 refreshExecutionLog()
                 refreshStatus()
                 showSection(Section.CHAT)
             }
         }.start()
+    }
+
+    private fun refreshStepTimeline(
+        event: ChatEvent.StepTimeline,
+        steps: List<AgentStep>,
+        complete: Boolean = false
+    ) {
+        event.steps = steps
+        event.isComplete = complete || event.isComplete
+        bindStepTimeline(event)
+        scrollChatToBottom()
     }
 
     private fun currentReasoningContext(): LocalReasoningContext {
@@ -1587,6 +1632,162 @@ class MainActivity : Activity() {
         return withoutScheme.substringBefore('/').ifBlank { trimmed }
     }
 
+    private fun stepTimelineCard(event: ChatEvent.StepTimeline): View {
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = Theme.StrokeDark
+            strokeWidth = 1
+            radius = 8f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        val titleView = TextView(this).apply {
+            text = "Agent steps"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+        }
+        val subtitleView = TextView(this).apply {
+            textSize = 11.5f
+            setTextColor(Theme.MutedText)
+            setPadding(0, 4, 0, 0)
+        }
+        val stepsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 10, 0, 0)
+        }
+        content.addView(titleView)
+        content.addView(subtitleView)
+        content.addView(stepsContainer)
+        card.addView(content)
+        event.viewHolder = ChatEvent.StepTimeline.ViewHolder(
+            subtitleView = subtitleView,
+            stepsContainer = stepsContainer
+        )
+        bindStepTimeline(event)
+        return card.withMargins(top = 8, bottom = 8)
+    }
+
+    private fun bindStepTimeline(event: ChatEvent.StepTimeline) {
+        val holder = event.viewHolder ?: return
+        val steps = event.steps
+        holder.subtitleView.text = when {
+            steps.isEmpty() -> "Waiting for the first step..."
+            event.isComplete -> "Completed ${steps.size} step${if (steps.size == 1) "" else "s"}"
+            else -> "Running locally on device"
+        }
+        holder.stepsContainer.removeAllViews()
+        if (steps.isEmpty()) {
+            holder.stepsContainer.addView(stepTimelineEmptyState())
+            return
+        }
+        steps.forEachIndexed { index, step ->
+            holder.stepsContainer.addView(stepTimelineRow(step, isLast = index == steps.lastIndex))
+        }
+    }
+
+    private fun stepTimelineEmptyState(): View {
+        return TextView(this).apply {
+            text = "Steps will appear here as TouchPilot observes, decides, and acts."
+            textSize = 12f
+            setTextColor(Theme.MutedText)
+            setPadding(0, 4, 0, 4)
+        }
+    }
+
+    private fun stepTimelineRow(step: AgentStep, isLast: Boolean): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, if (isLast) 0 else 6, 0, 6)
+        }
+        val rail = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, 2, 12, 0)
+        }
+        rail.addView(
+            View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(10, 10).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }
+                background = rounded(stepStatusColor(step.status), 5, stepStatusColor(step.status))
+            }
+        )
+        if (!isLast) {
+            rail.addView(
+                View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(2, 28)
+                    setBackgroundColor(Theme.StrokeDark)
+                }
+            )
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        header.addView(
+            TextView(this).apply {
+                text = step.type.timelineLabel()
+                textSize = 12.5f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+        )
+        header.addView(stepStatusChip(step.status))
+        column.addView(header)
+        column.addView(
+            TextView(this).apply {
+                text = step.timelineDetail()
+                textSize = 12f
+                setTextColor(Theme.BodyText)
+                setPadding(0, 4, 0, 0)
+            }
+        )
+        row.addView(rail)
+        row.addView(column)
+        return row
+    }
+
+    private fun stepStatusChip(status: AgentStepStatus): TextView {
+        return statusChip(status.timelineChipLabel(), accent = status.timelineChipAccent()).apply {
+            when (status) {
+                AgentStepStatus.FAILED,
+                AgentStepStatus.BLOCKED -> {
+                    background = rounded(Theme.SurfaceRaised, 8, Color.rgb(180, 70, 70))
+                    setTextColor(Color.rgb(255, 210, 210))
+                }
+                AgentStepStatus.CLARIFIED -> {
+                    background = rounded(Theme.SurfaceRaised, 8, Color.rgb(200, 150, 40))
+                    setTextColor(Color.rgb(255, 230, 170))
+                }
+                AgentStepStatus.PENDING -> {
+                    background = rounded(Theme.SurfaceRaised, 8, Theme.StrokeDark)
+                    setTextColor(Theme.MutedText)
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    private fun stepStatusColor(status: AgentStepStatus): Int {
+        return when (status) {
+            AgentStepStatus.OK -> Theme.Accent
+            AgentStepStatus.RUNNING -> Color.rgb(80, 170, 255)
+            AgentStepStatus.FAILED -> Color.rgb(220, 90, 90)
+            AgentStepStatus.BLOCKED -> Color.rgb(180, 70, 70)
+            AgentStepStatus.CLARIFIED -> Color.rgb(220, 170, 60)
+            AgentStepStatus.PENDING -> Theme.StrokeDark
+            AgentStepStatus.STOPPED -> Theme.MutedText
+        }
+    }
+
     private fun timelineCard(
         title: String,
         body: String,
@@ -2030,6 +2231,19 @@ class MainActivity : Activity() {
         data class User(val text: String) : ChatEvent()
         data class Agent(val text: String, val detail: String) : ChatEvent()
         data class Timeline(val title: String, val body: String, val runId: String? = null) : ChatEvent()
+        class StepTimeline(
+            steps: List<AgentStep> = emptyList(),
+            isComplete: Boolean = false
+        ) : ChatEvent() {
+            var steps: List<AgentStep> = steps
+            var isComplete: Boolean = isComplete
+            var viewHolder: ViewHolder? = null
+
+            class ViewHolder(
+                val subtitleView: TextView,
+                val stepsContainer: LinearLayout
+            )
+        }
         data class ToolCall(val card: ToolCallCardModel) : ChatEvent()
         class ApprovalPrompt(
             val request: ToolApprovalRequest,

@@ -20,11 +20,30 @@ class AgentRunner(
     private val policy: ActionPolicy = DefaultActionPolicy(),
     private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
-    fun run(task: String, maxSteps: Int = AgentRunLimits.DefaultMaxSteps): AgentRunResult {
-        return run(task, AgentRunLimits(maxSteps = maxSteps))
+    fun run(
+        task: String,
+        maxSteps: Int = AgentRunLimits.DefaultMaxSteps,
+        listener: AgentEventListener = AgentEventListener {},
+        timeline: AgentStepTimelineBuilder? = null
+    ): AgentRunResult {
+        return run(
+            task = task,
+            limits = AgentRunLimits(maxSteps = maxSteps),
+            listener = listener,
+            timeline = timeline
+        )
     }
 
     fun run(task: String, limits: AgentRunLimits): AgentRunResult {
+        return run(task, limits, AgentEventListener {}, null)
+    }
+
+    fun run(
+        task: String,
+        limits: AgentRunLimits,
+        listener: AgentEventListener,
+        timeline: AgentStepTimelineBuilder?
+    ): AgentRunResult {
         return BoundedLocalAgentLoop(
             tools = AndroidLoopTools(toolExecutor),
             approvalProvider = approvalProvider,
@@ -33,7 +52,12 @@ class AgentRunner(
             source = source,
             policy = policy,
             clarificationDecider = clarificationDecider
-        ).run(task, limits)
+        ).run(
+            task = task,
+            limits = limits,
+            listener = listener,
+            onStepsUpdated = timeline?.let { builder -> { steps -> builder.replaceAll(steps) } }
+        )
     }
 
     private class AndroidLoopTools(

@@ -172,7 +172,7 @@ class OfflineMilestone3Test {
     }
 
     private fun runScreenInquiry(context: ScreenContext) = DefaultLocalReasoningCore(
-        invocation = { _, _ -> error("screen inquiry must not invoke the agent runner") },
+        invocation = { _, _, _, _ -> error("screen inquiry must not invoke the agent runner") },
         sessionContext = {
             LocalReasoningContext(
                 skill = null,
