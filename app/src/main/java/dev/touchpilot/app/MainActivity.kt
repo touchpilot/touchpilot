@@ -37,6 +37,7 @@ import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunIds
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentRunResult
+import dev.touchpilot.app.agent.AgentRunState
 import dev.touchpilot.app.agent.AgentRunStepStatus
 import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.AgentStepStatus
@@ -98,6 +99,8 @@ class MainActivity : Activity() {
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
+    private var agentRunState: AgentRunState = AgentRunState.IDLE
+    private var agentCancellationSignal: AtomicBoolean = AtomicBoolean(false)
     private val agentRunHistory = mutableListOf<AgentRunRecord>()
     private var activeRunDetailId: String? = null
     private var pendingClarification: PendingClarification? = null
@@ -438,6 +441,10 @@ class MainActivity : Activity() {
             return
         }
 
+        contentRoot.addView(sectionTitle("Chat"))
+        contentRoot.addView(statusPill())
+        contentRoot.addView(skillPill())
+        contentRoot.addView(runStatePill())
         contentRoot.addView(chatContextStrip())
 
         conversation.forEach { event ->
@@ -729,6 +736,8 @@ class MainActivity : Activity() {
         }
 
         val workingIndex = conversation.size
+        agentCancellationSignal.set(false)
+        setAgentRunState(AgentRunState.RUNNING)
         conversation += ChatEvent.Working("Working on it.", "Runtime: ${currentProviderMode().label()}")
         val stepTimeline = ChatEvent.StepTimeline()
         conversation += stepTimeline
@@ -748,7 +757,8 @@ class MainActivity : Activity() {
                         runOnUiThread {
                             refreshStepTimeline(stepTimeline, timelineBuilder.snapshot)
                         }
-                    }
+                    },
+                    cancellationSignal = agentCancellationSignal
                 )
             }
             val completedAtMillis = System.currentTimeMillis()
@@ -778,6 +788,19 @@ class MainActivity : Activity() {
                     )
                 } else {
                     timelineBuilder.snapshot
+                }
+                if (agentCancellationSignal.get()) {
+                    setAgentRunState(AgentRunState.CANCELLED)
+                } else if (runOutcome.isFailure ||
+                           (record.result?.events?.any { it is AgentEvent.ToolFailed || it is AgentEvent.PolicyBlocked } == true)) {
+                    setAgentRunState(AgentRunState.FAILED)
+                    conversation.forEach { event ->
+                        if (event is ChatEvent.ApprovalPrompt && event.state == ApprovalState.PENDING) {
+                            event.state = ApprovalState.REJECTED
+                        }
+                    }
+                } else {
+                    setAgentRunState(AgentRunState.COMPLETED)
                 }
                 refreshStepTimeline(stepTimeline, steps, complete = true)
                 finishAgentChatRun(
@@ -1144,9 +1167,7 @@ class MainActivity : Activity() {
 
         contentRoot.addView(selectorRow)
         contentRoot.addView(focusInputField)
-
-        val focusDismissRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        focusDismissRow.addView(
+        contentRoot.addView(
             secondaryButton("Focus Input Field") {
                 hideKeyboard(focusInputField)
                 val args = mapOf(focusInputSelectorKey(focusSelectorIndex) to focusInputField.text.toString())
@@ -1156,17 +1177,8 @@ class MainActivity : Activity() {
                 } else {
                     lastFocusInputArgs = null
                 }
-            }.apply { id = R.id.focus_input_button },
-            rowButtonParams()
+            }.apply { id = R.id.focus_input_button }
         )
-        focusDismissRow.addView(
-            secondaryButton("Dismiss Keyboard") {
-                executeAndRender("dismiss_keyboard", emptyMap())
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.dismiss_keyboard_button },
-            rowButtonParams()
-        )
-        contentRoot.addView(focusDismissRow)
 
         contentRoot.addView(
             secondaryButton("Clear Focused Field") {
@@ -1540,6 +1552,28 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun setAgentRunState(state: AgentRunState) {
+        agentRunState = state
+        if (activeSection == Section.CHAT) {
+            showSection(Section.CHAT)
+        }
+    }
+
+    private fun cancelAgentRun() {
+        agentCancellationSignal.set(true)
+        setAgentRunState(AgentRunState.CANCELLED)
+
+        // Reject any pending approval prompts
+        conversation.forEach { event ->
+            if (event is ChatEvent.ApprovalPrompt && event.state == ApprovalState.PENDING) {
+                event.state = ApprovalState.REJECTED
+            }
+        }
+
+        conversation += ChatEvent.Agent("Run cancelled.", "Stopped by user request.")
+        showSection(Section.CHAT)
+    }
+
     private fun currentProviderMode(): AgentProviderMode {
         return when (preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name)) {
             AgentProviderMode.LOCAL_MODEL.name -> AgentProviderMode.LOCAL_MODEL
@@ -1862,6 +1896,69 @@ class MainActivity : Activity() {
             setLineSpacing(3f, 1f)
             setPadding(4, 0, 4, 0)
         }.withMargins(top = 2, bottom = 14)
+    }
+
+    private fun runStatePill(): View {
+        val (label, color) = when (agentRunState) {
+            AgentRunState.IDLE -> "Idle" to Theme.MutedText
+            AgentRunState.RUNNING -> "Running" to Theme.Accent
+            AgentRunState.WAITING_APPROVAL -> "Waiting for approval" to Color.rgb(255, 193, 7)
+            AgentRunState.WAITING_CLARIFICATION -> "Waiting for clarification" to Color.rgb(255, 193, 7)
+            AgentRunState.COMPLETED -> "Completed" to Theme.Accent
+            AgentRunState.FAILED -> "Failed" to Color.rgb(239, 68, 68)
+            AgentRunState.BLOCKED -> "Blocked" to Color.rgb(239, 68, 68)
+            AgentRunState.CANCELLED -> "Cancelled" to Theme.MutedText
+        }
+
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = color
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16, 12, 16, 12)
+        }
+
+        content.addView(
+            TextView(this).apply {
+                text = label
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(color)
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+
+        val canCancel = agentRunState == AgentRunState.RUNNING || agentRunState == AgentRunState.WAITING_APPROVAL
+        if (canCancel) {
+            content.addView(
+                MaterialButton(this).apply {
+                    text = "Stop"
+                    textSize = 11f
+                    typeface = Typeface.DEFAULT_BOLD
+                    isAllCaps = false
+                    minHeight = 32
+                    minWidth = 60
+                    insetTop = 0
+                    insetBottom = 0
+                    setTextColor(Color.rgb(239, 68, 68))
+                    backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+                    strokeColor = ColorStateList.valueOf(Color.rgb(239, 68, 68))
+                    strokeWidth = 1
+                    cornerRadius = 6
+                    setPadding(8, 4, 8, 4)
+                    setOnClickListener { cancelAgentRun() }
+                }
+            )
+        }
+
+        card.addView(content)
+        return card.withMargins(top = 8, bottom = 8)
     }
 
     private fun settingsPanelSwitcher(): View {

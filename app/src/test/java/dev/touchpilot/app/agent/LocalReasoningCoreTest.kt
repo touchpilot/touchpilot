@@ -23,7 +23,7 @@ class LocalReasoningCoreTest {
         val invocations = mutableListOf<String>()
         val collected = mutableListOf<AgentEvent>()
         val core = DefaultLocalReasoningCore(
-            invocation = { task, _, _, _ ->
+            invocation = { task, _, _, _, _ ->
                 invocations += task
                 error("invocation must not run for conversational input")
             },
@@ -53,7 +53,7 @@ class LocalReasoningCoreTest {
         val recordedContexts = mutableListOf<LocalReasoningContext>()
         val collected = mutableListOf<AgentEvent>()
         val core = DefaultLocalReasoningCore(
-            invocation = { _, ctx, _, _ ->
+            invocation = { _, ctx, _, _, _ ->
                 recordedContexts += ctx
                 sentinelResult
             },
@@ -72,7 +72,7 @@ class LocalReasoningCoreTest {
     @Test
     fun nullListenerIsTolerated() {
         val core = DefaultLocalReasoningCore(
-            invocation = { _, _, _, _ -> error("should not be called") },
+            invocation = { _, _, _, _, _ -> error("should not be called") },
             sessionContext = { defaultContext }
         )
         val result = core.run("help")
@@ -86,7 +86,7 @@ class LocalReasoningCoreTest {
     @Test
     fun customIntentsCanOverrideTheDefaultGate() {
         val core = DefaultLocalReasoningCore(
-            invocation = { _, _, _, _ -> error("should not be called") },
+            invocation = { _, _, _, _, _ -> error("should not be called") },
             sessionContext = { defaultContext },
             intents = { input ->
                 if (input == "ping") ConversationalResponse("pong") else null
@@ -100,7 +100,7 @@ class LocalReasoningCoreTest {
     fun mixedHelpPhraseFallsThroughToInvocation() {
         var sawInvocation = false
         val core = DefaultLocalReasoningCore(
-            invocation = { task, _, _, _ ->
+            invocation = { task, _, _, _, _ ->
                 sawInvocation = true
                 AgentRunResult(
                     transcript = "stub",
@@ -169,7 +169,7 @@ class LocalReasoningCoreTest {
         var invoked = false
         val collected = mutableListOf<AgentEvent>()
         val core = DefaultLocalReasoningCore(
-            invocation = { _, _, _, _ ->
+            invocation = { _, _, _, _, _ ->
                 invoked = true
                 error("unsafe intent must not invoke the runner")
             },
@@ -191,7 +191,7 @@ class LocalReasoningCoreTest {
         var invoked = false
         val collected = mutableListOf<AgentEvent>()
         val core = DefaultLocalReasoningCore(
-            invocation = { _, _, _, _ ->
+            invocation = { _, _, _, _, _ ->
                 invoked = true
                 error("clarification intent must not invoke the runner")
             },
@@ -222,7 +222,7 @@ class LocalReasoningCoreTest {
             providerMode = AgentProviderMode.LOCAL_MODEL
         )
         val core = DefaultLocalReasoningCore(
-            invocation = { _, ctx, _, _ ->
+            invocation = { _, ctx, _, _, _ ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
             },
@@ -246,7 +246,7 @@ class LocalReasoningCoreTest {
         // independent parser would press_back. The gate's decision must win.
         val ctxsSeen = mutableListOf<LocalReasoningContext>()
         val core = DefaultLocalReasoningCore(
-            invocation = { _, ctx, _, _ ->
+            invocation = { _, ctx, _, _, _ ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
             },
@@ -288,7 +288,7 @@ class LocalReasoningCoreTest {
             providerMode = AgentProviderMode.LOCAL_MODEL
         )
         val core = DefaultLocalReasoningCore(
-            invocation = { _, ctx, _, _ ->
+            invocation = { _, ctx, _, _, _ ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = null, events = emptyList())
             },
@@ -317,7 +317,7 @@ class LocalReasoningCoreTest {
         )
         val ctxsSeen = mutableListOf<LocalReasoningContext>()
         val core = DefaultLocalReasoningCore(
-            invocation = { _, ctx, _, _ ->
+            invocation = { _, ctx, _, _, _ ->
                 ctxsSeen += ctx
                 AgentRunResult(transcript = "", finalAnswer = "ok", events = emptyList())
             },
@@ -344,7 +344,7 @@ class LocalReasoningCoreTest {
         var invoked = false
         val collected = mutableListOf<AgentEvent>()
         val core = DefaultLocalReasoningCore(
-            invocation = { _, _, _, _ ->
+            invocation = { _, _, _, _, _ ->
                 invoked = true
                 error("missing skill should not invoke runner")
             },
@@ -388,7 +388,7 @@ class LocalReasoningCoreTest {
             )
         )
         val core = DefaultLocalReasoningCore(
-            invocation = { _, _, _, _ ->
+            invocation = { _, _, _, _, _ ->
                 invoked = true
                 error("screen inquiry must not invoke the runner")
             },
@@ -422,7 +422,7 @@ class LocalReasoningCoreTest {
         var invoked = false
         val collected = mutableListOf<AgentEvent>()
         val core = DefaultLocalReasoningCore(
-            invocation = { _, _, _, _ ->
+            invocation = { _, _, _, _, _ ->
                 invoked = true
                 error("screen inquiry must not invoke the runner")
             },
