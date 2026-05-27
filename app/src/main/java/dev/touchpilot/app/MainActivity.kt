@@ -29,12 +29,14 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
+import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunIds
 import dev.touchpilot.app.agent.AgentRunRecord
+import dev.touchpilot.app.agent.AgentRunResult
 import dev.touchpilot.app.agent.AgentRunState
 import dev.touchpilot.app.agent.AgentRunStepStatus
 import dev.touchpilot.app.agent.ConversationalGate
