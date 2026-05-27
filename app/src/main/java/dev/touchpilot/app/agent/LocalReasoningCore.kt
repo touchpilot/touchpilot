@@ -19,7 +19,14 @@ import dev.touchpilot.app.tools.AndroidToolExecutor
  * channel.
  */
 interface LocalReasoningCore {
-    fun run(task: String, listener: AgentEventListener = AgentEventListener {}): AgentRunResult
+    fun run(task: String, listener: AgentEventListener, cancellationSignal: java.util.concurrent.atomic.AtomicBoolean): AgentRunResult
+}
+
+/**
+ * Convenience overload for LocalReasoningCore.run() without cancellation support.
+ */
+fun LocalReasoningCore.run(task: String, listener: AgentEventListener = AgentEventListener {}): AgentRunResult {
+    return run(task, listener, java.util.concurrent.atomic.AtomicBoolean(false))
 }
 
 fun interface AgentEventListener {
@@ -45,7 +52,14 @@ data class LocalReasoningContext(
  * [defaultAgentRunInvocation] which builds and runs a real [AgentRunner].
  */
 fun interface AgentRunInvocation {
-    fun invoke(task: String, context: LocalReasoningContext): AgentRunResult
+    fun invoke(task: String, context: LocalReasoningContext, cancellationSignal: java.util.concurrent.atomic.AtomicBoolean): AgentRunResult
+}
+
+/**
+ * Convenience overload for invocation without cancellation support.
+ */
+fun AgentRunInvocation.invoke(task: String, context: LocalReasoningContext): AgentRunResult {
+    return invoke(task, context, java.util.concurrent.atomic.AtomicBoolean(false))
 }
 
 class DefaultLocalReasoningCore(
@@ -58,7 +72,7 @@ class DefaultLocalReasoningCore(
     private val screenSummarizer: ScreenContextSummarizer = ScreenContextSummarizer()
 ) : LocalReasoningCore {
 
-    override fun run(task: String, listener: AgentEventListener): AgentRunResult {
+    override fun run(task: String, listener: AgentEventListener, cancellationSignal: java.util.concurrent.atomic.AtomicBoolean): AgentRunResult {
         intents.respond(task)?.let { canned ->
             val userEvent = AgentEvent.UserMessage(task)
             val finalEvent = AgentEvent.FinalAnswer(canned.message)
@@ -122,7 +136,7 @@ class DefaultLocalReasoningCore(
             is IntentDecision.ScreenInquiry -> error("handled above")
         }
 
-        val result = invocation.invoke(task, effectiveCtx)
+        val result = invocation.invoke(task, effectiveCtx, cancellationSignal)
         result.events.forEach(listener::onEvent)
         return result
     }
@@ -225,14 +239,15 @@ fun defaultAgentRunInvocation(
     approvalProvider: ToolApprovalProvider,
     localModelRuntime: LocalCommandModelRuntime,
     policy: ActionPolicy = DefaultActionPolicy()
-): AgentRunInvocation = AgentRunInvocation { task, context ->
+): AgentRunInvocation = AgentRunInvocation { task, context, cancellationSignal ->
     buildDefaultAgentRunner(
         task = task,
         context = context,
         toolExecutor = toolExecutor,
         approvalProvider = approvalProvider,
         localModelRuntime = localModelRuntime,
-        policy = policy
+        policy = policy,
+        cancellationSignal = cancellationSignal
     ).run(task)
 }
 
@@ -247,7 +262,8 @@ fun buildDefaultAgentRunner(
     toolExecutor: AndroidToolExecutor,
     approvalProvider: ToolApprovalProvider,
     localModelRuntime: LocalCommandModelRuntime,
-    policy: ActionPolicy = DefaultActionPolicy()
+    policy: ActionPolicy = DefaultActionPolicy(),
+    cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
 ): AgentRunner {
     val commandProvider = buildCommandProvider(task, context, localModelRuntime)
     return AgentRunner(
@@ -256,7 +272,8 @@ fun buildDefaultAgentRunner(
         commandProvider = commandProvider,
         skill = context.skill,
         source = context.providerMode.toToolSource(),
-        policy = policy
+        policy = policy,
+        cancellationSignal = cancellationSignal
     )
 }
 

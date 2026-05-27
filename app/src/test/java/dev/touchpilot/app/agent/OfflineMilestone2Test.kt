@@ -44,7 +44,7 @@ class OfflineMilestone2Test {
     private fun core(
         sessionContext: LocalReasoningContext = baseContext,
         skills: List<Skill> = emptyList(),
-        invocation: AgentRunInvocation = AgentRunInvocation { _, _ ->
+        invocation: AgentRunInvocation = AgentRunInvocation { _, _, _ ->
             error("invocation should not run for this flow")
         }
     ): DefaultLocalReasoningCore = DefaultLocalReasoningCore(
@@ -164,7 +164,7 @@ class OfflineMilestone2Test {
     @Test
     fun passwordTaskBlockedByIntentGateBeforeReachingRunner() {
         val result = core(
-            invocation = AgentRunInvocation { _, _ ->
+            invocation = AgentRunInvocation { _, _, _ ->
                 error("unsafe requests must not reach the runner")
             }
         ).run("change my password please")
@@ -191,7 +191,7 @@ class OfflineMilestone2Test {
     @Test
     fun ambiguousReferencePromptsForClarification() {
         val result = core(
-            invocation = AgentRunInvocation { _, _ ->
+            invocation = AgentRunInvocation { _, _, _ ->
                 error("ambiguous references must not reach the runner")
             }
         ).run("do the thing")
@@ -261,7 +261,7 @@ class OfflineMilestone2Test {
         var context: LocalReasoningContext? = null
             private set
 
-        override fun invoke(task: String, context: LocalReasoningContext): AgentRunResult {
+        override fun invoke(task: String, context: LocalReasoningContext, cancellationSignal: java.util.concurrent.atomic.AtomicBoolean): AgentRunResult {
             this.context = context
             return producer(task, context)
         }
