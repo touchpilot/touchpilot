@@ -133,6 +133,23 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return setNodeText(node, text)
     }
 
+    fun clearFocusedField(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            ?: findNode(root) { it.isFocused }
+            ?: return false
+        if (!focused.isEnabled || !focused.isEditableTarget()) return false
+        return setNodeText(focused, "")
+    }
+
+    fun clearNode(nodeId: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = findNodeById(root, nodeId) ?: return false
+        if (!node.isEnabled || !node.isEditableTarget()) return false
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        return setNodeText(node, "")
+    }
+
     fun focusInput(text: String, nodeId: String, bounds: String, viewId: String): FocusResult {
         val root = rootInActiveWindow ?: return FocusResult(false, "No active window is available.")
 

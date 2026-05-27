@@ -745,6 +745,11 @@ class MainActivity : Activity() {
                 }
             }.apply { id = R.id.focus_input_button }
         )
+        contentRoot.addView(
+            secondaryButton("Clear Focused Field") {
+                executeAndRender("clear_text", emptyMap())
+            }.apply { id = R.id.clear_text_button }
+        )
 
         val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actionRow.addView(

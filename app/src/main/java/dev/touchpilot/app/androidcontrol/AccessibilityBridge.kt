@@ -91,4 +91,13 @@ object AccessibilityBridge {
         return service?.focusInput(text, nodeId, bounds, viewId)
             ?: FocusResult(false, "TouchPilot Control is not enabled.")
     }
+
+    fun clearFocusedField(): Boolean {
+        return service?.clearFocusedField() ?: false
+    }
+
+    fun clearNode(nodeId: String): Boolean {
+        if (nodeId.isBlank()) return false
+        return service?.clearNode(nodeId) ?: false
+    }
 }

@@ -34,6 +34,7 @@ class ToolVerifier {
                     "package_name" to (result.data["package_name"] ?: ""),
                 )
             )
+            "clear_text" -> verifyClearText(after)
             else -> ToolVerificationResult.Skipped("no verifier for $toolName")
         }
     }
@@ -176,6 +177,22 @@ class ToolVerifier {
             ToolVerificationResult.Failed(
                 reason = "expected UI text is not present after wait",
                 data = mapOf("text" to SensitiveTextRedactor.redact(expected))
+            )
+        }
+    }
+
+    private fun verifyClearText(after: ScreenContext): ToolVerificationResult {
+        val focused = after.nodes.firstOrNull { it.focused && it.isInputField }
+            ?: return ToolVerificationResult.Skipped("no focused input field in snapshot after clear")
+        return if (focused.text.raw.isEmpty()) {
+            ToolVerificationResult.Passed(
+                reason = "focused input field is empty after clear",
+                data = mapOf("node_id" to focused.nodeId.orEmpty())
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "focused input field still contains text after clear",
+                data = mapOf("node_id" to focused.nodeId.orEmpty())
             )
         }
     }

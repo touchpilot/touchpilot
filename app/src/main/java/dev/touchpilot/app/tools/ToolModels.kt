@@ -1,5 +1,6 @@
 package dev.touchpilot.app.tools
 
+import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollTarget
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
@@ -116,6 +117,19 @@ object AndroidToolCatalog {
             description = "Return the foreground app's package, label, window title, and activity for post-action verification.",
             risk = ToolRisk.LOW,
             arguments = emptyMap()
+        ),
+        ToolSpec(
+            name = "clear_text",
+            description = "Clear the focused or resolved editable input field.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                ClearTextTarget.TargetTextArg to "Visible input label to focus and clear.",
+                ClearTextTarget.TargetNodeIdArg to "Stable input node_id from observe_screen.",
+                ClearTextTarget.TargetBoundsArg to "Input bounds from observe_screen as left,top,right,bottom.",
+                ClearTextTarget.TargetViewIdArg to "Input viewIdResourceName from observe_screen.",
+                ClearTextTarget.TargetContentDescriptionArg to "Input content description to focus and clear.",
+            ),
+            requiredArguments = emptySet()
         )
     )
 
@@ -162,6 +176,20 @@ object AndroidToolCatalog {
                 .filter { args[it].isNullOrBlank().not() }
             if (selectors.size != 1) {
                 return "focus_input requires exactly one selector: text, node_id, bounds, or view_id"
+            }
+        }
+
+        if (name == "clear_text") {
+            val selectors = ClearTextTarget.selectorArgs.filter { args[it].isNullOrBlank().not() }
+            if (selectors.size > 1) {
+                return "clear_text requires at most one selector: target_text, target_node_id, target_bounds, target_view_id, or target_content_description"
+            }
+            val malformedBounds = args[ClearTextTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
             }
         }
 
