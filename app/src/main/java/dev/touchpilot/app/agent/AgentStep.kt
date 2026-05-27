@@ -159,8 +159,11 @@ enum class AgentStepStatus(val wireName: String) {
 enum class AgentStepStopReason(val wireName: String) {
     COMPLETED("completed"),
     MAX_STEPS("max_steps"),
+    REPEATED_TOOL_FAILURE("repeated_tool_failure"),
     POLICY_BLOCKED("policy_blocked"),
     APPROVAL_DENIED("approval_denied"),
+    USER_CANCELLED("user_cancelled"),
+    CLARIFICATION_NEEDED("clarification_needed"),
     PARSER_ERROR("parser_error"),
     EXECUTOR_ERROR("executor_error"),
     NO_VALID_ACTION("no_valid_action");
