@@ -27,6 +27,11 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentProviderMode
+import dev.touchpilot.app.agent.AgentRunDetailFormatter
+import dev.touchpilot.app.agent.AgentRunDisplayStep
+import dev.touchpilot.app.agent.AgentRunIds
+import dev.touchpilot.app.agent.AgentRunRecord
+import dev.touchpilot.app.agent.AgentRunStepStatus
 import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
@@ -77,6 +82,8 @@ class MainActivity : Activity() {
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
+    private val agentRunHistory = mutableListOf<AgentRunRecord>()
+    private var activeRunDetailId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -242,6 +249,9 @@ class MainActivity : Activity() {
     }
 
     private fun showSection(section: Section) {
+        if (section != Section.CHAT && section != Section.LOGS) {
+            activeRunDetailId = null
+        }
         activeSection = section
         updateBottomNav()
         chatInputBar.visibility = if (section == Section.CHAT) View.VISIBLE else View.GONE
@@ -381,6 +391,11 @@ class MainActivity : Activity() {
     }
 
     private fun renderChatScreen() {
+        if (activeRunDetailId != null) {
+            renderAgentRunDetailScreen()
+            return
+        }
+
         contentRoot.addView(sectionTitle("Chat"))
         contentRoot.addView(statusPill())
         contentRoot.addView(skillPill())
@@ -410,7 +425,12 @@ class MainActivity : Activity() {
         return when (event) {
             is ChatEvent.User -> userBubble(event.text)
             is ChatEvent.Agent -> agentBubble(event.text, event.detail)
-            is ChatEvent.Timeline -> timelineCard(event.title, event.body)
+            is ChatEvent.Timeline -> timelineCard(
+                title = event.title,
+                body = event.body,
+                actionHint = event.runId?.let { "Tap for run details" },
+                onClick = event.runId?.let { runId -> { openRunDetail(runId) } }
+            )
             is ChatEvent.ApprovalPrompt -> approvalCard(event)
         }
     }
@@ -500,16 +520,42 @@ class MainActivity : Activity() {
         conversation += ChatEvent.Agent("Working on it.", "Runtime: ${currentProviderMode().label()}")
         showSection(Section.CHAT)
 
+        val runId = AgentRunIds.next()
+        val startedAtMillis = System.currentTimeMillis()
+
         Thread {
-            val transcript = runCatching {
-                reasoningCore.run(task).transcript
-            }.getOrElse { error ->
-                "Agent failed: ${error.message}"
+            val runOutcome = runCatching { reasoningCore.run(task) }
+            val completedAtMillis = System.currentTimeMillis()
+            val record = if (runOutcome.isSuccess) {
+                AgentRunRecord(
+                    id = runId,
+                    task = task,
+                    startedAtMillis = startedAtMillis,
+                    completedAtMillis = completedAtMillis,
+                    result = runOutcome.getOrThrow()
+                )
+            } else {
+                AgentRunRecord(
+                    id = runId,
+                    task = task,
+                    startedAtMillis = startedAtMillis,
+                    completedAtMillis = completedAtMillis,
+                    result = null,
+                    errorMessage = runOutcome.exceptionOrNull()?.message ?: "Unknown agent error"
+                )
             }
 
             runOnUiThread {
-                conversation += ChatEvent.Timeline("Action timeline", transcript.trim())
-                conversation += ChatEvent.Agent("Done.", "Review the timeline for tool calls and results.")
+                agentRunHistory += record
+                conversation += ChatEvent.Timeline(
+                    title = "Action timeline",
+                    body = AgentRunDetailFormatter.compactSummary(record),
+                    runId = runId
+                )
+                conversation += ChatEvent.Agent(
+                    "Done.",
+                    "Tap the timeline card to inspect tool calls, verification, and stop reason."
+                )
                 refreshExecutionLog()
                 refreshStatus()
                 showSection(Section.CHAT)
@@ -958,6 +1004,11 @@ class MainActivity : Activity() {
     }
 
     private fun renderLogsScreen() {
+        if (activeRunDetailId != null) {
+            renderAgentRunDetailScreen()
+            return
+        }
+
         contentRoot.addView(sectionTitle("Logs"))
         contentRoot.addView(
             primaryButton("Export Debug Trace") {
@@ -966,6 +1017,7 @@ class MainActivity : Activity() {
                 showSection(Section.LOGS)
             }.apply { id = R.id.export_debug_trace_button }
         )
+        renderRecentAgentRuns()
         contentRoot.addView(timelineCard("Latest result", outputText))
         executionLogView = TextView(this).apply {
             id = R.id.execution_log_view
@@ -1439,13 +1491,23 @@ class MainActivity : Activity() {
         return withoutScheme.substringBefore('/').ifBlank { trimmed }
     }
 
-    private fun timelineCard(title: String, body: String): View {
+    private fun timelineCard(
+        title: String,
+        body: String,
+        actionHint: String? = null,
+        onClick: (() -> Unit)? = null
+    ): View {
         val card = MaterialCardView(this).apply {
             setCardBackgroundColor(Theme.Card)
-            strokeColor = Theme.StrokeDark
-            strokeWidth = 1
+            strokeColor = if (onClick != null) Theme.Accent else Theme.StrokeDark
+            strokeWidth = if (onClick != null) 2 else 1
             radius = 8f
             cardElevation = 0f
+            if (onClick != null) {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { onClick() }
+            }
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1467,6 +1529,16 @@ class MainActivity : Activity() {
                 setPadding(0, 8, 0, 0)
             }
         )
+        if (actionHint != null) {
+            content.addView(
+                TextView(this).apply {
+                    text = actionHint
+                    textSize = 11.5f
+                    setTextColor(Theme.Accent)
+                    setPadding(0, 8, 0, 0)
+                }
+            )
+        }
         card.addView(content)
         return card.withMargins(top = 8, bottom = 8)
     }
@@ -1598,6 +1670,213 @@ class MainActivity : Activity() {
         """.trimIndent()
     }
 
+    private fun openRunDetail(runId: String) {
+        activeRunDetailId = runId
+        showSection(activeSection)
+    }
+
+    private fun closeRunDetail() {
+        activeRunDetailId = null
+        showSection(activeSection)
+    }
+
+    private fun findAgentRun(runId: String): AgentRunRecord? {
+        return agentRunHistory.lastOrNull { it.id == runId }
+    }
+
+    private fun renderRecentAgentRuns() {
+        contentRoot.addView(
+            TextView(this).apply {
+                text = "Recent agent runs"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 12, 0, 4)
+            }
+        )
+        if (agentRunHistory.isEmpty()) {
+            contentRoot.addView(
+                timelineCard(
+                    title = "No agent runs yet",
+                    body = "Run a task from Chat to inspect structured run details here."
+                )
+            )
+            return
+        }
+
+        agentRunHistory.asReversed().forEach { record ->
+            contentRoot.addView(
+                timelineCard(
+                    title = record.task,
+                    body = AgentRunDetailFormatter.compactSummary(record),
+                    actionHint = "Tap for run details",
+                    onClick = { openRunDetail(record.id) }
+                )
+            )
+        }
+    }
+
+    private fun renderAgentRunDetailScreen() {
+        val runId = activeRunDetailId
+        contentRoot.addView(sectionTitle("Run details"))
+        contentRoot.addView(
+            secondaryButton("Go Back") {
+                closeRunDetail()
+            }.apply {
+                id = R.id.run_detail_back_button
+                minHeight = 46
+            }.withMargins(bottom = 12)
+        )
+
+        val record = runId?.let(::findAgentRun)
+        if (record == null) {
+            contentRoot.addView(
+                timelineCard(
+                    title = "Run unavailable",
+                    body = "This run is no longer available. It may have been cleared when the app restarted."
+                )
+            )
+            return
+        }
+
+        contentRoot.addView(
+            summaryCard(
+                title = "Task",
+                value = SensitiveTextRedactor.redact(record.task),
+                chipText = record.id,
+                chipAccent = true
+            )
+        )
+        contentRoot.addView(
+            timelineCard(
+                title = "Timing",
+                body = buildString {
+                    append("Started: ${AgentRunDetailFormatter.formatTimestamp(record.startedAtMillis)}")
+                    appendLine()
+                    append("Completed: ${AgentRunDetailFormatter.formatTimestamp(record.completedAtMillis)}")
+                }
+            )
+        )
+        contentRoot.addView(
+            timelineCard(
+                title = "Stop reason",
+                body = AgentRunDetailFormatter.deriveStopReason(record)
+            )
+        )
+        contentRoot.addView(
+            primaryButton("Export Run Trace") {
+                val file = exportRunTrace(record)
+                outputText = "Run trace exported: ${file.absolutePath}"
+                showSection(activeSection)
+            }.apply { id = R.id.export_run_trace_button }
+        )
+
+        val steps = AgentRunDetailFormatter.formatSteps(record)
+        contentRoot.addView(
+            TextView(this).apply {
+                text = if (steps.isEmpty()) "Steps" else "Steps (${steps.size})"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 12, 0, 4)
+            }
+        )
+        if (steps.isEmpty()) {
+            contentRoot.addView(
+                timelineCard(
+                    title = "No step data",
+                    body = record.errorMessage?.let { error ->
+                        "Run failed before structured events were recorded: ${SensitiveTextRedactor.redact(error)}"
+                    } ?: "Structured run events are unavailable for this run."
+                )
+            )
+            return
+        }
+
+        steps.forEach { step ->
+            contentRoot.addView(runDetailStepCard(step))
+        }
+    }
+
+    private fun runDetailStepCard(step: AgentRunDisplayStep): View {
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = stepStatusColor(step.status)
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(
+            TextView(this).apply {
+                text = "Step ${step.index}"
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        header.addView(statusChip(step.status.label, accent = step.status != AgentRunStepStatus.INFO))
+        content.addView(header)
+        content.addView(
+            TextView(this).apply {
+                text = step.title
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+        content.addView(
+            TextView(this).apply {
+                text = AgentRunDetailFormatter.formatTimestamp(step.timestampMillis)
+                textSize = 11f
+                setTextColor(Theme.MutedText)
+                setPadding(0, 4, 0, 0)
+            }
+        )
+        content.addView(
+            TextView(this).apply {
+                text = step.detail
+                textSize = 12.5f
+                setTextColor(Theme.BodyText)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+        card.addView(content)
+        return card.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun stepStatusColor(status: AgentRunStepStatus): Int {
+        return when (status) {
+            AgentRunStepStatus.SUCCESS,
+            AgentRunStepStatus.COMPLETE -> Theme.Accent
+            AgentRunStepStatus.FAILED,
+            AgentRunStepStatus.BLOCKED -> Theme.StrokeDark
+            AgentRunStepStatus.RUNNING,
+            AgentRunStepStatus.WAITING,
+            AgentRunStepStatus.PENDING -> Color.rgb(255, 196, 86)
+            AgentRunStepStatus.INFO -> Theme.StrokeDark
+        }
+    }
+
+    private fun exportRunTrace(record: AgentRunRecord): File {
+        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
+            mkdirs()
+        }
+        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val file = File(directory, "touchpilot-run-${record.id}-$timestamp.txt")
+        file.writeText(AgentRunDetailFormatter.exportRedactedTrace(record))
+        return file
+    }
+
     private fun exportDebugTrace(): File {
         val directory = File(getExternalFilesDir(null), "debug-traces").apply {
             mkdirs()
@@ -1624,7 +1903,7 @@ class MainActivity : Activity() {
     private sealed class ChatEvent {
         data class User(val text: String) : ChatEvent()
         data class Agent(val text: String, val detail: String) : ChatEvent()
-        data class Timeline(val title: String, val body: String) : ChatEvent()
+        data class Timeline(val title: String, val body: String, val runId: String? = null) : ChatEvent()
         class ApprovalPrompt(
             val request: ToolApprovalRequest,
             val onDecision: (Boolean) -> Unit

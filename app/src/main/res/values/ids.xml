@@ -44,5 +44,6 @@
     <item name="settings_panel_cloud_button" type="id" />
     <item name="settings_panel_runtime_button" type="id" />
     <item name="save_cloud_api_button" type="id" />
-    <item name="save_skill_button" type="id" />
+    <item name="export_run_trace_button" type="id" />
+    <item name="run_detail_back_button" type="id" />
 </resources>
