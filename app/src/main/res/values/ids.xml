@@ -3,6 +3,7 @@
     <item name="touchpilot_status" type="id" />
     <item name="open_accessibility_settings_button" type="id" />
     <item name="observe_screen_button" type="id" />
+    <item name="get_foreground_app_button" type="id" />
     <item name="open_app_input" type="id" />
     <item name="open_app_button" type="id" />
     <item name="tap_text_input" type="id" />

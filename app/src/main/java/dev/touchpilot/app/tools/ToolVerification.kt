@@ -27,6 +27,13 @@ class ToolVerifier {
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
             "wait_for_ui" -> verifyWaitForUi(args, after)
+            "get_foreground_app" -> ToolVerificationResult.Passed(
+                reason = "foreground app inspection is read-only",
+                data = mapOf(
+                    "accessibility_connected" to (result.data["accessibility_connected"] ?: "false"),
+                    "package_name" to (result.data["package_name"] ?: ""),
+                )
+            )
             else -> ToolVerificationResult.Skipped("no verifier for $toolName")
         }
     }

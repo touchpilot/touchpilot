@@ -93,6 +93,7 @@ class AndroidToolRetryPolicy(
                 "press_home" to action,
                 "wait_for_ui" to action.copy(waitForIdleAfterSuccess = false),
                 "focus_input" to action,
+                "get_foreground_app" to ToolRetryConfig(maxAttempts = 1, retryable = false),
             )
         }
     }

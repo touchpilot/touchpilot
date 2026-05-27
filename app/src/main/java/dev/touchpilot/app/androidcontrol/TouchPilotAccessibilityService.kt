@@ -14,6 +14,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class TouchPilotAccessibilityService : AccessibilityService() {
+    @Volatile
+    private var lastWindowPackage: String? = null
+
+    @Volatile
+    private var lastWindowActivity: String? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         AccessibilityBridge.attach(this)
@@ -25,7 +31,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // The first spike is pull-based from the debug screen.
+        if (event == null) return
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            // package + class on TYPE_WINDOW_STATE_CHANGED reflect the
+            // foreground activity. We cache the class because
+            // rootInActiveWindow alone cannot recover it later.
+            val pkg = event.packageName?.toString()
+            val cls = event.className?.toString()
+            if (!pkg.isNullOrBlank()) lastWindowPackage = pkg
+            if (!cls.isNullOrBlank()) lastWindowActivity = cls
+        }
     }
 
     override fun onInterrupt() {
@@ -38,6 +53,33 @@ class TouchPilotAccessibilityService : AccessibilityService() {
             appendLine("TouchPilot screen snapshot")
             appendNode(root, depth = 0, maxDepth = 8, nodeId = "0")
         }
+    }
+
+    fun getForegroundApp(): ForegroundAppInfo {
+        val root = rootInActiveWindow
+        val rootPackage = root?.packageName?.toString()
+        val packageName = rootPackage?.takeIf { it.isNotBlank() } ?: lastWindowPackage
+        val windowTitle = root?.window?.title?.toString()?.takeIf { it.isNotBlank() }
+        val activityClass = lastWindowActivity
+            ?.takeIf { it.isNotBlank() }
+            ?.takeIf { lastWindowPackage == null || lastWindowPackage == packageName }
+            ?: root?.className?.toString()?.takeIf { it.isNotBlank() }
+        val appLabel = packageName?.let { loadAppLabel(it) }
+        return ForegroundAppInfo(
+            packageName = packageName,
+            appLabel = appLabel,
+            windowTitle = windowTitle,
+            activityClass = activityClass,
+            accessibilityConnected = true,
+        )
+    }
+
+    private fun loadAppLabel(packageName: String): String? {
+        return runCatching {
+            val pm = applicationContext.packageManager
+            val info = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(info).toString().takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     fun observeScreenContext(): ScreenContext {

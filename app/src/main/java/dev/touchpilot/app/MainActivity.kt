@@ -638,6 +638,13 @@ class MainActivity : Activity() {
             }.apply { id = R.id.observe_screen_button }
         )
 
+        contentRoot.addView(
+            secondaryButton("Get Foreground App") {
+                executeAndRender("get_foreground_app", emptyMap())
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.get_foreground_app_button }
+        )
+
         val appInput = editText("App package or launcher label").apply { id = R.id.open_app_input }
         contentRoot.addView(appInput)
         contentRoot.addView(
