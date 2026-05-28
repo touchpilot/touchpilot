@@ -74,7 +74,6 @@ class MainActivity : Activity() {
     private lateinit var chatTaskInput: EditText
     private lateinit var statusView: TextView
     private lateinit var executionLogView: TextView
-    private lateinit var latestResultView: TextView
     private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
@@ -791,7 +790,9 @@ class MainActivity : Activity() {
                 Thread {
                     val result = toolExecutor.execute("wait_for_app", args, ToolSource.DIRECT_DEBUG)
                     runOnUiThread {
-                        outputText = SensitiveTextRedactor.redact("wait_for_app -> ${result.ok}: ${result.message}")
+                        sectionResults.recordToolsResult(
+                            SensitiveTextRedactor.redact("wait_for_app -> ${result.ok}: ${result.message}")
+                        )
                         refreshExecutionLog()
                         showSection(Section.TOOLS)
                     }
@@ -951,7 +952,9 @@ class MainActivity : Activity() {
                         ToolSource.DIRECT_DEBUG
                     )
                     runOnUiThread {
-                        outputText = SensitiveTextRedactor.redact("wait_for_ui -> ${result.ok}: ${result.message}")
+                        sectionResults.recordToolsResult(
+                            SensitiveTextRedactor.redact("wait_for_ui -> ${result.ok}: ${result.message}")
+                        )
                         refreshExecutionLog()
                         showSection(Section.TOOLS)
                     }
@@ -968,7 +971,9 @@ class MainActivity : Activity() {
                         ToolSource.DIRECT_DEBUG
                     )
                     runOnUiThread {
-                        outputText = SensitiveTextRedactor.redact("wait_for_idle -> ${result.ok}: ${result.message}")
+                        sectionResults.recordToolsResult(
+                            SensitiveTextRedactor.redact("wait_for_idle -> ${result.ok}: ${result.message}")
+                        )
                         refreshExecutionLog()
                         showSection(Section.TOOLS)
                     }
@@ -976,7 +981,7 @@ class MainActivity : Activity() {
             }.apply { id = R.id.wait_for_idle_button }
         )
 
-        contentRoot.addView(latestResultCard())
+        contentRoot.addView(timelineCard("Latest result", sectionResults.forTools()))
 
         // Tail spacer so the Focus / Dismiss row can scroll above the soft
         // keyboard when an input is focused (adjustResize alone leaves them
@@ -1055,7 +1060,7 @@ class MainActivity : Activity() {
             secondaryButton("List Tools") {
                 val endpoint = endpointInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
-                outputText = "Listing MCP tools..."
+                sectionResults.recordMcpResult("Listing MCP tools...")
                 showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
@@ -1079,7 +1084,7 @@ class MainActivity : Activity() {
                         "MCP list failed: ${error.message}"
                     }
                     runOnUiThread {
-                        outputText = result
+                        sectionResults.recordMcpResult(result)
                         showSection(Section.SETTINGS)
                     }
                 }.start()
@@ -1092,7 +1097,7 @@ class MainActivity : Activity() {
                 val toolName = toolInput.text.toString()
                 val argsText = argsInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
-                outputText = "Calling MCP tool..."
+                sectionResults.recordMcpResult("Calling MCP tool...")
                 showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
@@ -1104,7 +1109,7 @@ class MainActivity : Activity() {
                         "MCP call failed: ${error.message}"
                     }
                     runOnUiThread {
-                        outputText = result
+                        sectionResults.recordMcpResult(result)
                         showSection(Section.SETTINGS)
                     }
                 }.start()
@@ -1112,8 +1117,7 @@ class MainActivity : Activity() {
             rowButtonParams()
         )
         contentRoot.addView(actionRow)
-
-        contentRoot.addView(timelineCard("MCP result", outputText))
+        contentRoot.addView(timelineCard("MCP result", sectionResults.forMcp()))
     }
 
     private fun renderLogsScreen() {
@@ -1126,12 +1130,11 @@ class MainActivity : Activity() {
         contentRoot.addView(
             primaryButton("Export Debug Trace") {
                 val file = exportDebugTrace()
-                outputText = "Debug trace exported: ${file.absolutePath}"
+                sectionResults.recordLogsResult("Debug trace exported: ${file.absolutePath}")
                 showSection(Section.LOGS)
             }.apply { id = R.id.export_debug_trace_button }
         )
-        renderRecentAgentRuns()
-        contentRoot.addView(timelineCard("Latest result", outputText))
+        contentRoot.addView(timelineCard("Latest result", sectionResults.forLogs()))
         executionLogView = TextView(this).apply {
             id = R.id.execution_log_view
             text = ToolExecutionLog.render()
@@ -1227,7 +1230,6 @@ class MainActivity : Activity() {
                     .putString("agent_api_key", apiKeyInput.text.toString().trim())
                     .apply()
                 hideKeyboard(apiKeyInput)
-                outputText = "Cloud API settings saved."
                 showSection(Section.SETTINGS)
             }.apply { id = R.id.save_cloud_api_button }
         )
@@ -1244,20 +1246,15 @@ class MainActivity : Activity() {
         )
     }
 
-    private var outputText: String = "No result yet."
+    private val sectionResults = SectionResultStore()
 
     private fun executeAndRender(name: String, args: Map<String, String>): ToolResult {
         val result = toolExecutor.execute(name, args, ToolSource.DIRECT_DEBUG)
-        outputText = SensitiveTextRedactor.redact("$name($args) -> ${result.ok}: ${result.message}")
-        refreshLatestResult()
+        sectionResults.recordToolsResult(
+            SensitiveTextRedactor.redact("$name($args) -> ${result.ok}: ${result.message}")
+        )
         refreshExecutionLog()
         return result
-    }
-
-    private fun refreshLatestResult() {
-        if (::latestResultView.isInitialized) {
-            latestResultView.text = outputText
-        }
     }
 
     private fun refreshExecutionLog() {
@@ -1656,38 +1653,6 @@ class MainActivity : Activity() {
         return card.withMargins(top = 8, bottom = 8)
     }
 
-    private fun latestResultCard(): View {
-        val card = MaterialCardView(this).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = Theme.StrokeDark
-            strokeWidth = 1
-            radius = 18f
-            cardElevation = 0f
-            setPadding(18, 16, 18, 16)
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18, 16, 18, 16)
-        }
-        content.addView(
-            TextView(this).apply {
-                text = "Latest result"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }
-        )
-        latestResultView = TextView(this).apply {
-            text = outputText
-            textSize = 12.5f
-            setTextColor(Theme.BodyText)
-            setPadding(0, 8, 0, 0)
-        }
-        content.addView(latestResultView)
-        card.addView(content)
-        return card.withMargins(top = 10, right = 42, bottom = 10)
-    }
-
     private fun View.withMargins(
         left: Int = 0,
         top: Int = 0,
@@ -1909,7 +1874,7 @@ class MainActivity : Activity() {
         contentRoot.addView(
             primaryButton("Export Run Trace") {
                 val file = exportRunTrace(record)
-                outputText = "Run trace exported: ${file.absolutePath}"
+                sectionResults.recordLogsResult("Run trace exported: ${file.absolutePath}")
                 showSection(activeSection)
             }.apply { id = R.id.export_run_trace_button }
         )
