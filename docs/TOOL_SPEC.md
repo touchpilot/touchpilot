@@ -29,6 +29,7 @@ Tools are the only way an agent may affect the Android device.
 - `press_back`: send Android back.
 - `press_home`: return to launcher.
 - `wait_for_ui`: wait for a screen change or expected text.
+- `wait_for_app`: wait until a package name or launcher label is foreground.
 - `focus_input`: focus a visible editable input field without typing.
 - `clear_text`: clear the focused or resolved editable input field.
 - `dismiss_keyboard`: hide the soft keyboard if it is visible.
@@ -50,6 +51,9 @@ ambiguous container.
 `press_back`, `press_home`, `wait_for_ui`, `focus_input`, `clear_text`, and
 `dismiss_keyboard` from the Android Tools screen and the agent command-provider
 loop.
+`press_back`, `press_home`, `wait_for_ui`, `wait_for_app`, `focus_input`,
+`clear_text`, and `dismiss_keyboard` from the Android Tools screen and the
+agent command-provider loop.
 
 `dismiss_keyboard` is observation-gated: it inspects the accessibility window
 list for a `TYPE_INPUT_METHOD` window first. If the keyboard is already hidden,

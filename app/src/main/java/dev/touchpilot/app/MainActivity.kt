@@ -775,6 +775,30 @@ class MainActivity : Activity() {
             }.apply { id = R.id.open_app_button }
         )
 
+        val waitAppInput = editText("App package or launcher label to wait for").apply {
+            id = R.id.wait_for_app_input
+        }
+        contentRoot.addView(waitAppInput)
+        contentRoot.addView(
+            secondaryButton("Wait For App") {
+                val expected = waitAppInput.text.toString()
+                val args = if (expected.contains(".")) {
+                    mapOf("package" to expected, "timeout_ms" to "5000")
+                } else {
+                    mapOf("label" to expected, "timeout_ms" to "5000")
+                }
+                hideKeyboard(waitAppInput)
+                Thread {
+                    val result = toolExecutor.execute("wait_for_app", args, ToolSource.DIRECT_DEBUG)
+                    runOnUiThread {
+                        outputText = SensitiveTextRedactor.redact("wait_for_app -> ${result.ok}: ${result.message}")
+                        refreshExecutionLog()
+                        showSection(Section.TOOLS)
+                    }
+                }.start()
+            }.apply { id = R.id.wait_for_app_button }
+        )
+
         val tapInput = editText("Visible text to tap").apply { id = R.id.tap_text_input }
         contentRoot.addView(tapInput)
         contentRoot.addView(

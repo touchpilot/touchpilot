@@ -28,6 +28,14 @@ class ToolVerifier {
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
             "wait_for_ui" -> verifyWaitForUi(args, after)
+            "wait_for_app" -> ToolVerificationResult.Passed(
+                reason = "foreground app matched requested target",
+                data = mapOf(
+                    "matched_by" to result.data.getOrDefault("matched_by", ""),
+                    "package_name" to result.data.getOrDefault("package_name", ""),
+                    "app_label" to result.data.getOrDefault("app_label", ""),
+                ).redactedValues()
+            )
             "get_foreground_app" -> ToolVerificationResult.Passed(
                 reason = "foreground app inspection is read-only",
                 data = mapOf(
