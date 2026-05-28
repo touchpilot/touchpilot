@@ -52,6 +52,17 @@ class BoundedLocalAgentLoop(
 
         repeat(limits.maxSteps) { step ->
             val stepIndex = step + 1
+            if (cancellationSignal.get()) {
+                transcript.appendLine("Run cancelled by user at step $stepIndex")
+                events += AgentEvent.RunCancelled(reason = "Cancelled by user")
+                steps += AgentStepFactory.stop(
+                    sequenceNumber = stepIndex,
+                    reason = AgentStepStopReason.USER_CANCELLED,
+                    outputSummary = "Cancelled by user",
+                    inputSummary = "observed ${currentScreen.length} character(s)"
+                )
+                return stopped(transcript, events, steps, AgentStepStopReason.USER_CANCELLED)
+            }
             transcript.appendLine("Step $stepIndex")
             val raw = runCatching {
                 commandProvider.complete(AgentPrompts.systemPrompt(skill), context)
