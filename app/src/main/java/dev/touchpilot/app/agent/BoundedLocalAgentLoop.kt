@@ -295,7 +295,12 @@ class BoundedLocalAgentLoop(
                 stepNumber = stepIndex,
                 previousCommand = command,
                 previousToolResult = result,
-                failureReason = if (result.ok) null else result.message
+                failureReason = if (result.ok) null else result.message,
+                candidateTargets = if (result.ok) {
+                    emptyList()
+                } else {
+                    ClarificationFromToolResult.candidatesFromResult(result)
+                },
             )
         }
 
