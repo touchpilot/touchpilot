@@ -26,12 +26,15 @@ import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
+import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunIds
 import dev.touchpilot.app.agent.AgentRunRecord
+import dev.touchpilot.app.agent.AgentRunResult
 import dev.touchpilot.app.agent.AgentRunStepStatus
+import dev.touchpilot.app.agent.AgentStepStopReason
 import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
@@ -86,6 +89,7 @@ class MainActivity : Activity() {
     private val conversation = mutableListOf<ChatEvent>()
     private val agentRunHistory = mutableListOf<AgentRunRecord>()
     private var activeRunDetailId: String? = null
+    private var pendingClarification: PendingClarification? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -435,6 +439,7 @@ class MainActivity : Activity() {
             )
             is ChatEvent.ToolCall -> toolCallCard(event.card)
             is ChatEvent.ApprovalPrompt -> approvalCard(event)
+            is ChatEvent.ClarificationPrompt -> clarificationCard(event)
         }
     }
 
@@ -573,29 +578,135 @@ class MainActivity : Activity() {
         showSection(Section.CHAT)
     }
 
+    private fun clarificationCard(event: ChatEvent.ClarificationPrompt): View {
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = when (event.state) {
+                ClarificationState.PENDING -> Theme.Accent
+                ClarificationState.ANSWERED -> Theme.StrokeDark
+            }
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20, 18, 20, 18)
+        }
+
+        val statusLabel = when (event.state) {
+            ClarificationState.PENDING -> "Clarification needed"
+            ClarificationState.ANSWERED -> "Answered"
+        }
+        content.addView(
+            TextView(this).apply {
+                text = statusLabel
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            }
+        )
+        content.addView(
+            TextView(this).apply {
+                text = event.question
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+        if (event.detail.isNotBlank()) {
+            content.addView(
+                TextView(this).apply {
+                    text = SensitiveTextRedactor.redact(event.detail)
+                    textSize = 12.5f
+                    setTextColor(Theme.BodyText)
+                    setPadding(0, 6, 0, 0)
+                }
+            )
+        }
+
+        if (event.state == ClarificationState.PENDING && event.choices.isNotEmpty()) {
+            event.choices.forEach { choice ->
+                val label = SensitiveTextRedactor.redact(choice)
+                content.addView(
+                    secondaryButton(label) {
+                        resolveClarification(event, label)
+                    }.apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            topMargin = 10
+                        }
+                    }
+                )
+            }
+        } else if (event.state == ClarificationState.ANSWERED) {
+            content.addView(
+                TextView(this).apply {
+                    text = "You: ${event.selectedAnswer.orEmpty()}"
+                    textSize = 12.5f
+                    setTextColor(Theme.Accent)
+                    setPadding(0, 10, 0, 0)
+                }
+            )
+        } else if (event.state == ClarificationState.PENDING) {
+            content.addView(
+                TextView(this).apply {
+                    text = "Reply in the chat box below."
+                    textSize = 12.5f
+                    setTextColor(Theme.MutedText)
+                    setPadding(0, 10, 0, 0)
+                }
+            )
+        }
+
+        card.addView(content)
+        return card.withMargins(top = 8, bottom = 8)
+    }
+
+    private fun resolveClarification(event: ChatEvent.ClarificationPrompt, answer: String) {
+        if (event.state != ClarificationState.PENDING) return
+        event.state = ClarificationState.ANSWERED
+        event.selectedAnswer = answer
+        event.onAnswer(answer)
+        showSection(Section.CHAT)
+    }
+
     private fun runAgentFromChat(task: String) {
+        val pending = pendingClarification
+        val originalTask = pending?.originalTask
+        val agentTask = if (pending != null) {
+            pendingClarification = null
+            "${pending.originalTask}\n\nUser clarification: $task"
+        } else {
+            task
+        }
+
         conversation += ChatEvent.User(task)
 
-        val conversationalResponse = ConversationalGate.respond(task)
+        val conversationalResponse = ConversationalGate.respond(agentTask)
         if (conversationalResponse != null) {
             conversation += ChatEvent.Agent(conversationalResponse.message, "")
             showSection(Section.CHAT)
             return
         }
 
+        val workingIndex = conversation.size
         conversation += ChatEvent.Agent("Working on it.", "Runtime: ${currentProviderMode().label()}")
         showSection(Section.CHAT)
 
         val runId = AgentRunIds.next()
         val startedAtMillis = System.currentTimeMillis()
+        val taskForRecord = originalTask ?: task
 
         Thread {
-            val runOutcome = runCatching { reasoningCore.run(task) }
+            val runOutcome = runCatching { reasoningCore.run(agentTask) }
             val completedAtMillis = System.currentTimeMillis()
             val record = if (runOutcome.isSuccess) {
                 AgentRunRecord(
                     id = runId,
-                    task = task,
+                    task = taskForRecord,
                     startedAtMillis = startedAtMillis,
                     completedAtMillis = completedAtMillis,
                     result = runOutcome.getOrThrow()
@@ -603,7 +714,7 @@ class MainActivity : Activity() {
             } else {
                 AgentRunRecord(
                     id = runId,
-                    task = task,
+                    task = taskForRecord,
                     startedAtMillis = startedAtMillis,
                     completedAtMillis = completedAtMillis,
                     result = null,
@@ -612,7 +723,69 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
-                agentRunHistory += record
+                finishAgentChatRun(
+                    record = record,
+                    runOutcome = runOutcome,
+                    workingIndex = workingIndex,
+                    resumeOriginalTask = originalTask
+                )
+            }
+        }.start()
+    }
+
+    private fun finishAgentChatRun(
+        record: AgentRunRecord,
+        runOutcome: Result<AgentRunResult>,
+        workingIndex: Int,
+        resumeOriginalTask: String?,
+    ) {
+        removeWorkingIndicator(workingIndex)
+        agentRunHistory += record
+        refreshExecutionLog()
+        refreshStatus()
+
+        val result = runOutcome.getOrNull()
+        when {
+            result?.stopReason == AgentStepStopReason.CLARIFICATION_NEEDED -> {
+                val structured = result.events.filterIsInstance<AgentEvent.Clarification>().lastOrNull()
+                val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().lastOrNull()
+                val prompt = when {
+                    structured != null -> ClarificationChatPrompt(
+                        question = structured.question,
+                        detail = structured.detail,
+                        choices = structured.candidates.map {
+                            SensitiveTextRedactor.redact(it.displayLabel)
+                        },
+                    )
+                    assistant != null -> ClarificationChatPrompt(
+                        question = assistant.text,
+                        detail = assistant.detail,
+                        choices = assistant.choices,
+                    )
+                    else -> null
+                }
+                if (prompt != null) {
+                    val originalTask = resumeOriginalTask ?: record.task
+                    pendingClarification = PendingClarification(originalTask = originalTask)
+                    conversation += ChatEvent.ClarificationPrompt(
+                        question = prompt.question,
+                        detail = prompt.detail,
+                        choices = prompt.choices,
+                        onAnswer = { answer -> runAgentFromChat(answer) }
+                    )
+                } else {
+                    conversation += ChatEvent.Agent(
+                        "TouchPilot needs clarification before continuing.",
+                        result.stopMessage
+                    )
+                }
+            }
+            result?.stopReason == AgentStepStopReason.COMPLETED &&
+                isInformationalAssistantRun(result) -> {
+                val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().last()
+                conversation += ChatEvent.Agent(assistant.text, assistant.detail)
+            }
+            runOutcome.isSuccess -> {
                 record.result?.events
                     ?.let(ToolCallCardModel::fromEvents)
                     ?.forEach { card ->
@@ -621,17 +794,38 @@ class MainActivity : Activity() {
                 conversation += ChatEvent.Timeline(
                     title = "Action timeline",
                     body = AgentRunDetailFormatter.compactSummary(record),
-                    runId = runId
+                    runId = record.id
                 )
                 conversation += ChatEvent.Agent(
                     "Done.",
                     "Tap the timeline card to inspect tool calls, verification, and stop reason."
                 )
-                refreshExecutionLog()
-                refreshStatus()
-                showSection(Section.CHAT)
             }
-        }.start()
+            else -> {
+                conversation += ChatEvent.Agent(
+                    "Run failed.",
+                    record.errorMessage ?: "Unknown agent error"
+                )
+            }
+        }
+        showSection(Section.CHAT)
+    }
+
+    private fun removeWorkingIndicator(workingIndex: Int) {
+        if (workingIndex in conversation.indices &&
+            conversation[workingIndex] is ChatEvent.Agent &&
+            (conversation[workingIndex] as ChatEvent.Agent).text == "Working on it."
+        ) {
+            conversation.removeAt(workingIndex)
+        }
+    }
+
+    private fun isInformationalAssistantRun(result: AgentRunResult): Boolean {
+        val hasAssistant = result.events.any { it is AgentEvent.AssistantMessage }
+        val invokedTools = result.events.any {
+            it is AgentEvent.ToolRequested || it is AgentEvent.ToolRunning
+        }
+        return hasAssistant && !invokedTools
     }
 
     private fun currentReasoningContext(): LocalReasoningContext {
@@ -2008,6 +2202,16 @@ class MainActivity : Activity() {
         return file
     }
 
+    private data class PendingClarification(
+        val originalTask: String,
+    )
+
+    private data class ClarificationChatPrompt(
+        val question: String,
+        val detail: String,
+        val choices: List<String>,
+    )
+
     private sealed class ChatEvent {
         data class User(val text: String) : ChatEvent()
         data class Agent(val text: String, val detail: String) : ChatEvent()
@@ -2019,9 +2223,19 @@ class MainActivity : Activity() {
         ) : ChatEvent() {
             var state: ApprovalState = ApprovalState.PENDING
         }
+        class ClarificationPrompt(
+            val question: String,
+            val detail: String,
+            val choices: List<String>,
+            val onAnswer: (String) -> Unit
+        ) : ChatEvent() {
+            var state: ClarificationState = ClarificationState.PENDING
+            var selectedAnswer: String? = null
+        }
     }
 
     private enum class ApprovalState { PENDING, APPROVED, REJECTED }
+    private enum class ClarificationState { PENDING, ANSWERED }
 
     private enum class Section(val label: String) {
         CHAT("Chat"),

@@ -46,7 +46,8 @@ sealed class IntentDecision {
      */
     data class ClarificationNeeded(
         override val reason: String,
-        val clarification: String
+        val clarification: String,
+        val candidateLabels: List<String> = emptyList()
     ) : IntentDecision()
 
     /**

@@ -27,6 +27,16 @@ class AgentEventTest {
         assertEquals("assistant_message", assistantJson.getString("type"))
         assertEquals("Done.", assistantJson.getJSONObject("payload").getString("text"))
         assertEquals("Local router", assistantJson.getJSONObject("payload").getString("detail"))
+
+        val withChoices = AgentEvent.AssistantMessage(
+            text = "Which item should I tap?",
+            detail = "ambiguous",
+            choices = listOf("Save", "Cancel")
+        )
+        val choicesJson = withChoices.toJson().getJSONObject("payload").getJSONArray("choices")
+        assertEquals(2, choicesJson.length())
+        assertEquals("Save", choicesJson.getString(0))
+        assertEquals("Cancel", choicesJson.getString(1))
     }
 
     @Test

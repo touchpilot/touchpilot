@@ -5,6 +5,7 @@ import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.ToolResult
+import org.json.JSONArray
 import org.json.JSONObject
 
 sealed class AgentEvent(
@@ -38,6 +39,7 @@ sealed class AgentEvent(
     data class AssistantMessage(
         val text: String,
         val detail: String = "",
+        val choices: List<String> = emptyList(),
         override val id: String = nextId(),
         override val timestampMillis: Long = System.currentTimeMillis()
     ) : AgentEvent(id, timestampMillis) {
@@ -46,7 +48,10 @@ sealed class AgentEvent(
         override fun payload(redactSensitive: Boolean): Map<String, Any?> {
             return mapOf(
                 "text" to text.redacted(redactSensitive),
-                "detail" to detail.redacted(redactSensitive)
+                "detail" to detail.redacted(redactSensitive),
+                "choices" to JSONArray().apply {
+                    choices.forEach { put(it.redacted(redactSensitive)) }
+                }
             )
         }
     }

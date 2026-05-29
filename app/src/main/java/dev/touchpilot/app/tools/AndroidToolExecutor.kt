@@ -15,10 +15,12 @@ import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollResolution
 import dev.touchpilot.app.tools.targets.ScrollResolver
 import dev.touchpilot.app.tools.targets.ScrollTarget
+import dev.touchpilot.app.agent.ClarificationFromToolResult
 import dev.touchpilot.app.tools.targets.TargetResolutionResult
 import dev.touchpilot.app.tools.targets.TargetResolver
 import dev.touchpilot.app.tools.targets.TargetSelector
 import dev.touchpilot.app.tools.targets.TargetSelectorBuilder
+import dev.touchpilot.app.tools.targets.displayLabels
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 class AndroidToolExecutor(
@@ -345,7 +347,9 @@ class AndroidToolExecutor(
                 ToolResult(
                     ok = false,
                     message = message,
-                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
                 )
             }
             is TargetResolutionResult.NotFound -> {
@@ -419,7 +423,9 @@ class AndroidToolExecutor(
                 ToolResult(
                     ok = false,
                     message = message,
-                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
                 )
             }
             is TargetResolutionResult.NotFound -> {
@@ -488,7 +494,9 @@ class AndroidToolExecutor(
                 ToolResult(
                     ok = false,
                     message = message,
-                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
                 )
             }
             is ScrollResolution.NotFound -> {
@@ -653,7 +661,9 @@ class AndroidToolExecutor(
                 ToolResult(
                     ok = false,
                     message = message,
-                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
                 )
             }
             is TargetResolutionResult.NotFound -> {
