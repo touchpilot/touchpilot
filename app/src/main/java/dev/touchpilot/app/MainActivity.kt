@@ -362,8 +362,7 @@ class MainActivity : Activity() {
             minHeight = 56
             imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
             inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
-                InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEND) {
                     submitChatMessage()
