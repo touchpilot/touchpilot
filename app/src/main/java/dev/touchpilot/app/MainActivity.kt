@@ -454,6 +454,7 @@ class MainActivity : Activity() {
         return when (event) {
             is ChatEvent.User -> userBubble(event.text)
             is ChatEvent.Agent -> agentBubble(event.text, event.detail)
+            is ChatEvent.Working -> workingBubble(event.text, event.detail)
             is ChatEvent.Timeline -> timelineCard(
                 title = event.title,
                 body = event.body,
@@ -610,7 +611,7 @@ class MainActivity : Activity() {
             return
         }
 
-        conversation += ChatEvent.Agent("Working on it.", "Runtime: ${currentProviderMode().label()}")
+        conversation += ChatEvent.Working("Working on it.", "Runtime: ${currentProviderMode().label()}")
         showSection(Section.CHAT)
 
         val runId = AgentRunIds.next()
@@ -640,6 +641,8 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 agentRunHistory += record
+                val workingIdx = conversation.indexOfLast { it is ChatEvent.Working }
+                if (workingIdx >= 0) conversation.removeAt(workingIdx)
                 record.result?.events
                     ?.let(ToolCallCardModel::fromEvents)
                     ?.forEach { card ->
@@ -1499,6 +1502,81 @@ class MainActivity : Activity() {
         return column.withMargins(top = 6, bottom = 6)
     }
 
+    private fun workingBubble(text: String, detail: String): View {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.START
+        }
+        column.addView(senderLabel("TouchPilot", alignEnd = false))
+
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bubbleBackground(Theme.Card, Theme.Accent, tailOnRight = false)
+            setPadding(20, 14, 20, 14)
+        }
+
+        val mainText = TextView(this).apply {
+            setText("$text  ")
+            textSize = 14.5f
+            setTextColor(Theme.BodyText)
+            setLineSpacing(4f, 1f)
+            maxWidth = bubbleMaxWidth()
+        }
+        bubble.addView(mainText)
+
+        if (detail.isNotBlank()) {
+            bubble.addView(
+                TextView(this).apply {
+                    setText(detail)
+                    textSize = 12f
+                    setTextColor(Theme.MutedText)
+                    setLineSpacing(3f, 1f)
+                    setPadding(0, 6, 0, 0)
+                    maxWidth = bubbleMaxWidth()
+                }
+            )
+        }
+
+        animateTypingDots(mainText, baseText = text)
+
+        column.addView(
+            bubble,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START
+            }
+        )
+        return column.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun animateTypingDots(target: TextView, baseText: String) {
+        var step = 0
+        val intervalMs = 350L
+        val runner = object : Runnable {
+            override fun run() {
+                val count = (step % 3) + 1
+                target.text = baseText + "  " + ".".repeat(count) + " ".repeat(3 - count)
+                step++
+                target.postDelayed(this, intervalMs)
+            }
+        }
+        target.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                v.removeCallbacks(runner)
+                v.post(runner)
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                v.removeCallbacks(runner)
+            }
+        })
+        if (target.isAttachedToWindow) {
+            target.removeCallbacks(runner)
+            target.post(runner)
+        }
+    }
+
     private fun senderLabel(text: String, alignEnd: Boolean): TextView {
         return TextView(this).apply {
             setText(text)
@@ -2143,6 +2221,7 @@ class MainActivity : Activity() {
     private sealed class ChatEvent {
         data class User(val text: String) : ChatEvent()
         data class Agent(val text: String, val detail: String) : ChatEvent()
+        data class Working(val text: String, val detail: String) : ChatEvent()
         data class Timeline(val title: String, val body: String, val runId: String? = null) : ChatEvent()
         data class ToolCall(val card: ToolCallCardModel) : ChatEvent()
         class ApprovalPrompt(
