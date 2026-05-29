@@ -18,6 +18,7 @@ import dev.touchpilot.app.tools.targets.ScrollTarget
 import dev.touchpilot.app.tools.targets.TargetResolutionResult
 import dev.touchpilot.app.tools.targets.TargetResolver
 import dev.touchpilot.app.tools.targets.TargetSelector
+import dev.touchpilot.app.tools.targets.TargetSelectorBuilder
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 class AndroidToolExecutor(
@@ -139,21 +140,7 @@ class AndroidToolExecutor(
                 ToolResult(ok, "openApp")
             }
             "tap" -> {
-                val text = args["text"].orEmpty()
-                val nodeId = args["node_id"].orEmpty()
-                val bounds = args["bounds"].orEmpty()
-                val ok = when {
-                    nodeId.isNotBlank() -> AccessibilityBridge.tapByNodeId(nodeId)
-                    bounds.isNotBlank() -> AccessibilityBridge.tapByBounds(bounds)
-                    else -> AccessibilityBridge.tapByText(text)
-                }
-                val selector = when {
-                    nodeId.isNotBlank() -> "node_id=\"$nodeId\""
-                    bounds.isNotBlank() -> "bounds=\"$bounds\""
-                    else -> "text=\"$text\""
-                }
-                record(name, selector, ok, "tap")
-                ToolResult(ok, "tap", mapOf("selector" to selector))
+                executeTap(args)
             }
             "type_text" -> {
                 executeTypeText(args)
@@ -315,6 +302,72 @@ class AndroidToolExecutor(
             result.message
         )
         return result
+    }
+
+    private fun executeTap(args: Map<String, String>): ToolResult {
+        val selector = TargetSelectorBuilder.fromLegacyArgs(args)
+        val resolution = targetResolver.resolve(
+            context = AccessibilityBridge.observeScreenContext(),
+            selector = selector
+        )
+
+        return when (resolution) {
+            is TargetResolutionResult.Resolved -> {
+                val candidate = resolution.candidate
+                val nodeId = candidate.node.nodeId
+                val boundsArg = candidate.selector.bounds?.toBoundsArg()
+                val ok = when {
+                    !nodeId.isNullOrBlank() -> AccessibilityBridge.tapByNodeId(nodeId)
+                    boundsArg != null -> AccessibilityBridge.tapByBounds(boundsArg)
+                    else -> false
+                }
+                val message = when {
+                    ok -> "tap"
+                    nodeId.isNullOrBlank() && boundsArg == null ->
+                        "Resolved tap target has no stable node id or bounds"
+                    else -> "Unable to perform tap on resolved target"
+                }
+                record("tap", tapLogArgs(candidate.selector), ok, message)
+                ToolResult(
+                    ok = ok,
+                    message = message,
+                    data = buildMap {
+                        put("selector", tapLogArgs(candidate.selector))
+                        if (!nodeId.isNullOrBlank()) put("node_id", nodeId)
+                        put("confidence", candidate.confidence.toString())
+                        put("match_reasons", candidate.matchReasons.joinToString(","))
+                    }
+                )
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous tap target: ${resolution.reason}"
+                record("tap", "target=ambiguous", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "Tap target not found: ${resolution.reason}"
+                record("tap", "target=not_found", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+        }
+    }
+
+    private fun tapLogArgs(selector: TargetSelector): String {
+        val label = selector.text?.displaySafe?.takeIf { it.isNotBlank() }
+            ?: selector.contentDescription?.displaySafe?.takeIf { it.isNotBlank() }
+            ?: selector.nodeId?.let { "node_id=$it" }
+            ?: selector.viewIdResourceName?.let { "view_id=$it" }
+            ?: selector.bounds?.let { "bounds=${it.toBoundsArg()}" }
+            ?: "resolved"
+        return "target=\"$label\""
     }
 
     private fun executeTypeText(args: Map<String, String>): ToolResult {

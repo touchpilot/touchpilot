@@ -41,7 +41,8 @@ object AndroidToolCatalog {
         ),
         ToolSpec(
             name = "tap",
-            description = "Tap a visible UI target by semantic text, node_id, or bounds.",
+            description = "Tap a visible UI target resolved from text, node_id, or bounds. " +
+                "Fails safely when the target is ambiguous or cannot be found.",
             risk = ToolRisk.MEDIUM,
             arguments = mapOf(
                 "text" to "Visible text or content description to tap.",
