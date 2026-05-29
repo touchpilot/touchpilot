@@ -112,7 +112,7 @@ class McpHttpClient(
         }
 
         val responseText = if (connection.responseCode in 200..299) {
-            connection.getHeaderField(SessionHeader)?.takeIf { it.isNotBlank() }?.let {
+            connection.getHeaderField(SessionHeader)?.trim()?.takeIf { it.isNotBlank() }?.let {
                 sessionId = it
             }
             connection.inputStream.bufferedReader().use { it.readText() }
