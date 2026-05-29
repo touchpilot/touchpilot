@@ -123,6 +123,17 @@ object AndroidToolCatalog {
             requiredArguments = setOf("text")
         ),
         ToolSpec(
+            name = "wait_for_idle",
+            description = "Wait until the redacted screen context remains stable for a bounded window.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                WaitForIdle.StableArg to "Milliseconds the screen context must remain stable.",
+                WaitForIdle.TimeoutArg to "Maximum wait time in milliseconds.",
+                WaitForIdle.IncludeBoundsArg to "true if bounds changes should count as instability."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "wait_for_app",
             description = "Wait until a package name or launcher label becomes the foreground app.",
             risk = ToolRisk.LOW,
@@ -150,6 +161,20 @@ object AndroidToolCatalog {
             description = "Return the foreground app's package, label, window title, and activity for post-action verification.",
             risk = ToolRisk.LOW,
             arguments = emptyMap()
+        ),
+        ToolSpec(
+            name = "find_element",
+            description = "Search the current screen for elements matching a structured query and return ranked candidates.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                "text" to "Visible text query.",
+                "content_description" to "Accessibility content description query.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "class_name" to "Android class name filter (e.g. android.widget.Button).",
+                "match" to "Match mode: exact, contains, or semantic. Defaults to contains.",
+                "limit" to "Maximum number of candidates to return (1-25). Defaults to 5."
+            ),
+            requiredArguments = emptySet()
         ),
         ToolSpec(
             name = "clear_text",
@@ -221,6 +246,10 @@ object AndroidToolCatalog {
             }
         }
 
+        if (name == "wait_for_idle") {
+            return WaitForIdle.validate(args)
+        }
+
         if (name == "clear_text") {
             val selectors = ClearTextTarget.selectorArgs.filter { args[it].isNullOrBlank().not() }
             if (selectors.size > 1) {
@@ -276,6 +305,22 @@ object AndroidToolCatalog {
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
+        if (name == "find_element") {
+            val filters = listOf("text", "content_description", "node_id", "class_name")
+                .filter { args[it].isNullOrBlank().not() }
+            if (filters.isEmpty()) {
+                return "find_element requires at least one filter: text, content_description, node_id, or class_name"
+            }
+            val match = args["match"]
+            if (!match.isNullOrBlank() && MatchMode.fromWire(match) == null) {
+                return "find_element match must be one of: exact, contains, semantic"
+            }
+            val limit = args["limit"]
+            if (!limit.isNullOrBlank()) {
+                val parsed = limit.toIntOrNull()
+                if (parsed == null || parsed < 1 || parsed > FindElementQuery.MaxLimit) {
+                    return "find_element limit must be an integer between 1 and ${FindElementQuery.MaxLimit}"
+                }
             }
         }
 
