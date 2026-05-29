@@ -321,21 +321,22 @@ class MainActivity : Activity() {
 
         val inputRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.BOTTOM
             setPadding(0, 12, 0, 0)
         }
         chatTaskInput = EditText(this).apply {
             id = R.id.agent_task_input
             hint = "Message TouchPilot..."
             setSingleLine(false)
-            minLines = 2
-            maxLines = 4
+            minLines = 1
+            maxLines = 5
             textSize = 14.5f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
-            background = rounded(Theme.Card, 10, Theme.StrokeDark)
-            setPadding(18, 12, 18, 12)
-            minHeight = 64
+            setLineSpacing(4f, 1f)
+            background = rounded(Theme.Card, 24, Theme.StrokeDark)
+            setPadding(22, 14, 22, 14)
+            minHeight = 56
             imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
@@ -359,25 +360,25 @@ class MainActivity : Activity() {
             MaterialButton(this).apply {
                 id = R.id.run_agent_button
                 text = "Send"
-                textSize = 13f
+                textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
                 isAllCaps = false
-                minHeight = 44
-                minWidth = 88
+                minHeight = 56
+                minWidth = 0
                 insetTop = 0
                 insetBottom = 0
                 gravity = Gravity.CENTER
                 setTextColor(Theme.OnAccent)
                 backgroundTintList = ColorStateList.valueOf(Theme.Accent)
-                cornerRadius = 10
-                setPadding(12, 0, 12, 0)
+                cornerRadius = 28
+                setPadding(34, 0, 34, 0)
                 setOnClickListener { submitChatMessage() }
             },
             LinearLayout.LayoutParams(
-                88,
-                52
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                56
             ).apply {
-                leftMargin = 8
+                leftMargin = 10
             }
         )
         bar.addView(inputRow)
@@ -398,9 +399,7 @@ class MainActivity : Activity() {
             return
         }
 
-        contentRoot.addView(sectionTitle("Chat"))
-        contentRoot.addView(statusPill())
-        contentRoot.addView(skillPill())
+        contentRoot.addView(chatContextStrip())
 
         conversation.forEach { event ->
             contentRoot.addView(renderChatEvent(event))
@@ -1380,33 +1379,93 @@ class MainActivity : Activity() {
     }
 
     private fun userBubble(text: String): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
         }
-        row.addView(
+        column.addView(senderLabel("You", alignEnd = true))
+        column.addView(
             TextView(this).apply {
                 setText(text)
-                textSize = 14f
+                textSize = 14.5f
                 setTextColor(Theme.OnAccent)
-                background = rounded(Theme.Accent, 10, Theme.Accent)
-                setPadding(18, 14, 18, 14)
+                setLineSpacing(4f, 1f)
+                background = bubbleBackground(Theme.Accent, Theme.Accent, tailOnRight = true)
+                setPadding(20, 14, 20, 14)
+                maxWidth = bubbleMaxWidth()
             },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                leftMargin = 56
+                gravity = Gravity.END
             }
         )
-        return row.withMargins(top = 8, bottom = 8)
+        return column.withMargins(top = 6, bottom = 6)
     }
 
     private fun agentBubble(text: String, detail: String): View {
-        return timelineCard(text, detail).apply {
-            (layoutParams as? LinearLayout.LayoutParams)?.rightMargin = 36
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.START
+        }
+        column.addView(senderLabel("TouchPilot", alignEnd = false))
+
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bubbleBackground(Theme.Card, Theme.StrokeDark, tailOnRight = false)
+            setPadding(20, 14, 20, 14)
+        }
+        bubble.addView(
+            TextView(this).apply {
+                setText(text)
+                textSize = 14.5f
+                setTextColor(Theme.BodyText)
+                setLineSpacing(4f, 1f)
+                maxWidth = bubbleMaxWidth()
+            }
+        )
+        if (detail.isNotBlank()) {
+            bubble.addView(
+                TextView(this).apply {
+                    setText(detail)
+                    textSize = 12f
+                    setTextColor(Theme.MutedText)
+                    setLineSpacing(3f, 1f)
+                    setPadding(0, 6, 0, 0)
+                    maxWidth = bubbleMaxWidth()
+                }
+            )
+        }
+        column.addView(
+            bubble,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START
+            }
+        )
+        return column.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun senderLabel(text: String, alignEnd: Boolean): TextView {
+        return TextView(this).apply {
+            setText(text)
+            textSize = 11f
+            setTextColor(Theme.MutedText)
+            setPadding(6, 0, 6, 4)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = if (alignEnd) Gravity.END else Gravity.START
+            }
         }
     }
+
+    private fun bubbleMaxWidth(): Int =
+        (resources.displayMetrics.widthPixels * 0.78f).toInt()
 
     private fun statusPill(): View {
         return timelineCard(
@@ -1429,8 +1488,16 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun skillPill(): View {
-        return timelineCard("Active skill", selectedSkill()?.title ?: "No skill")
+    private fun chatContextStrip(): View {
+        val runtime = currentProviderMode().label()
+        val skill = selectedSkill()?.title ?: "No skill selected"
+        return TextView(this).apply {
+            text = "Runtime: $runtime   ·   Skill: $skill"
+            textSize = 11.5f
+            setTextColor(Theme.MutedText)
+            setLineSpacing(3f, 1f)
+            setPadding(4, 0, 4, 0)
+        }.withMargins(top = 2, bottom = 14)
     }
 
     private fun settingsPanelSwitcher(): View {
@@ -1674,6 +1741,21 @@ class MainActivity : Activity() {
             setColor(fill)
             cornerRadius = radius.toFloat()
             setStroke(1, stroke)
+        }
+    }
+
+    private fun bubbleBackground(fill: Int, stroke: Int, tailOnRight: Boolean): GradientDrawable {
+        val large = 22f
+        val tail = 6f
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(fill)
+            setStroke(1, stroke)
+            cornerRadii = if (tailOnRight) {
+                floatArrayOf(large, large, large, large, tail, tail, large, large)
+            } else {
+                floatArrayOf(large, large, large, large, large, large, tail, tail)
+            }
         }
     }
 
