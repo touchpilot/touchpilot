@@ -46,6 +46,12 @@ Launch TouchPilot:
 - [ ] `Tap Text` followed by `wait_for_idle` settles after the tap transition.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
+- [ ] `Swipe Left` and `Swipe Right` advance a horizontal pager/carousel (e.g.
+      the launcher home screens or a photo viewer). Added in Milestone 4
+      (issue #86); pending a live emulator pass.
+- [ ] `Swipe Up` and `Swipe Down` move a vertical gesture surface (e.g. the
+      notification shade or a bottom sheet). Added in Milestone 4 (issue #86);
+      pending a live emulator pass.
 - [ ] `Scroll Down` or `Scroll Up` followed by `wait_for_idle` settles after movement.
 - [ ] Keyboard dismissal followed by `wait_for_idle` settles after IME changes.
 - [x] `Back` and `Home` work.

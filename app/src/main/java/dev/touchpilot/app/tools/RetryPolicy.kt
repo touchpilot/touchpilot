@@ -89,6 +89,7 @@ class AndroidToolRetryPolicy(
                 "tap" to action,
                 "type_text" to action,
                 "scroll" to action,
+                "swipe" to action,
                 "press_back" to action,
                 "press_home" to action,
                 "wait_for_ui" to action.copy(waitForIdleAfterSuccess = false),

@@ -23,6 +23,9 @@ Tools are the only way an agent may affect the Android device.
 - `tap`: tap a semantic target by visible text, stable `node_id`, or bounds.
 - `type_text`: type text into the focused field or selected target.
 - `scroll`: scroll the current view.
+- `swipe`: swipe a gesture surface (pager, carousel, drawer, map) by direction
+  or between explicit coordinates — distinct from `scroll`, which drives a
+  scrollable container's accessibility scroll action.
 - `press_back`: send Android back.
 - `press_home`: return to launcher.
 - `wait_for_ui`: wait for a screen change or expected text.
@@ -33,6 +36,25 @@ Tools are the only way an agent may affect the Android device.
 - `dismiss_keyboard`: hide the soft keyboard if it is visible.
 
 The app implements `observe_screen`, `open_app`, `tap`, `type_text`, `scroll`,
+`swipe`, `press_back`, `press_home`, and `wait_for_ui` from the Android Tools
+screen and the agent command-provider loop.
+
+`swipe` has two input modes. In **direction mode** (the primary path) the caller
+passes `direction` (`left`, `right`, `up`, or `down`, naming the direction the
+finger travels); the gesture is planned within an optional container target
+(same selector/scoring path as `scroll`) or the active window when no container
+is given. In **coordinate mode** the caller passes explicit `start_x`,
+`start_y`, `end_x`, `end_y` (plus an optional `duration_ms`). Unlike `scroll`,
+`swipe` imposes no scrollable-role constraint on its container, dispatches a raw
+drag gesture rather than an accessibility scroll action, and fails explicitly on
+an invalid direction, an incomplete/out-of-range coordinate set, or a missing or
+ambiguous container.
+`press_back`, `press_home`, `wait_for_ui`, `focus_input`, `clear_text`, and
+`dismiss_keyboard` from the Android Tools screen and the agent command-provider
+loop.
+`press_back`, `press_home`, `wait_for_ui`, `wait_for_app`, `focus_input`,
+`clear_text`, and `dismiss_keyboard` from the Android Tools screen and the
+agent command-provider loop.
 `press_back`, `press_home`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`,
 `focus_input`, `clear_text`, and `dismiss_keyboard` from the Android Tools
 screen and the agent command-provider loop.
