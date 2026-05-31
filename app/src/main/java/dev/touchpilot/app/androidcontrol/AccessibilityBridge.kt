@@ -47,6 +47,16 @@ object AccessibilityBridge {
         return service?.tapByBounds(bounds) ?: false
     }
 
+    fun longPressNode(nodeId: String): Boolean {
+        if (nodeId.isBlank()) return false
+        return service?.longPressNode(nodeId) ?: false
+    }
+
+    fun longPressByBounds(bounds: String): Boolean {
+        if (bounds.isBlank()) return false
+        return service?.longPressByBounds(bounds) ?: false
+    }
+
     fun typeIntoFocusedField(text: String): Boolean {
         if (text.isBlank()) return false
         return service?.typeIntoFocusedField(text) ?: false

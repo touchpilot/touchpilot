@@ -117,6 +117,21 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
     }
 
+    fun longPressNode(nodeId: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = findNodeById(root, nodeId) ?: return false
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return false
+        return longPress(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
+    fun longPressByBounds(boundsText: String): Boolean {
+        val bounds = parseBounds(boundsText) ?: return false
+        if (bounds.isEmpty) return false
+        return longPress(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
     fun typeIntoFocusedField(text: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
@@ -442,10 +457,21 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
     }
 
-    private fun tap(x: Float, y: Float): Boolean {
+    private fun tap(x: Float, y: Float): Boolean =
+        dispatchPointGesture(x, y, TapDurationMs)
+
+    /**
+     * Dispatch a bounded long-press: a single-point stroke held past the
+     * Android long-press timeout. Used by the `long_press` tool to open context
+     * menus, enter selection mode, or trigger long-click handlers.
+     */
+    private fun longPress(x: Float, y: Float): Boolean =
+        dispatchPointGesture(x, y, LongPressDurationMs)
+
+    private fun dispatchPointGesture(x: Float, y: Float, durationMs: Long): Boolean {
         val path = Path().apply { moveTo(x, y) }
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0L, 60L))
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, durationMs))
             .build()
         val completed = AtomicBoolean(false)
         val latch = CountDownLatch(1)
@@ -467,7 +493,7 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         )
 
         if (!dispatched) return false
-        latch.await(1_000L, TimeUnit.MILLISECONDS)
+        latch.await(durationMs + GestureCallbackTimeoutMs, TimeUnit.MILLISECONDS)
         return completed.get()
     }
 
@@ -486,5 +512,20 @@ class TouchPilotAccessibilityService : AccessibilityService() {
                 ?: ""
             label.contains(text, ignoreCase = true)
         } != null
+    }
+
+    private companion object {
+        /** Brief contact for a normal tap. */
+        const val TapDurationMs = 60L
+
+        /**
+         * Contact held past Android's default long-press timeout
+         * (`ViewConfiguration.getLongPressTimeout()` is 500ms). 600ms clears it
+         * with margin while staying short enough to feel responsive.
+         */
+        const val LongPressDurationMs = 600L
+
+        /** Extra time beyond the gesture duration to wait for the callback. */
+        const val GestureCallbackTimeoutMs = 1_000L
     }
 }

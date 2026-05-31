@@ -87,6 +87,7 @@ class AndroidToolRetryPolicy(
                 "observe_screen" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "open_app" to action,
                 "tap" to action,
+                "long_press" to action,
                 "type_text" to action,
                 "scroll" to action,
                 "press_back" to action,

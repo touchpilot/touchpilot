@@ -8,6 +8,7 @@ Allowed initial tools:
 - `open_app`
 - `observe_screen`
 - `tap`
+- `long_press`
 - `type_text`
 - `scroll`
 - `press_back`

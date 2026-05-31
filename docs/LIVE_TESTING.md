@@ -43,6 +43,9 @@ Launch TouchPilot:
 - [ ] `Open App` followed by `wait_for_app({label=Settings})` confirms
   Settings is foreground before follow-up actions.
 - [x] `Tap Text` taps a visible target.
+- [ ] `Long Press Text` long-presses a visible target (e.g. opens a launcher
+      icon context menu or enters list selection mode). Added in Milestone 4
+      (issue #85); pending a live emulator pass.
 - [ ] `Tap Text` followed by `wait_for_idle` settles after the tap transition.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.

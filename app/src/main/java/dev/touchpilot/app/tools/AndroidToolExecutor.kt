@@ -11,6 +11,7 @@ import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.tools.targets.LongPressTarget
 import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollResolution
 import dev.touchpilot.app.tools.targets.ScrollResolver
@@ -141,6 +142,9 @@ class AndroidToolExecutor(
             }
             "tap" -> {
                 executeTap(args)
+            }
+            "long_press" -> {
+                executeLongPress(args)
             }
             "type_text" -> {
                 executeTypeText(args)
@@ -432,6 +436,70 @@ class AndroidToolExecutor(
                 )
             }
         }
+    }
+
+    private fun executeLongPress(args: Map<String, String>): ToolResult {
+        val selector = LongPressTarget.selectorFromArgs(args)
+        val resolution = targetResolver.resolve(
+            context = AccessibilityBridge.observeScreenContext(),
+            selector = selector,
+        )
+
+        return when (resolution) {
+            is TargetResolutionResult.Resolved -> {
+                val candidate = resolution.candidate
+                val nodeId = candidate.node.nodeId
+                val bounds = candidate.selector.bounds
+                val ok = when {
+                    !nodeId.isNullOrBlank() -> AccessibilityBridge.longPressNode(nodeId)
+                    bounds != null -> AccessibilityBridge.longPressByBounds(bounds.toBoundsArg())
+                    else -> false
+                }
+                val message = when {
+                    ok -> "long_press"
+                    nodeId.isNullOrBlank() && bounds == null ->
+                        "Resolved long-press target has no stable node id or bounds"
+                    else -> "Unable to perform long-press on resolved target"
+                }
+                record("long_press", longPressLogArgs(candidate.selector), ok, message)
+                ToolResult(
+                    ok = ok,
+                    message = message,
+                    data = buildMap {
+                        put("target", candidate.selector.toRedactedJson())
+                        put("confidence", candidate.confidence.toString())
+                        if (!nodeId.isNullOrBlank()) put("node_id", nodeId)
+                    }
+                )
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous long-press target: ${resolution.reason}"
+                record("long_press", "target=ambiguous", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "Long-press target not found: ${resolution.reason}"
+                record("long_press", "target=not_found", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+        }
+    }
+
+    private fun longPressLogArgs(selector: TargetSelector): String {
+        val label = selector.text?.displaySafe?.takeIf { it.isNotBlank() }
+            ?: selector.nodeId?.let { "node_id=$it" }
+            ?: selector.viewIdResourceName?.let { "view_id=$it" }
+            ?: selector.bounds?.let { "bounds=${it.toBoundsArg()}" }
+            ?: "resolved"
+        return "target=\"$label\""
     }
 
     private fun executeScroll(args: Map<String, String>): ToolResult {
