@@ -434,7 +434,6 @@ class MainActivity : Activity() {
 
         contentRoot.addView(sectionTitle("Chat"))
         contentRoot.addView(statusPill())
-        contentRoot.addView(skillPill())
         contentRoot.addView(runStatePill())
         contentRoot.addView(chatContextStrip())
 
