@@ -5,6 +5,17 @@ enum class AgentProviderMode {
     LOCAL_ROUTER
 }
 
+enum class AgentRunState {
+    IDLE,
+    RUNNING,
+    WAITING_APPROVAL,
+    WAITING_CLARIFICATION,
+    COMPLETED,
+    FAILED,
+    BLOCKED,
+    CANCELLED
+}
+
 data class AgentCommand(
     val tool: String?,
     val args: Map<String, String>,
