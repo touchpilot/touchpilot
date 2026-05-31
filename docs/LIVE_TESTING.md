@@ -39,12 +39,18 @@ Launch TouchPilot:
 - [x] Accessibility status shows connected.
 - [x] `Observe Current Screen` returns a non-empty UI tree.
 - [x] `Open App` opens Settings by label.
+- [ ] `Open App` followed by `wait_for_idle` settles after launch.
+- [ ] `Open App` followed by `wait_for_app({label=Settings})` confirms
+  Settings is foreground before follow-up actions.
 - [x] `Tap Text` taps a visible target.
 - [ ] `Long Press Text` long-presses a visible target (e.g. opens a launcher
       icon context menu or enters list selection mode). Added in Milestone 4
       (issue #85); pending a live emulator pass.
+- [ ] `Tap Text` followed by `wait_for_idle` settles after the tap transition.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
+- [ ] `Scroll Down` or `Scroll Up` followed by `wait_for_idle` settles after movement.
+- [ ] Keyboard dismissal followed by `wait_for_idle` settles after IME changes.
 - [x] `Back` and `Home` work.
 - [ ] `dismiss_keyboard` hides the soft keyboard when it is visible.
 - [ ] `dismiss_keyboard` is a no-op when the keyboard is not visible and does

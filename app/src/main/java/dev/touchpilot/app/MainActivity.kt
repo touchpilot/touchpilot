@@ -20,9 +20,12 @@ import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.annotation.DrawableRes
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
@@ -74,7 +77,6 @@ class MainActivity : Activity() {
     private lateinit var chatTaskInput: EditText
     private lateinit var statusView: TextView
     private lateinit var executionLogView: TextView
-    private lateinit var latestResultView: TextView
     private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
@@ -238,17 +240,35 @@ class MainActivity : Activity() {
         }.withMargins()
     }
 
-    private fun bottomNavLabel(section: Section): TextView {
-        return TextView(this).apply {
-            text = section.label
+    private fun bottomNavLabel(section: Section): View {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setSingleLine(true)
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            minWidth = 0
-            minHeight = 44
-            setPadding(8, 10, 8, 10)
+            minimumWidth = 0
+            minimumHeight = 56
+            setPadding(8, 6, 8, 6)
         }
+        column.addView(
+            ImageView(this).apply {
+                setImageResource(section.iconRes)
+                imageTintList = ColorStateList.valueOf(Theme.NavText)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = section.label
+            },
+            LinearLayout.LayoutParams(40, 40)
+        )
+        column.addView(
+            TextView(this).apply {
+                text = section.label
+                gravity = Gravity.CENTER
+                setSingleLine(true)
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Theme.NavText)
+                setPadding(0, 2, 0, 0)
+            }
+        )
+        return column
     }
 
     private fun showSection(section: Section) {
@@ -291,10 +311,12 @@ class MainActivity : Activity() {
             nav.getTabAt(index)?.select()
         }
         Section.values().forEachIndexed { tabIndex, section ->
-            val label = nav.getTabAt(tabIndex)?.customView as? TextView
+            val container = nav.getTabAt(tabIndex)?.customView as? LinearLayout
             val selected = section == activeSection
-            label?.setTextColor(if (selected) Theme.OnAccent else Theme.NavText)
-            label?.background = rounded(
+            val tint = if (selected) Theme.OnAccent else Theme.NavText
+            (container?.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(tint)
+            (container?.getChildAt(1) as? TextView)?.setTextColor(tint)
+            container?.background = rounded(
                 fill = if (selected) Theme.Accent else Color.TRANSPARENT,
                 radius = 10,
                 stroke = if (selected) Theme.Accent else Color.TRANSPARENT
@@ -322,25 +344,25 @@ class MainActivity : Activity() {
 
         val inputRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.BOTTOM
             setPadding(0, 12, 0, 0)
         }
         chatTaskInput = EditText(this).apply {
             id = R.id.agent_task_input
             hint = "Message TouchPilot..."
             setSingleLine(false)
-            minLines = 2
-            maxLines = 4
+            minLines = 1
+            maxLines = 5
             textSize = 14.5f
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
-            background = rounded(Theme.Card, 10, Theme.StrokeDark)
-            setPadding(18, 12, 18, 12)
-            minHeight = 64
+            setLineSpacing(4f, 1f)
+            background = rounded(Theme.Card, 24, Theme.StrokeDark)
+            setPadding(22, 14, 22, 14)
+            minHeight = 56
             imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
             inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
-                InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEND) {
                     submitChatMessage()
@@ -360,25 +382,30 @@ class MainActivity : Activity() {
             MaterialButton(this).apply {
                 id = R.id.run_agent_button
                 text = "Send"
-                textSize = 13f
+                textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
                 isAllCaps = false
-                minHeight = 44
-                minWidth = 88
+                minHeight = 56
+                minWidth = 0
                 insetTop = 0
                 insetBottom = 0
                 gravity = Gravity.CENTER
                 setTextColor(Theme.OnAccent)
                 backgroundTintList = ColorStateList.valueOf(Theme.Accent)
-                cornerRadius = 10
-                setPadding(12, 0, 12, 0)
+                cornerRadius = 28
+                setPadding(28, 0, 32, 0)
+                icon = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_send)
+                iconTint = ColorStateList.valueOf(Theme.OnAccent)
+                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                iconPadding = 10
+                iconSize = 40
                 setOnClickListener { submitChatMessage() }
             },
             LinearLayout.LayoutParams(
-                88,
-                52
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                56
             ).apply {
-                leftMargin = 8
+                leftMargin = 10
             }
         )
         bar.addView(inputRow)
@@ -399,9 +426,7 @@ class MainActivity : Activity() {
             return
         }
 
-        contentRoot.addView(sectionTitle("Chat"))
-        contentRoot.addView(statusPill())
-        contentRoot.addView(skillPill())
+        contentRoot.addView(chatContextStrip())
 
         conversation.forEach { event ->
             contentRoot.addView(renderChatEvent(event))
@@ -428,6 +453,7 @@ class MainActivity : Activity() {
         return when (event) {
             is ChatEvent.User -> userBubble(event.text)
             is ChatEvent.Agent -> agentBubble(event.text, event.detail)
+            is ChatEvent.Working -> workingBubble(event.text, event.detail)
             is ChatEvent.Timeline -> timelineCard(
                 title = event.title,
                 body = event.body,
@@ -549,13 +575,13 @@ class MainActivity : Activity() {
                 setPadding(0, 14, 0, 0)
             }
             buttonRow.addView(
-                primaryButton("Approve") {
+                primaryButton("Approve", iconRes = R.drawable.ic_check) {
                     resolveApproval(event, true)
                 }.apply { id = R.id.approval_approve_button },
                 rowButtonParams()
             )
             buttonRow.addView(
-                secondaryButton("Reject") {
+                secondaryButton("Reject", iconRes = R.drawable.ic_close) {
                     resolveApproval(event, false)
                 }.apply { id = R.id.approval_reject_button },
                 rowButtonParams()
@@ -584,7 +610,7 @@ class MainActivity : Activity() {
             return
         }
 
-        conversation += ChatEvent.Agent("Working on it.", "Runtime: ${currentProviderMode().label()}")
+        conversation += ChatEvent.Working("Working on it.", "Runtime: ${currentProviderMode().label()}")
         showSection(Section.CHAT)
 
         val runId = AgentRunIds.next()
@@ -614,6 +640,8 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 agentRunHistory += record
+                val workingIdx = conversation.indexOfLast { it is ChatEvent.Working }
+                if (workingIdx >= 0) conversation.removeAt(workingIdx)
                 record.result?.events
                     ?.let(ToolCallCardModel::fromEvents)
                     ?.forEach { card ->
@@ -773,6 +801,32 @@ class MainActivity : Activity() {
                 executeAndRender("open_app", mapOf("target" to appInput.text.toString()))
                 showSection(Section.TOOLS)
             }.apply { id = R.id.open_app_button }
+        )
+
+        val waitAppInput = editText("App package or launcher label to wait for").apply {
+            id = R.id.wait_for_app_input
+        }
+        contentRoot.addView(waitAppInput)
+        contentRoot.addView(
+            secondaryButton("Wait For App") {
+                val expected = waitAppInput.text.toString()
+                val args = if (expected.contains(".")) {
+                    mapOf("package" to expected, "timeout_ms" to "5000")
+                } else {
+                    mapOf("label" to expected, "timeout_ms" to "5000")
+                }
+                hideKeyboard(waitAppInput)
+                Thread {
+                    val result = toolExecutor.execute("wait_for_app", args, ToolSource.DIRECT_DEBUG)
+                    runOnUiThread {
+                        sectionResults.recordToolsResult(
+                            SensitiveTextRedactor.redact("wait_for_app -> ${result.ok}: ${result.message}")
+                        )
+                        refreshExecutionLog()
+                        showSection(Section.TOOLS)
+                    }
+                }.start()
+            }.apply { id = R.id.wait_for_app_button }
         )
 
         val tapInput = editText("Visible text to tap").apply { id = R.id.tap_text_input }
@@ -937,7 +991,9 @@ class MainActivity : Activity() {
                         ToolSource.DIRECT_DEBUG
                     )
                     runOnUiThread {
-                        outputText = SensitiveTextRedactor.redact("wait_for_ui -> ${result.ok}: ${result.message}")
+                        sectionResults.recordToolsResult(
+                            SensitiveTextRedactor.redact("wait_for_ui -> ${result.ok}: ${result.message}")
+                        )
                         refreshExecutionLog()
                         showSection(Section.TOOLS)
                     }
@@ -945,7 +1001,26 @@ class MainActivity : Activity() {
             }.apply { id = R.id.wait_for_text_button }
         )
 
-        contentRoot.addView(latestResultCard())
+        contentRoot.addView(
+            secondaryButton("Wait For Idle") {
+                Thread {
+                    val result = toolExecutor.execute(
+                        "wait_for_idle",
+                        emptyMap(),
+                        ToolSource.DIRECT_DEBUG
+                    )
+                    runOnUiThread {
+                        sectionResults.recordToolsResult(
+                            SensitiveTextRedactor.redact("wait_for_idle -> ${result.ok}: ${result.message}")
+                        )
+                        refreshExecutionLog()
+                        showSection(Section.TOOLS)
+                    }
+                }.start()
+            }.apply { id = R.id.wait_for_idle_button }
+        )
+
+        contentRoot.addView(timelineCard("Latest result", sectionResults.forTools()))
 
         // Tail spacer so the Focus / Dismiss row can scroll above the soft
         // keyboard when an input is focused (adjustResize alone leaves them
@@ -1024,7 +1099,7 @@ class MainActivity : Activity() {
             secondaryButton("List Tools") {
                 val endpoint = endpointInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
-                outputText = "Listing MCP tools..."
+                sectionResults.recordMcpResult("Listing MCP tools...")
                 showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
@@ -1048,7 +1123,7 @@ class MainActivity : Activity() {
                         "MCP list failed: ${error.message}"
                     }
                     runOnUiThread {
-                        outputText = result
+                        sectionResults.recordMcpResult(result)
                         showSection(Section.SETTINGS)
                     }
                 }.start()
@@ -1061,7 +1136,7 @@ class MainActivity : Activity() {
                 val toolName = toolInput.text.toString()
                 val argsText = argsInput.text.toString()
                 preferences.edit().putString("mcp_endpoint", endpoint).apply()
-                outputText = "Calling MCP tool..."
+                sectionResults.recordMcpResult("Calling MCP tool...")
                 showSection(Section.SETTINGS)
                 Thread {
                     val result = runCatching {
@@ -1073,7 +1148,7 @@ class MainActivity : Activity() {
                         "MCP call failed: ${error.message}"
                     }
                     runOnUiThread {
-                        outputText = result
+                        sectionResults.recordMcpResult(result)
                         showSection(Section.SETTINGS)
                     }
                 }.start()
@@ -1081,8 +1156,7 @@ class MainActivity : Activity() {
             rowButtonParams()
         )
         contentRoot.addView(actionRow)
-
-        contentRoot.addView(timelineCard("MCP result", outputText))
+        contentRoot.addView(timelineCard("MCP result", sectionResults.forMcp()))
     }
 
     private fun renderLogsScreen() {
@@ -1095,12 +1169,11 @@ class MainActivity : Activity() {
         contentRoot.addView(
             primaryButton("Export Debug Trace") {
                 val file = exportDebugTrace()
-                outputText = "Debug trace exported: ${file.absolutePath}"
+                sectionResults.recordLogsResult("Debug trace exported: ${file.absolutePath}")
                 showSection(Section.LOGS)
             }.apply { id = R.id.export_debug_trace_button }
         )
-        renderRecentAgentRuns()
-        contentRoot.addView(timelineCard("Latest result", outputText))
+        contentRoot.addView(timelineCard("Latest result", sectionResults.forLogs()))
         executionLogView = TextView(this).apply {
             id = R.id.execution_log_view
             text = ToolExecutionLog.render()
@@ -1196,7 +1269,6 @@ class MainActivity : Activity() {
                     .putString("agent_api_key", apiKeyInput.text.toString().trim())
                     .apply()
                 hideKeyboard(apiKeyInput)
-                outputText = "Cloud API settings saved."
                 showSection(Section.SETTINGS)
             }.apply { id = R.id.save_cloud_api_button }
         )
@@ -1213,20 +1285,15 @@ class MainActivity : Activity() {
         )
     }
 
-    private var outputText: String = "No result yet."
+    private val sectionResults = SectionResultStore()
 
     private fun executeAndRender(name: String, args: Map<String, String>): ToolResult {
         val result = toolExecutor.execute(name, args, ToolSource.DIRECT_DEBUG)
-        outputText = SensitiveTextRedactor.redact("$name($args) -> ${result.ok}: ${result.message}")
-        refreshLatestResult()
+        sectionResults.recordToolsResult(
+            SensitiveTextRedactor.redact("$name($args) -> ${result.ok}: ${result.message}")
+        )
         refreshExecutionLog()
         return result
-    }
-
-    private fun refreshLatestResult() {
-        if (::latestResultView.isInitialized) {
-            latestResultView.text = outputText
-        }
     }
 
     private fun refreshExecutionLog() {
@@ -1314,7 +1381,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun primaryButton(text: String, onClick: () -> Unit): TextView {
+    private fun primaryButton(
+        text: String,
+        @DrawableRes iconRes: Int? = null,
+        onClick: () -> Unit
+    ): TextView {
         return MaterialButton(this).apply {
             setText(text)
             gravity = Gravity.CENTER
@@ -1329,11 +1400,22 @@ class MainActivity : Activity() {
             layoutParams = controlParams()
             minHeight = 50
             setPadding(16, 12, 16, 12)
+            if (iconRes != null) {
+                icon = ContextCompat.getDrawable(this@MainActivity, iconRes)
+                iconTint = ColorStateList.valueOf(Theme.OnAccent)
+                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                iconPadding = 8
+                iconSize = 36
+            }
             setOnClickListener { onClick() }
         }
     }
 
-    private fun secondaryButton(text: String, onClick: () -> Unit): TextView {
+    private fun secondaryButton(
+        text: String,
+        @DrawableRes iconRes: Int? = null,
+        onClick: () -> Unit
+    ): TextView {
         return MaterialButton(this).apply {
             setText(text)
             gravity = Gravity.CENTER
@@ -1347,38 +1429,180 @@ class MainActivity : Activity() {
             layoutParams = controlParams()
             minHeight = 48
             setPadding(14, 12, 14, 12)
+            if (iconRes != null) {
+                icon = ContextCompat.getDrawable(this@MainActivity, iconRes)
+                iconTint = ColorStateList.valueOf(Theme.BodyText)
+                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                iconPadding = 8
+                iconSize = 36
+            }
             setOnClickListener { onClick() }
         }
     }
 
     private fun userBubble(text: String): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
         }
-        row.addView(
+        column.addView(senderLabel("You", alignEnd = true))
+        column.addView(
             TextView(this).apply {
                 setText(text)
-                textSize = 14f
+                textSize = 14.5f
                 setTextColor(Theme.OnAccent)
-                background = rounded(Theme.Accent, 10, Theme.Accent)
-                setPadding(18, 14, 18, 14)
+                setLineSpacing(4f, 1f)
+                background = bubbleBackground(Theme.Accent, Theme.Accent, tailOnRight = true)
+                setPadding(20, 14, 20, 14)
+                maxWidth = bubbleMaxWidth()
             },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                leftMargin = 56
+                gravity = Gravity.END
             }
         )
-        return row.withMargins(top = 8, bottom = 8)
+        return column.withMargins(top = 6, bottom = 6)
     }
 
     private fun agentBubble(text: String, detail: String): View {
-        return timelineCard(text, detail).apply {
-            (layoutParams as? LinearLayout.LayoutParams)?.rightMargin = 36
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.START
+        }
+        column.addView(senderLabel("TouchPilot", alignEnd = false))
+
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bubbleBackground(Theme.Card, Theme.StrokeDark, tailOnRight = false)
+            setPadding(20, 14, 20, 14)
+        }
+        bubble.addView(
+            TextView(this).apply {
+                setText(text)
+                textSize = 14.5f
+                setTextColor(Theme.BodyText)
+                setLineSpacing(4f, 1f)
+                maxWidth = bubbleMaxWidth()
+            }
+        )
+        if (detail.isNotBlank()) {
+            bubble.addView(
+                TextView(this).apply {
+                    setText(detail)
+                    textSize = 12f
+                    setTextColor(Theme.MutedText)
+                    setLineSpacing(3f, 1f)
+                    setPadding(0, 6, 0, 0)
+                    maxWidth = bubbleMaxWidth()
+                }
+            )
+        }
+        column.addView(
+            bubble,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START
+            }
+        )
+        return column.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun workingBubble(text: String, detail: String): View {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.START
+        }
+        column.addView(senderLabel("TouchPilot", alignEnd = false))
+
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bubbleBackground(Theme.Card, Theme.Accent, tailOnRight = false)
+            setPadding(20, 14, 20, 14)
+        }
+
+        val mainText = TextView(this).apply {
+            setText("$text  ")
+            textSize = 14.5f
+            setTextColor(Theme.BodyText)
+            setLineSpacing(4f, 1f)
+            maxWidth = bubbleMaxWidth()
+        }
+        bubble.addView(mainText)
+
+        if (detail.isNotBlank()) {
+            bubble.addView(
+                TextView(this).apply {
+                    setText(detail)
+                    textSize = 12f
+                    setTextColor(Theme.MutedText)
+                    setLineSpacing(3f, 1f)
+                    setPadding(0, 6, 0, 0)
+                    maxWidth = bubbleMaxWidth()
+                }
+            )
+        }
+
+        animateTypingDots(mainText, baseText = text)
+
+        column.addView(
+            bubble,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START
+            }
+        )
+        return column.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun animateTypingDots(target: TextView, baseText: String) {
+        var step = 0
+        val intervalMs = 350L
+        val runner = object : Runnable {
+            override fun run() {
+                val count = (step % 3) + 1
+                target.text = baseText + "  " + ".".repeat(count) + " ".repeat(3 - count)
+                step++
+                target.postDelayed(this, intervalMs)
+            }
+        }
+        target.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                v.removeCallbacks(runner)
+                v.post(runner)
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                v.removeCallbacks(runner)
+            }
+        })
+        if (target.isAttachedToWindow) {
+            target.removeCallbacks(runner)
+            target.post(runner)
         }
     }
+
+    private fun senderLabel(text: String, alignEnd: Boolean): TextView {
+        return TextView(this).apply {
+            setText(text)
+            textSize = 11f
+            setTextColor(Theme.MutedText)
+            setPadding(6, 0, 6, 4)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = if (alignEnd) Gravity.END else Gravity.START
+            }
+        }
+    }
+
+    private fun bubbleMaxWidth(): Int =
+        (resources.displayMetrics.widthPixels * 0.78f).toInt()
 
     private fun statusPill(): View {
         return timelineCard(
@@ -1401,8 +1625,16 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun skillPill(): View {
-        return timelineCard("Active skill", selectedSkill()?.title ?: "No skill")
+    private fun chatContextStrip(): View {
+        val runtime = currentProviderMode().label()
+        val skill = selectedSkill()?.title ?: "No skill selected"
+        return TextView(this).apply {
+            text = "Runtime: $runtime   ·   Skill: $skill"
+            textSize = 11.5f
+            setTextColor(Theme.MutedText)
+            setLineSpacing(3f, 1f)
+            setPadding(4, 0, 4, 0)
+        }.withMargins(top = 2, bottom = 14)
     }
 
     private fun settingsPanelSwitcher(): View {
@@ -1625,38 +1857,6 @@ class MainActivity : Activity() {
         return card.withMargins(top = 8, bottom = 8)
     }
 
-    private fun latestResultCard(): View {
-        val card = MaterialCardView(this).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = Theme.StrokeDark
-            strokeWidth = 1
-            radius = 18f
-            cardElevation = 0f
-            setPadding(18, 16, 18, 16)
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18, 16, 18, 16)
-        }
-        content.addView(
-            TextView(this).apply {
-                text = "Latest result"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }
-        )
-        latestResultView = TextView(this).apply {
-            text = outputText
-            textSize = 12.5f
-            setTextColor(Theme.BodyText)
-            setPadding(0, 8, 0, 0)
-        }
-        content.addView(latestResultView)
-        card.addView(content)
-        return card.withMargins(top = 10, right = 42, bottom = 10)
-    }
-
     private fun View.withMargins(
         left: Int = 0,
         top: Int = 0,
@@ -1678,6 +1878,21 @@ class MainActivity : Activity() {
             setColor(fill)
             cornerRadius = radius.toFloat()
             setStroke(1, stroke)
+        }
+    }
+
+    private fun bubbleBackground(fill: Int, stroke: Int, tailOnRight: Boolean): GradientDrawable {
+        val large = 22f
+        val tail = 6f
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(fill)
+            setStroke(1, stroke)
+            cornerRadii = if (tailOnRight) {
+                floatArrayOf(large, large, large, large, tail, tail, large, large)
+            } else {
+                floatArrayOf(large, large, large, large, large, large, tail, tail)
+            }
         }
     }
 
@@ -1878,7 +2093,7 @@ class MainActivity : Activity() {
         contentRoot.addView(
             primaryButton("Export Run Trace") {
                 val file = exportRunTrace(record)
-                outputText = "Run trace exported: ${file.absolutePath}"
+                sectionResults.recordLogsResult("Run trace exported: ${file.absolutePath}")
                 showSection(activeSection)
             }.apply { id = R.id.export_run_trace_button }
         )
@@ -2015,6 +2230,7 @@ class MainActivity : Activity() {
     private sealed class ChatEvent {
         data class User(val text: String) : ChatEvent()
         data class Agent(val text: String, val detail: String) : ChatEvent()
+        data class Working(val text: String, val detail: String) : ChatEvent()
         data class Timeline(val title: String, val body: String, val runId: String? = null) : ChatEvent()
         data class ToolCall(val card: ToolCallCardModel) : ChatEvent()
         class ApprovalPrompt(
@@ -2027,11 +2243,11 @@ class MainActivity : Activity() {
 
     private enum class ApprovalState { PENDING, APPROVED, REJECTED }
 
-    private enum class Section(val label: String) {
-        CHAT("Chat"),
-        TOOLS("Tools"),
-        LOGS("Logs"),
-        SETTINGS("Settings")
+    private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
+        CHAT("Chat", R.drawable.ic_chat),
+        TOOLS("Tools", R.drawable.ic_tools),
+        LOGS("Logs", R.drawable.ic_logs),
+        SETTINGS("Settings", R.drawable.ic_settings)
     }
 
     private enum class SettingsPanel(val label: String, val intro: String) {

@@ -66,6 +66,7 @@ class ScreenContextBuilder(
         val rawText = node.text?.takeIf { it.isNotBlank() }
             ?: node.contentDescription?.takeIf { it.isNotBlank() }
             ?: ""
+        val rawContentDescription = node.contentDescription?.takeIf { it.isNotBlank() }
         return ScreenNode(
             nodeId = node.nodeId,
             role = roleFor(node),
@@ -80,7 +81,8 @@ class ScreenContextBuilder(
             isInputField = node.editable,
             sensitive = node.password,
             viewIdResourceName = node.viewIdResourceName,
-            className = node.className
+            className = node.className,
+            contentDescription = rawContentDescription?.let { ScreenText.of(it) }
         )
     }
 

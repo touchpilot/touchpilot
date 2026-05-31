@@ -6,6 +6,8 @@
     <item name="get_foreground_app_button" type="id" />
     <item name="open_app_input" type="id" />
     <item name="open_app_button" type="id" />
+    <item name="wait_for_app_input" type="id" />
+    <item name="wait_for_app_button" type="id" />
     <item name="tap_text_input" type="id" />
     <item name="tap_text_button" type="id" />
     <item name="long_press_text_input" type="id" />
@@ -19,6 +21,7 @@
     <item name="scroll_up_button" type="id" />
     <item name="wait_for_text_input" type="id" />
     <item name="wait_for_text_button" type="id" />
+    <item name="wait_for_idle_button" type="id" />
     <item name="focus_input_input" type="id" />
     <item name="focus_input_button" type="id" />
     <item name="clear_text_button" type="id" />
