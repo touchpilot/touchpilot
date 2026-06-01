@@ -10,5 +10,6 @@ Allowed initial tools:
 - `tap`
 - `type_text`
 - `scroll`
+- `swipe`
 - `press_back`
 - `wait_for_ui`

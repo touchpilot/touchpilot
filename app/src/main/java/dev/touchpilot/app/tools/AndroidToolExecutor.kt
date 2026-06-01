@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.content.pm.ResolveInfo
 import android.net.Uri
+import dev.touchpilot.app.agent.ClarificationFromToolResult
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.androidcontrol.DismissKeyboardOutcome
 import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
@@ -13,11 +14,16 @@ import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.screen.NodeBounds
 import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollResolution
 import dev.touchpilot.app.tools.targets.ScrollResolver
 import dev.touchpilot.app.tools.targets.ScrollTarget
-import dev.touchpilot.app.agent.ClarificationFromToolResult
+import dev.touchpilot.app.tools.targets.SwipeDirection
+import dev.touchpilot.app.tools.targets.SwipeGesture
+import dev.touchpilot.app.tools.targets.SwipeRequest
+import dev.touchpilot.app.tools.targets.SwipeTarget
+import dev.touchpilot.app.tools.targets.TargetBounds
 import dev.touchpilot.app.tools.targets.TargetResolutionResult
 import dev.touchpilot.app.tools.targets.TargetResolver
 import dev.touchpilot.app.tools.targets.TargetSelector
@@ -168,6 +174,9 @@ class AndroidToolExecutor(
             }
             "scroll" -> {
                 executeScroll(args)
+            }
+            "swipe" -> {
+                executeSwipe(args)
             }
             "press_back" -> {
                 val ok = AccessibilityBridge.pressBack()
@@ -567,12 +576,152 @@ class AndroidToolExecutor(
         }
     }
 
+    private fun executeSwipe(args: Map<String, String>): ToolResult {
+        val before = AccessibilityBridge.observeScreenContext()
+
+        val explicit = SwipeTarget.explicitCoordinates(args)
+        if (explicit != null) {
+            val window = AccessibilityBridge.activeWindowBounds()?.toTargetBounds()
+            if (window != null && !window.isEmpty && !explicit.within(window)) {
+                val message = "Swipe coordinates (${explicit.startX},${explicit.startY})->" +
+                    "(${explicit.endX},${explicit.endY}) are outside the screen bounds ${window.toBoundsArg()}"
+                record("swipe", swipeLogArgs("coordinates", explicit), false, message)
+                return ToolResult(false, message, mapOf("screen_bounds" to window.toBoundsArg()))
+            }
+            return dispatchSwipe(explicit, before, "coordinates")
+        }
+
+        val direction = SwipeDirection.parse(args[SwipeTarget.DirectionArg])
+            ?: return ToolResult(false, "Invalid swipe direction")
+        val duration = SwipeTarget.durationOrDefault(args)
+
+        val area = if (SwipeTarget.hasTarget(args)) {
+            when (val resolved = resolveSwipeContainer(args, before)) {
+                is SwipeArea.Resolved -> resolved.bounds
+                is SwipeArea.Failure -> return resolved.result
+            }
+        } else {
+            val window = AccessibilityBridge.activeWindowBounds()?.toTargetBounds()
+            if (window == null || window.isEmpty) {
+                val message = "No active window is available to swipe."
+                record("swipe", swipeLogArgs(direction.label(), null), false, message)
+                return ToolResult(false, message)
+            }
+            window
+        }
+
+        val request = SwipeGesture.forDirection(direction, area, duration)
+        return dispatchSwipe(request, before, direction.label())
+    }
+
+    private fun resolveSwipeContainer(
+        args: Map<String, String>,
+        context: dev.touchpilot.app.screen.ScreenContext,
+    ): SwipeArea {
+        val selector = SwipeTarget.selectorFromArgs(args)
+        return when (val resolution = targetResolver.resolve(context, selector)) {
+            is TargetResolutionResult.Resolved -> {
+                val bounds = resolution.candidate.node.bounds.toTargetBounds()
+                if (bounds.isEmpty) {
+                    val message = "Resolved swipe container has no usable bounds"
+                    record("swipe", "target=resolved_no_bounds", false, message)
+                    SwipeArea.Failure(
+                        ToolResult(
+                            ok = false,
+                            message = message,
+                            data = mapOf("target" to resolution.candidate.selector.toRedactedJson())
+                        )
+                    )
+                } else {
+                    SwipeArea.Resolved(bounds)
+                }
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous swipe target: ${resolution.reason}"
+                record("swipe", "target=ambiguous", false, message)
+                SwipeArea.Failure(
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    )
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "Swipe target not found: ${resolution.reason}"
+                record("swipe", "target=not_found", false, message)
+                SwipeArea.Failure(
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf("debug_context" to resolution.debugContext)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun dispatchSwipe(
+        request: SwipeRequest,
+        beforeContext: dev.touchpilot.app.screen.ScreenContext,
+        label: String,
+    ): ToolResult {
+        val attempted = AccessibilityBridge.swipe(
+            request.startX,
+            request.startY,
+            request.endX,
+            request.endY,
+            request.durationMs,
+        )
+        val verification = verifyScreenChanged(
+            beforeContext = beforeContext,
+            scrollAttempted = attempted,
+            idleTimeoutMs = retryPolicy.configFor("swipe").idleTimeoutMs,
+        )
+        val message = when {
+            !attempted -> "Unable to perform swipe"
+            !verification.changed -> "Swipe performed but screen did not change"
+            else -> "swipe"
+        }
+        val ok = attempted && verification.changed
+        record("swipe", swipeLogArgs(label, request), ok, message)
+        return ToolResult(
+            ok = ok,
+            message = message,
+            data = mapOf(
+                "gesture" to label,
+                "start" to "${request.startX},${request.startY}",
+                "end" to "${request.endX},${request.endY}",
+                "duration_ms" to request.durationMs.toString(),
+                "screen_changed" to verification.changed.toString(),
+            )
+        )
+    }
+
+    private fun swipeLogArgs(label: String, request: SwipeRequest?): String {
+        if (request == null) return "gesture=\"$label\""
+        return "gesture=\"$label\", start=${request.startX},${request.startY}, " +
+            "end=${request.endX},${request.endY}, duration_ms=${request.durationMs}"
+    }
+
+    private fun SwipeDirection.label(): String = name.lowercase()
+
+    private fun NodeBounds.toTargetBounds(): TargetBounds {
+        return TargetBounds(left = left, top = top, right = right, bottom = bottom)
+    }
+
+    private sealed class SwipeArea {
+        data class Resolved(val bounds: TargetBounds) : SwipeArea()
+        data class Failure(val result: ToolResult) : SwipeArea()
+    }
+
     private fun verifyScreenChanged(
         beforeContext: dev.touchpilot.app.screen.ScreenContext,
-        scrollAttempted: Boolean
+        scrollAttempted: Boolean,
+        idleTimeoutMs: Long = retryPolicy.configFor("scroll").idleTimeoutMs,
     ): ScrollVerification {
         if (!scrollAttempted) return ScrollVerification(changed = false)
-        AccessibilityBridge.waitForIdle(retryPolicy.configFor("scroll").idleTimeoutMs)
+        AccessibilityBridge.waitForIdle(idleTimeoutMs)
         val after = AccessibilityBridge.observeScreenContext()
         val changed = !sameSnapshot(beforeContext, after)
         return ScrollVerification(changed = changed)

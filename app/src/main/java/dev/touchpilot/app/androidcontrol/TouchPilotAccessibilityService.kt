@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import dev.touchpilot.app.screen.NodeBounds
 import android.view.accessibility.AccessibilityWindowInfo
 import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.screen.ScreenContextBuilder
@@ -115,6 +116,57 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         val bounds = parseBounds(boundsText) ?: return false
         if (bounds.isEmpty) return false
         return tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
+    /**
+     * Bounds of the active window in screen pixels, used by the `swipe` tool to
+     * plan a full-screen direction swipe when no container target is given.
+     */
+    fun activeWindowBounds(): NodeBounds? {
+        val root = rootInActiveWindow ?: return null
+        val bounds = Rect()
+        root.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return null
+        return NodeBounds(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    }
+
+    /**
+     * Dispatch a swipe: a single drag stroke from (startX, startY) to
+     * (endX, endY) held for [durationMs]. Unlike `scroll`, this is a raw gesture
+     * and works on surfaces that expose no accessibility scroll action (pagers,
+     * carousels, drawers, maps).
+     */
+    fun swipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Long): Boolean {
+        val duration = durationMs.coerceIn(MinSwipeDurationMs, MaxSwipeDurationMs)
+        val path = Path().apply {
+            moveTo(startX.toFloat(), startY.toFloat())
+            lineTo(endX.toFloat(), endY.toFloat())
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, duration))
+            .build()
+        val completed = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    completed.set(true)
+                    latch.countDown()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    completed.set(false)
+                    latch.countDown()
+                }
+            },
+            null
+        )
+
+        if (!dispatched) return false
+        latch.await(duration + GestureCallbackTimeoutMs, TimeUnit.MILLISECONDS)
+        return completed.get()
     }
 
     fun typeIntoFocusedField(text: String): Boolean {
@@ -486,5 +538,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
                 ?: ""
             label.contains(text, ignoreCase = true)
         } != null
+    }
+
+    private companion object {
+        /** Lower bound so a swipe still registers as a gesture rather than a tap. */
+        const val MinSwipeDurationMs = 50L
+
+        /** Upper bound so a runaway duration cannot hold the gesture indefinitely. */
+        const val MaxSwipeDurationMs = 5_000L
+
+        /** Extra time beyond the gesture duration to wait for the result callback. */
+        const val GestureCallbackTimeoutMs = 1_000L
     }
 }
