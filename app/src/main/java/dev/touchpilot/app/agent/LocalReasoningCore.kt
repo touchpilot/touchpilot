@@ -7,6 +7,7 @@ import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.screen.ScreenContextSummarizer
 import dev.touchpilot.app.screen.ScreenSummary
 import dev.touchpilot.app.security.ActionPolicy
+import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
@@ -187,7 +188,8 @@ class DefaultLocalReasoningCore(
         val userEvent = AgentEvent.UserMessage(task)
         val assistant = AgentEvent.AssistantMessage(
             text = intent.clarification,
-            detail = intent.reason
+            detail = intent.reason,
+            choices = intent.candidateLabels.map { SensitiveTextRedactor.redact(it) }
         )
         forward(userEvent)
         timeline?.requestClarification(intent.clarification)
