@@ -2,7 +2,6 @@ package dev.touchpilot.app.localinference
 
 import android.content.Context
 import dev.touchpilot.app.agent.AgentCommandProvider
-import dev.touchpilot.app.agent.LocalRouterCommandProvider
 import dev.touchpilot.app.memory.Skill
 import org.json.JSONObject
 import org.tensorflow.lite.Interpreter
@@ -82,13 +81,21 @@ class LiteRtCommandModelRuntime(
             error(status.message)
         }
 
-        val input = buildFeatures(task)
+        val dispatched = extractDispatchedTools(context)
+        val input = buildFeatures(task, dispatched)
         val output = Array(1) { FloatArray(RouteLabels.size) }
         val loadedInterpreter = interpreter ?: error(status.message)
         synchronized(loadedInterpreter) {
             loadedInterpreter.run(input, output)
         }
         return output[0].toCommandJson(task, skill)
+    }
+
+    private fun extractDispatchedTools(context: String): Set<String> {
+        return Regex(""""tool"\s*:\s*"([^"]+)"""")
+            .findAll(context)
+            .map { it.groupValues[1] }
+            .toSet()
     }
 
     private fun loadManifest(): LocalModelManifest? {
@@ -125,16 +132,16 @@ class LiteRtCommandModelRuntime(
         }
     }
 
-    private fun buildFeatures(task: String): Array<FloatArray> {
+    private fun buildFeatures(task: String, dispatched: Set<String>): Array<FloatArray> {
         val normalized = task.trim().lowercase()
         val features = FloatArray(RouteLabels.size)
         when {
-            "back" in normalized -> features[RouteIndexBack] = 1f
-            "home" in normalized -> features[RouteIndexHome] = 1f
-            "scroll up" in normalized -> features[RouteIndexScrollUp] = 1f
-            "scroll" in normalized -> features[RouteIndexScrollDown] = 1f
-            OpenPattern.containsMatchIn(normalized) -> features[RouteIndexOpenApp] = 1f
-            TapPattern.containsMatchIn(normalized) -> features[RouteIndexTapText] = 1f
+            "back" in normalized && "press_back" !in dispatched -> features[RouteIndexBack] = 1f
+            "home" in normalized && "press_home" !in dispatched -> features[RouteIndexHome] = 1f
+            "scroll up" in normalized && "scroll" !in dispatched -> features[RouteIndexScrollUp] = 1f
+            "scroll" in normalized && "scroll" !in dispatched -> features[RouteIndexScrollDown] = 1f
+            OpenPattern.containsMatchIn(normalized) && "open_app" !in dispatched -> features[RouteIndexOpenApp] = 1f
+            TapPattern.containsMatchIn(normalized) && "tap" !in dispatched -> features[RouteIndexTapText] = 1f
         }
         return arrayOf(features)
     }
@@ -210,26 +217,15 @@ class LiteRtCommandModelRuntime(
 
 class LocalModelCommandProvider(
     private val runtime: LocalCommandModelRuntime,
-    private val fallback: LocalRouterCommandProvider,
     private val task: String,
     private val skill: Skill?
 ) : AgentCommandProvider {
-    private var attemptedModel = false
-
     override fun complete(systemPrompt: String, context: String): String {
-        if (!attemptedModel) {
-            attemptedModel = true
-            val modelResult = runCatching {
-                runtime.route(task, context, skill)
-            }.getOrNull()
-
-            val validOutput = modelResult?.let { validateModelOutput(it) }
-            if (validOutput != null) {
-                return validOutput.toCommandJson()
-            }
-        }
-
-        return fallback.complete(systemPrompt, context)
+        val modelResult = runCatching {
+            runtime.route(task, context, skill)
+        }.getOrNull()
+        val validOutput = modelResult?.let { validateModelOutput(it) }
+        return validOutput?.toCommandJson() ?: FinalFallback
     }
 
     private fun validateModelOutput(raw: String): LocalModelOutput? {
@@ -241,5 +237,9 @@ class LocalModelCommandProvider(
             is LocalModelOutputValidation.Valid -> validation.output
             is LocalModelOutputValidation.Invalid -> null
         }
+    }
+
+    companion object {
+        private const val FinalFallback = """{"final":"Local model could not route this task safely."}"""
     }
 }

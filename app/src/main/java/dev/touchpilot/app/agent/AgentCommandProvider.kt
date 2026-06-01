@@ -47,15 +47,9 @@ class LocalRouterCommandProvider(
     private val task: String,
     private val skill: Skill?
 ) : AgentCommandProvider {
-    private var hasObserved = false
     private var hasActed = false
 
     override fun complete(systemPrompt: String, context: String): String {
-        if (!hasObserved) {
-            hasObserved = true
-            return """{"tool":"observe_screen","args":{}}"""
-        }
-
         if (!hasActed) {
             val routed = routeTask(task)
             if (routed != null && isAllowed(routed.tool)) {

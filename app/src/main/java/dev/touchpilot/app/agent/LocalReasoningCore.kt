@@ -268,15 +268,13 @@ fun buildCommandProvider(
     context.exactCommand?.let { command ->
         return FixedCommandProvider(command)
     }
-    val localRouter = LocalRouterCommandProvider(task, context.skill)
     return when (context.providerMode) {
         AgentProviderMode.LOCAL_MODEL -> LocalModelCommandProvider(
             runtime = localModelRuntime,
-            fallback = localRouter,
             task = task,
             skill = context.skill
         )
-        AgentProviderMode.LOCAL_ROUTER -> localRouter
+        AgentProviderMode.LOCAL_ROUTER -> LocalRouterCommandProvider(task, context.skill)
     }
 }
 
