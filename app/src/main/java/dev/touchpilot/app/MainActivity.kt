@@ -841,7 +841,6 @@ class MainActivity : Activity() {
         val workingIndex = conversation.size
         agentCancellationSignal.set(false)
         setAgentRunState(AgentRunState.RUNNING)
-        val workingIndex = conversation.size
         conversation += ChatEvent.Working("Working on it.", "Runtime: ${currentProviderMode().label()}")
         val stepTimeline = ChatEvent.StepTimeline()
         conversation += stepTimeline
