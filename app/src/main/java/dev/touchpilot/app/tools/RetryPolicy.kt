@@ -89,6 +89,7 @@ class AndroidToolRetryPolicy(
                 "open_app" to action,
                 "open_settings_panel" to action,
                 "tap" to action,
+                "long_press" to action,
                 "type_text" to action,
                 "scroll" to action,
                 "swipe" to action,

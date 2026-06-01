@@ -75,6 +75,36 @@ class TargetResolverTest {
     }
 
     @Test
+    fun resolvesSingleContainsTextSelector() {
+        val result = resolver.resolve(
+            context = context(
+                node(nodeId = "0.0", text = "Open Settings Panel"),
+                node(nodeId = "0.1", text = "Tap Text"),
+            ),
+            selector = TargetSelector(text = SelectorText.of("Settings")),
+        )
+
+        val resolved = assertIs<TargetResolutionResult.Resolved>(result)
+        assertEquals("0.0", resolved.candidate.node.nodeId)
+        assertContains(resolved.candidate.matchReasons, "text_contains")
+    }
+
+    @Test
+    fun containsTextStillFailsSafelyWhenAmbiguous() {
+        val result = resolver.resolve(
+            context = context(
+                node(nodeId = "0.0", text = "Open Accessibility Settings"),
+                node(nodeId = "0.1", text = "Open Settings Panel"),
+            ),
+            selector = TargetSelector(text = SelectorText.of("Settings")),
+        )
+
+        val ambiguous = assertIs<TargetResolutionResult.Ambiguous>(result)
+        assertEquals(2, ambiguous.candidates.size)
+        assertTrue(ambiguous.candidates.all { "text_contains" in it.matchReasons })
+    }
+
+    @Test
     fun resolvesContentDescriptionSelectorAgainstObservedText() {
         val result = resolver.resolve(
             context = context(node(nodeId = "0.0", text = "Search apps")),

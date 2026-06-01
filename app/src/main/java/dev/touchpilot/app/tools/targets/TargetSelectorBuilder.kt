@@ -29,6 +29,8 @@ object TargetSelectorBuilder {
      * - `bounds` -> parsed via [TargetBounds.parse]; malformed input is
      *   dropped silently so the resulting selector is simply less specific
      *   rather than invalid.
+     * - `view_id` -> propagated verbatim for tools that accept resource-id
+     *   selectors.
      *
      * The returned selector's [TargetSelector.source] is [SelectorSource.USER]
      * because legacy args come from agent / model / user-typed input that
@@ -38,11 +40,13 @@ object TargetSelectorBuilder {
         val text = args["text"]?.takeIf { it.isNotBlank() }?.let { SelectorText.of(it) }
         val nodeId = args["node_id"]?.takeIf { it.isNotBlank() }
         val bounds = args["bounds"]?.takeIf { it.isNotBlank() }?.let { TargetBounds.parse(it) }
+        val viewId = args["view_id"]?.takeIf { it.isNotBlank() }
 
         return TargetSelector(
             text = text,
             nodeId = nodeId,
             bounds = bounds,
+            viewIdResourceName = viewId,
             source = SelectorSource.USER,
         )
     }

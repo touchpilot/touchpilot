@@ -24,6 +24,8 @@ Tools are the only way an agent may affect the Android device.
 - `open_app`: launch an installed app by package name or label.
 - `open_settings_panel`: open an allowlisted Android Settings panel by intent.
 - `tap`: tap a semantic target by visible text, stable `node_id`, or bounds.
+- `long_press`: long-press a semantic target by visible text, stable `node_id`,
+  bounds, or view ID.
 - `type_text`: type text into the focused field or selected target.
 - `scroll`: scroll the current view.
 - `swipe`: swipe a gesture surface (pager, carousel, drawer, map) by direction
@@ -39,7 +41,7 @@ Tools are the only way an agent may affect the Android device.
 - `dismiss_keyboard`: hide the soft keyboard if it is visible.
 
 The app implements `observe_screen`, `observe_screen_context`, `open_app`,
-`open_settings_panel`, `tap`, `type_text`, `scroll`, `swipe`, `press_back`,
+`open_settings_panel`, `tap`, `long_press`, `type_text`, `scroll`, `swipe`, `press_back`,
 `press_home`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`, `focus_input`,
 `clear_text`, and `dismiss_keyboard` from the Android Tools screen and the
 agent command-provider loop.
@@ -60,6 +62,11 @@ ambiguous container.
 `system_settings`. Unsupported panel names fail validation with the supported
 panel list. The tool only opens Android Settings intents; it never toggles a
 setting.
+
+`long_press` accepts exactly one selector: `text`, `node_id`, `bounds`, or
+`view_id`. Like `tap`, it resolves the target through the shared selector
+resolver before dispatching. Ambiguous or missing targets fail safely instead
+of guessing.
 
 ## Structured vs. raw observation
 

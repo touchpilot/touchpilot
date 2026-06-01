@@ -24,6 +24,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
@@ -1110,10 +1111,28 @@ class MainActivity : Activity() {
         contentRoot.addView(tapInput)
         contentRoot.addView(
             secondaryButton("Tap Text") {
+                val targetText = tapInput.text.toString()
                 hideKeyboard(tapInput)
-                executeAndRender("tap", mapOf("text" to tapInput.text.toString()))
-                showSection(Section.TOOLS)
+                contentRoot.postDelayed({
+                    val result = executeAndRender("tap", mapOf("text" to targetText))
+                    showToolResultToast("Tap", result)
+                    showSection(Section.TOOLS)
+                }, ToolActionKeyboardSettleMs)
             }.apply { id = R.id.tap_text_button }
+        )
+
+        val longPressInput = editText("Visible text to long-press").apply { id = R.id.long_press_text_input }
+        contentRoot.addView(longPressInput)
+        contentRoot.addView(
+            secondaryButton("Long-Press Text") {
+                val targetText = longPressInput.text.toString()
+                hideKeyboard(longPressInput)
+                contentRoot.postDelayed({
+                    val result = executeAndRender("long_press", mapOf("text" to targetText))
+                    showToolResultToast("Long-press", result)
+                    showSection(Section.TOOLS)
+                }, ToolActionKeyboardSettleMs)
+            }.apply { id = R.id.long_press_text_button }
         )
 
         val typeInput = editText("Text to type into focused field").apply { id = R.id.type_text_input }
@@ -1595,6 +1614,18 @@ class MainActivity : Activity() {
         )
         refreshExecutionLog()
         return result
+    }
+
+    private fun showToolResultToast(label: String, result: ToolResult) {
+        Toast.makeText(
+            this,
+            if (result.ok) {
+                "$label succeeded"
+            } else {
+                "$label failed: ${result.message}"
+            },
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun refreshExecutionLog() {
@@ -2763,6 +2794,7 @@ class MainActivity : Activity() {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
         const val MaxToolCardFieldLength = 700
+        const val ToolActionKeyboardSettleMs = 250L
         val ProviderModeLabels = listOf("Local router", "Local model")
         val FocusInputSelectorLabels = listOf("Text", "Node ID", "View ID")
         val FocusInputSelectorHints = listOf(

@@ -9,6 +9,7 @@ Allowed initial tools:
 - `open_settings_panel`
 - `observe_screen`
 - `tap`
+- `long_press`
 - `scroll`
 - `press_back`
 - `wait_for_ui`

@@ -13,6 +13,8 @@
     <item name="wait_for_app_button" type="id" />
     <item name="tap_text_input" type="id" />
     <item name="tap_text_button" type="id" />
+    <item name="long_press_text_input" type="id" />
+    <item name="long_press_text_button" type="id" />
     <item name="type_text_input" type="id" />
     <item name="type_text_button" type="id" />
     <item name="dismiss_keyboard_button" type="id" />

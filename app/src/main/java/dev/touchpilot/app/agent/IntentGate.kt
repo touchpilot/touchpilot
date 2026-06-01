@@ -154,6 +154,14 @@ class IntentGate : IntentClassifier {
                     reason = "open or launch phrase"
                 )
             }
+        LongPressPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+            ?.let { text ->
+                return IntentDecision.ExactCommand(
+                    tool = "long_press",
+                    args = mapOf("text" to text),
+                    reason = "long press phrase"
+                )
+            }
         TapPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
             ?.let { text ->
                 return IntentDecision.ExactCommand(
@@ -229,6 +237,7 @@ class IntentGate : IntentClassifier {
         )
 
         val OpenAppPattern: Regex = Regex("(?:open|launch)\\s+([\\w .-]+)")
+        val LongPressPattern: Regex = Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
         val TapPattern: Regex = Regex("(?:tap|press)\\s+([\\w .-]+)")
     }
 }

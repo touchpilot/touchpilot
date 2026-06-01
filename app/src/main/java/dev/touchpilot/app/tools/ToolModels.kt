@@ -71,6 +71,19 @@ object AndroidToolCatalog {
             requiredArguments = emptySet()
         ),
         ToolSpec(
+            name = "long_press",
+            description = "Long-press a visible UI target resolved from text, node_id, bounds, or view_id. " +
+                "Fails safely when the target is ambiguous or cannot be found.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                "text" to "Visible text or content description to long-press.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "bounds" to "Bounds from observe_screen as left,top,right,bottom.",
+                "view_id" to "Resource ID of the view (e.g., dev.example.app:id/item)."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "type_text",
             description = "Type text into the focused input field, or into a resolved visible input target.",
             risk = ToolRisk.MEDIUM,
@@ -242,6 +255,21 @@ object AndroidToolCatalog {
                 .filter { args[it].isNullOrBlank().not() }
             if (selectors.size != 1) {
                 return "tap requires exactly one selector: text, node_id, or bounds"
+            }
+        }
+
+        if (name == "long_press") {
+            val selectors = listOf("text", "node_id", "bounds", "view_id")
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.size != 1) {
+                return "long_press requires exactly one selector: text, node_id, bounds, or view_id"
+            }
+            val malformedBounds = args["bounds"]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "bounds must be left,top,right,bottom"
             }
         }
 
