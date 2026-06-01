@@ -181,7 +181,7 @@ class OfflineMilestone3Test {
             )
         },
         screenContextProvider = { context }
-    ).run("what can you do here", AgentEventListener {}, java.util.concurrent.atomic.AtomicBoolean(false))
+    ).run("what can you do here", null, AgentEventListener {}, java.util.concurrent.atomic.AtomicBoolean(false))
 
     private fun contextFrom(
         appLabel: String,
