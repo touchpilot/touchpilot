@@ -20,6 +20,10 @@
     <item name="home_button" type="id" />
     <item name="scroll_down_button" type="id" />
     <item name="scroll_up_button" type="id" />
+    <item name="swipe_left_button" type="id" />
+    <item name="swipe_right_button" type="id" />
+    <item name="swipe_up_button" type="id" />
+    <item name="swipe_down_button" type="id" />
     <item name="wait_for_text_input" type="id" />
     <item name="wait_for_text_button" type="id" />
     <item name="wait_for_idle_button" type="id" />
