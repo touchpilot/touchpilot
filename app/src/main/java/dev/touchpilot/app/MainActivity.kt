@@ -31,6 +31,8 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
+import dev.touchpilot.app.agent.AgentRunCompletionStatus
+import dev.touchpilot.app.agent.AgentRunCompletionSummary
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunIds
@@ -469,6 +471,7 @@ class MainActivity : Activity() {
                 onClick = event.runId?.let { runId -> { openRunDetail(runId) } }
             )
             is ChatEvent.StepTimeline -> stepTimelineCard(event)
+            is ChatEvent.CompletionSummary -> completionSummaryCard(event.summary, event.runId)
             is ChatEvent.ToolCall -> toolCallCard(event.card)
             is ChatEvent.ApprovalPrompt -> approvalCard(event)
         }
@@ -535,6 +538,105 @@ class MainActivity : Activity() {
         )
         card.addView(content)
         return card.withMargins(top = 6, right = 24, bottom = 6)
+    }
+
+    private fun completionSummaryCard(summary: AgentRunCompletionSummary, runId: String): View {
+        val stroke = completionSummaryStroke(summary.status)
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = stroke
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { openRunDetail(runId) }
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(
+            TextView(this).apply {
+                text = "Task summary"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+        )
+        header.addView(
+            statusChip(
+                summary.status.label,
+                accent = summary.status == AgentRunCompletionStatus.COMPLETED,
+            )
+        )
+        content.addView(header)
+        content.addView(completionSummaryRow("Stop reason", summary.stopReason))
+        content.addView(
+            completionSummaryRow(
+                "Steps",
+                "${summary.stepCount} step${if (summary.stepCount == 1) "" else "s"}",
+            )
+        )
+        content.addView(
+            completionSummaryRow(
+                "Last verification",
+                summary.lastVerificationOutcome ?: "None recorded",
+            )
+        )
+        summary.nextAction?.let { nextAction ->
+            content.addView(completionSummaryRow("Next", nextAction))
+        }
+        content.addView(
+            TextView(this).apply {
+                text = "Tap for full run details"
+                textSize = 11.5f
+                setTextColor(Theme.Accent)
+                setPadding(0, 10, 0, 0)
+            }
+        )
+        card.addView(content)
+        return card.withMargins(top = 6, right = 24, bottom = 6)
+    }
+
+    private fun completionSummaryRow(label: String, value: String): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8, 0, 0)
+            addView(
+                TextView(this@MainActivity).apply {
+                    text = label
+                    textSize = 11f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Theme.MutedText)
+                }
+            )
+            addView(
+                TextView(this@MainActivity).apply {
+                    text = value
+                    textSize = 12.5f
+                    setTextColor(Theme.BodyText)
+                    setLineSpacing(2f, 1f)
+                    setPadding(0, 2, 0, 0)
+                }
+            )
+        }
+    }
+
+    private fun completionSummaryStroke(status: AgentRunCompletionStatus): Int {
+        return when (status) {
+            AgentRunCompletionStatus.COMPLETED -> Theme.Accent
+            AgentRunCompletionStatus.BLOCKED,
+            AgentRunCompletionStatus.FAILED -> Theme.Danger
+            AgentRunCompletionStatus.STOPPED,
+            AgentRunCompletionStatus.NEEDS_CLARIFICATION,
+            AgentRunCompletionStatus.CANCELLED -> Theme.Warning
+        }
     }
 
     private fun approvalCard(event: ChatEvent.ApprovalPrompt): View {
@@ -677,6 +779,10 @@ class MainActivity : Activity() {
                     ?.forEach { card ->
                         conversation += ChatEvent.ToolCall(card)
                     }
+                conversation += ChatEvent.CompletionSummary(
+                    summary = AgentRunDetailFormatter.buildCompletionSummary(record, steps),
+                    runId = runId,
+                )
                 conversation += ChatEvent.Timeline(
                     title = "Action timeline",
                     body = AgentRunDetailFormatter.compactSummary(record),
@@ -2423,6 +2529,10 @@ class MainActivity : Activity() {
         data class Agent(val text: String, val detail: String) : ChatEvent()
         data class Working(val text: String, val detail: String) : ChatEvent()
         data class Timeline(val title: String, val body: String, val runId: String? = null) : ChatEvent()
+        data class CompletionSummary(
+            val summary: AgentRunCompletionSummary,
+            val runId: String,
+        ) : ChatEvent()
         class StepTimeline(
             steps: List<AgentStep> = emptyList(),
             isComplete: Boolean = false

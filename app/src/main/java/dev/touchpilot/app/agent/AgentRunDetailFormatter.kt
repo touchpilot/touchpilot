@@ -28,6 +28,22 @@ data class AgentRunDisplayStep(
 object AgentRunDetailFormatter {
     private val timestampFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 
+    fun buildCompletionSummary(
+        record: AgentRunRecord,
+        displaySteps: List<AgentStep> = emptyList(),
+    ): AgentRunCompletionSummary {
+        val steps = resolveDisplaySteps(record, displaySteps)
+        val stopReason = record.result?.stopReason
+        val status = deriveCompletionStatus(record, steps)
+        return AgentRunCompletionSummary(
+            status = status,
+            stopReason = deriveStopReason(record),
+            stepCount = steps.size,
+            lastVerificationOutcome = deriveLastVerificationOutcome(record, steps),
+            nextAction = deriveNextAction(status, stopReason, steps),
+        )
+    }
+
     fun compactSummary(record: AgentRunRecord): String {
         if (record.errorMessage != null) {
             return "Run failed: ${SensitiveTextRedactor.redact(record.errorMessage)}"
@@ -130,6 +146,127 @@ object AgentRunDetailFormatter {
                 result.events.forEach { event ->
                     appendLine(event.toJson(redactSensitive = true).toString())
                 }
+            }
+        }
+    }
+
+    private fun resolveDisplaySteps(
+        record: AgentRunRecord,
+        displaySteps: List<AgentStep>,
+    ): List<AgentStep> {
+        val structured = record.result?.steps.orEmpty()
+        return if (structured.isNotEmpty()) structured else displaySteps
+    }
+
+    private fun deriveCompletionStatus(
+        record: AgentRunRecord,
+        steps: List<AgentStep>,
+    ): AgentRunCompletionStatus {
+        if (record.errorMessage != null) {
+            return AgentRunCompletionStatus.FAILED
+        }
+        record.result?.stopReason?.let { return it.toCompletionStatus() }
+        steps.lastOrNull { it.type == AgentStepType.STOP || it.type == AgentStepType.CLARIFY }
+            ?.let { terminal ->
+                if (terminal.type == AgentStepType.CLARIFY) {
+                    return AgentRunCompletionStatus.NEEDS_CLARIFICATION
+                }
+                terminal.stopReason?.let { return it.toCompletionStatus() }
+            }
+        if (!record.result?.finalAnswer.isNullOrBlank()) {
+            return AgentRunCompletionStatus.COMPLETED
+        }
+        return when (record.result?.events?.lastOrNull()) {
+            is AgentEvent.FinalAnswer -> AgentRunCompletionStatus.COMPLETED
+            is AgentEvent.PolicyBlocked -> AgentRunCompletionStatus.BLOCKED
+            is AgentEvent.Clarification -> AgentRunCompletionStatus.NEEDS_CLARIFICATION
+            else -> AgentRunCompletionStatus.STOPPED
+        }
+    }
+
+    private fun AgentStepStopReason.toCompletionStatus(): AgentRunCompletionStatus {
+        return when (this) {
+            AgentStepStopReason.COMPLETED -> AgentRunCompletionStatus.COMPLETED
+            AgentStepStopReason.POLICY_BLOCKED,
+            AgentStepStopReason.APPROVAL_DENIED -> AgentRunCompletionStatus.BLOCKED
+            AgentStepStopReason.CLARIFICATION_NEEDED -> AgentRunCompletionStatus.NEEDS_CLARIFICATION
+            AgentStepStopReason.USER_CANCELLED -> AgentRunCompletionStatus.CANCELLED
+            AgentStepStopReason.MAX_STEPS,
+            AgentStepStopReason.REPEATED_TOOL_FAILURE,
+            AgentStepStopReason.PARSER_ERROR,
+            AgentStepStopReason.EXECUTOR_ERROR,
+            AgentStepStopReason.NO_VALID_ACTION -> AgentRunCompletionStatus.STOPPED
+        }
+    }
+
+    private fun deriveLastVerificationOutcome(
+        record: AgentRunRecord,
+        steps: List<AgentStep>,
+    ): String? {
+        steps.asReversed().firstNotNullOfOrNull { step ->
+            step.verification?.let(::formatVerificationOutcome)
+                ?: step.takeIf { it.type == AgentStepType.VERIFY && it.outputSummary.isNotBlank() }
+                    ?.let { verifyStep ->
+                        formatVerificationOutcome(
+                            verifyStep.status.wireName,
+                            verifyStep.outputSummary,
+                        )
+                    }
+        }?.let { return it }
+
+        record.result?.events?.asReversed()?.firstNotNullOfOrNull { event ->
+            if (event !is AgentEvent.ToolSucceeded) return@firstNotNullOfOrNull null
+            val status = event.data["verification_status"].orEmpty()
+            if (status.isBlank()) return@firstNotNullOfOrNull null
+            formatVerificationOutcome(status, event.data["verification_reason"].orEmpty())
+        }?.let { return it }
+
+        return null
+    }
+
+    private fun formatVerificationOutcome(verification: AgentStepVerification): String {
+        return formatVerificationOutcome(verification.status, verification.reason)
+    }
+
+    private fun formatVerificationOutcome(status: String, reason: String): String {
+        val label = status.replace('_', ' ').replaceFirstChar { char ->
+            if (char.isLowerCase()) char.titlecase(Locale.US) else char.toString()
+        }
+        val redactedReason = SensitiveTextRedactor.redact(reason)
+        return if (redactedReason.isBlank()) label else "$label: $redactedReason"
+    }
+
+    private fun deriveNextAction(
+        status: AgentRunCompletionStatus,
+        stopReason: AgentStepStopReason?,
+        steps: List<AgentStep>,
+    ): String? {
+        return when (status) {
+            AgentRunCompletionStatus.COMPLETED -> null
+            AgentRunCompletionStatus.NEEDS_CLARIFICATION -> {
+                steps.lastOrNull { it.type == AgentStepType.CLARIFY }
+                    ?.clarification
+                    ?.question
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { question ->
+                        "Reply with: ${SensitiveTextRedactor.redact(question).take(120)}"
+                    }
+                    ?: "Reply with the missing detail to continue."
+            }
+            AgentRunCompletionStatus.BLOCKED -> when (stopReason) {
+                AgentStepStopReason.APPROVAL_DENIED ->
+                    "Approve the action or rephrase the task."
+                else -> "Try a safer alternative or adjust your request."
+            }
+            AgentRunCompletionStatus.CANCELLED ->
+                "Approve the pending action or send a revised task."
+            AgentRunCompletionStatus.FAILED -> "Check logs or retry the task."
+            AgentRunCompletionStatus.STOPPED -> when (stopReason) {
+                AgentStepStopReason.MAX_STEPS ->
+                    "Break the task into smaller steps and try again."
+                AgentStepStopReason.REPEATED_TOOL_FAILURE ->
+                    "Check the current screen state and retry."
+                else -> "Review the step timeline and retry if needed."
             }
         }
     }
