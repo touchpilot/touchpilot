@@ -106,6 +106,38 @@ class DefaultActionPolicyTest {
     }
 
     @Test
+    fun mediumRiskToolFromDirectDebugRequiresApproval() {
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = mediumTool("tap"),
+                args = mapOf("text" to "OK"),
+                source = ToolSource.DIRECT_DEBUG
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
+    }
+
+    @Test
+    fun highRiskToolFromDirectDebugRequiresApproval() {
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = ToolSpec(
+                    name = "open_app",
+                    description = "Open an app",
+                    risk = ToolRisk.HIGH,
+                    arguments = emptyMap(),
+                    requiredArguments = emptySet()
+                ),
+                args = mapOf("target" to "Settings"),
+                source = ToolSource.DIRECT_DEBUG
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
+    }
+
+    @Test
     fun allowsLowRiskObservation() {
         val decision = policy.evaluate(
             ToolPolicyRequest(

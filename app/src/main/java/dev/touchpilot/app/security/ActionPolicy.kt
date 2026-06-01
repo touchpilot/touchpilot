@@ -28,6 +28,13 @@ sealed class PolicyDecision {
         override val userMessage: String = reason
     ) : PolicyDecision()
 
+    /**
+     * The tool requires explicit user approval before execution. This is a **blocking
+     * contract**: every caller that evaluates policy must surface an approval gate and
+     * must not proceed to execution unless the user explicitly approves. Treating
+     * RequireApproval as a no-op is a security defect — it bypasses the consent model
+     * for MEDIUM and HIGH risk tools.
+     */
     data class RequireApproval(
         override val reason: String,
         override val userMessage: String,

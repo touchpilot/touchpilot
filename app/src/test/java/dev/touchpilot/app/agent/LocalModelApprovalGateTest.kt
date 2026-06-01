@@ -65,6 +65,26 @@ class LocalModelApprovalGateTest {
     }
 
     @Test
+    fun directDebugMediumRiskToolRequiresApprovalDecision() {
+        // Pins the precondition that drives the executor's approval gate for DIRECT_DEBUG
+        // calls. AndroidToolExecutor.execute() evaluates policy only when source ==
+        // DIRECT_DEBUG; this test confirms DefaultActionPolicy returns RequireApproval for
+        // that source so the executor's block-without-provider branch is reachable.
+        // Full executor integration (ToolResult(ok=false) without approvalProvider) requires
+        // Android instrumentation — see androidTest for that coverage.
+        val spec = assertNotNull(AndroidToolCatalog.find("open_app"))
+        val decision = policy.evaluate(
+            ToolPolicyRequest(
+                tool = spec,
+                args = mapOf("target" to "Settings"),
+                source = ToolSource.DIRECT_DEBUG
+            )
+        )
+
+        assertIs<PolicyDecision.RequireApproval>(decision)
+    }
+
+    @Test
     fun rejectionDecisionMatchesApprovalGateContract() {
         // The approval-gate contract that AgentRunner relies on: when the
         // ToolApprovalProvider returns false, the runner must not execute
