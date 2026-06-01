@@ -1040,6 +1040,21 @@ class MainActivity : Activity() {
             }.apply { id = R.id.open_app_button }
         )
 
+        val settingsPanelInput = editText(
+            "Settings panel: wifi, bluetooth, accessibility, app_info, notifications, system_settings"
+        ).apply { id = R.id.open_settings_panel_input }
+        contentRoot.addView(settingsPanelInput)
+        contentRoot.addView(
+            secondaryButton("Open Settings Panel") {
+                hideKeyboard(settingsPanelInput)
+                executeAndRender(
+                    "open_settings_panel",
+                    mapOf("panel" to settingsPanelInput.text.toString())
+                )
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.open_settings_panel_button }
+        )
+
         val waitAppInput = editText("App package or launcher label to wait for").apply {
             id = R.id.wait_for_app_input
         }

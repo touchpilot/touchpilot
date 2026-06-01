@@ -6,6 +6,7 @@ user explicitly asks to change a setting.
 Allowed initial tools:
 
 - `open_app`
+- `open_settings_panel`
 - `observe_screen`
 - `tap`
 - `scroll`

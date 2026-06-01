@@ -20,6 +20,7 @@ Tools are the only way an agent may affect the Android device.
 
 - `observe_screen`: serialize the current accessibility tree.
 - `open_app`: launch an installed app by package name or label.
+- `open_settings_panel`: open an allowlisted Android Settings panel by intent.
 - `tap`: tap a semantic target by visible text, stable `node_id`, or bounds.
 - `type_text`: type text into the focused field or selected target.
 - `scroll`: scroll the current view.
@@ -32,10 +33,17 @@ Tools are the only way an agent may affect the Android device.
 - `clear_text`: clear the focused or resolved editable input field.
 - `dismiss_keyboard`: hide the soft keyboard if it is visible.
 
-The app implements `observe_screen`, `open_app`, `tap`, `type_text`, `scroll`,
-`press_back`, `press_home`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`,
-`focus_input`, `clear_text`, and `dismiss_keyboard` from the Android Tools
-screen and the agent command-provider loop.
+The app implements `observe_screen`, `open_app`, `open_settings_panel`, `tap`,
+`type_text`, `scroll`, `press_back`, `press_home`, `wait_for_ui`,
+`wait_for_idle`, `wait_for_app`, `focus_input`, `clear_text`, and
+`dismiss_keyboard` from the Android Tools screen and the agent command-provider
+loop.
+
+`open_settings_panel` accepts `panel` and only supports the explicit allowlist
+`wifi`, `bluetooth`, `accessibility`, `app_info`, `notifications`, and
+`system_settings`. Unsupported panel names fail validation with the supported
+panel list. The tool only opens Android Settings intents; it never toggles a
+setting.
 
 `dismiss_keyboard` is observation-gated: it inspects the accessibility window
 list for a `TYPE_INPUT_METHOD` window first. If the keyboard is already hidden,

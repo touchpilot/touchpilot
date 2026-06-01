@@ -39,6 +39,13 @@ Launch TouchPilot:
 - [x] Accessibility status shows connected.
 - [x] `Observe Current Screen` returns a non-empty UI tree.
 - [x] `Open App` opens Settings by label.
+- [ ] `open_settings_panel({panel=wifi})` opens Wi-Fi Settings directly.
+- [ ] `open_settings_panel({panel=bluetooth})` opens Bluetooth Settings directly.
+- [ ] `open_settings_panel({panel=accessibility})` opens Accessibility Settings directly.
+- [ ] `open_settings_panel({panel=app_info})` opens TouchPilot app details.
+- [ ] `open_settings_panel({panel=notifications})` opens TouchPilot notification settings.
+- [ ] `open_settings_panel({panel=system_settings})` opens top-level Android Settings.
+- [ ] `open_settings_panel` rejects unsupported panel names before launching an intent.
 - [ ] `Open App` followed by `wait_for_idle` settles after launch.
 - [ ] `Open App` followed by `wait_for_app({label=Settings})` confirms
   Settings is foreground before follow-up actions.

@@ -2,7 +2,9 @@ package dev.touchpilot.app.tools
 
 import android.content.Context
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.content.pm.ResolveInfo
+import android.net.Uri
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.androidcontrol.DismissKeyboardOutcome
 import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
@@ -140,6 +142,9 @@ class AndroidToolExecutor(
                 val ok = openApp(target)
                 record(name, "target=\"$target\"", ok, "openApp")
                 ToolResult(ok, "openApp")
+            }
+            "open_settings_panel" -> {
+                executeOpenSettingsPanel(args)
             }
             "tap" -> {
                 executeTap(args)
@@ -728,6 +733,43 @@ class AndroidToolExecutor(
             ?: return false
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         return true
+    }
+
+    private fun executeOpenSettingsPanel(args: Map<String, String>): ToolResult {
+        val panel = args[SettingsPanelIntent.PanelArg].orEmpty()
+        val spec = SettingsPanelIntent.resolve(panel)
+            ?: return ToolResult(false, SettingsPanelIntent.unsupportedMessage(panel))
+        val packageName = context.packageName
+        val intent = Intent(spec.action).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            spec.dataUri
+                ?.replace(SettingsPanelIntent.AppPackagePlaceholder, packageName)
+                ?.let { data = Uri.parse(it) }
+            spec.extras.forEach { (key, value) ->
+                putExtra(key, value.replace(SettingsPanelIntent.AppPackagePlaceholder, packageName))
+            }
+        }
+        return try {
+            context.startActivity(intent)
+            record(
+                "open_settings_panel",
+                "panel=\"${spec.panel}\"",
+                true,
+                "opened ${spec.panel} settings panel"
+            )
+            ToolResult(
+                ok = true,
+                message = "Opened ${spec.panel} settings panel",
+                data = mapOf(
+                    "panel" to spec.panel,
+                    "action" to spec.action,
+                )
+            )
+        } catch (_: ActivityNotFoundException) {
+            val message = "No settings activity found for panel: ${spec.panel}"
+            record("open_settings_panel", "panel=\"${spec.panel}\"", false, message)
+            ToolResult(false, message, data = mapOf("panel" to spec.panel, "action" to spec.action))
+        }
     }
 
     private fun ResolveInfo.launcherLabel(): String {

@@ -40,6 +40,15 @@ object AndroidToolCatalog {
             arguments = mapOf("target" to "Package name or launcher label.")
         ),
         ToolSpec(
+            name = "open_settings_panel",
+            description = "Open an allowlisted Android Settings panel using a Settings intent. Does not toggle settings.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                SettingsPanelIntent.PanelArg to
+                    "Panel name: ${SettingsPanelIntent.supportedPanels.joinToString()}."
+            )
+        ),
+        ToolSpec(
             name = "tap",
             description = "Tap a visible UI target resolved from text, node_id, or bounds. " +
                 "Fails safely when the target is ambiguous or cannot be found.",
@@ -222,6 +231,13 @@ object AndroidToolCatalog {
                 .filter { args[it].isNullOrBlank().not() }
             if (selectors.size != 1) {
                 return "focus_input requires exactly one selector: text, node_id, bounds, or view_id"
+            }
+        }
+
+        if (name == "open_settings_panel") {
+            val panel = args[SettingsPanelIntent.PanelArg].orEmpty()
+            if (SettingsPanelIntent.resolve(panel) == null) {
+                return SettingsPanelIntent.unsupportedMessage(panel)
             }
         }
 

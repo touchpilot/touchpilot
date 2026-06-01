@@ -1,6 +1,7 @@
 package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.tools.SettingsPanelIntent
 
 /**
  * Classifies a user task before the local reasoning core decides what to do
@@ -136,6 +137,13 @@ class IntentGate : IntentClassifier {
                 tool = "press_home",
                 args = emptyMap(),
                 reason = "home phrase"
+            )
+        }
+        SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
+            return IntentDecision.ExactCommand(
+                tool = "open_settings_panel",
+                args = mapOf(SettingsPanelIntent.PanelArg to panel),
+                reason = "settings panel phrase"
             )
         }
         OpenAppPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
