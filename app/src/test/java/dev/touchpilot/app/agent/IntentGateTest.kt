@@ -44,6 +44,13 @@ class IntentGateTest {
     }
 
     @Test
+    fun classifiesOpenWifiSettingsAsSettingsPanel() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("Open Wi-Fi settings"))
+        assertEquals("open_settings_panel", command.tool)
+        assertEquals("wifi", command.args["panel"])
+    }
+
+    @Test
     fun classifiesLaunchAppAsExactOpenApp() {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("launch maps"))
         assertEquals("open_app", command.tool)

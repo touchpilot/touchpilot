@@ -1,6 +1,7 @@
 package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.tools.SettingsPanelIntent
 
 fun interface AgentCommandProvider {
     fun complete(systemPrompt: String, context: String): String
@@ -78,6 +79,10 @@ class LocalRouterCommandProvider(
         }
         if (normalized.contains("scroll")) {
             return LocalRoute("scroll", mapOf("direction" to "forward"))
+        }
+
+        SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
+            return LocalRoute("open_settings_panel", mapOf(SettingsPanelIntent.PanelArg to panel))
         }
 
         Regex("(?:open|launch)\\s+([\\w .-]+)")
