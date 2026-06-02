@@ -1878,10 +1878,45 @@ class MainActivity : Activity() {
         val entry = ToolExecutionLog.findEntry(id) ?: return
         AlertDialog.Builder(this)
             .setTitle(entry.name.ifBlank { "Log details" })
-            .setMessage(entry.detailText())
-            .setNeutralButton("Copy") { _, _ -> copyDeveloperLog(entry) }
+            .setView(developerLogDetailView(entry))
             .setPositiveButton("Close", null)
             .show()
+    }
+
+    private fun developerLogDetailView(entry: DeveloperLogEntry): View {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8, 0, 0)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, 8)
+        }
+        header.addView(
+            TextView(this).apply {
+                text = "${entry.type.ifBlank { "log" }} · ${entry.source.ifBlank { "unknown" }}"
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Theme.MutedText)
+                maxLines = 1
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        header.addView(copyLogButton(entry))
+        content.addView(header)
+        content.addView(
+            TextView(this).apply {
+                text = entry.detailText()
+                textSize = 12.5f
+                setTextColor(Theme.BodyText)
+                setTextIsSelectable(true)
+                setLineSpacing(3f, 1f)
+                background = rounded(Theme.SurfaceRaised, 8, Theme.StrokeDark)
+                setPadding(12, 10, 12, 10)
+            }
+        )
+        return content
     }
 
     private fun copyLogButton(entry: DeveloperLogEntry): View {
