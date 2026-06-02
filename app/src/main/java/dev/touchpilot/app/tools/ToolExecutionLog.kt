@@ -61,7 +61,13 @@ object ToolExecutionLog {
                 result = redactedMessage,
                 errorDetails = if (ok) "" else redactedMessage,
                 payloadSummary = redactedArgs,
-                details = "tool=$name\nsource=$source\nstatus=${if (ok) "ok" else "fail"}"
+                details = buildString {
+                    appendLine("tool=$name")
+                    appendLine("source=$source")
+                    appendLine("status=${if (ok) "ok" else "fail"}")
+                    appendLine("args=$redactedArgs")
+                    appendLine("message=$redactedMessage")
+                }.trim()
             )
         )
     }

@@ -39,9 +39,24 @@ data class DeveloperLogEntry(
     }
 
     fun detailText(): String {
+        return buildString {
+            val logText = fullLogText()
+            if (logText.isNotBlank()) {
+                appendLine(logText)
+            }
+        }.trim()
+    }
+
+    fun fullLogText(): String {
         val message = result.ifBlank { errorDetails.ifBlank { payloadSummary } }
         return buildString {
+            appendLine(
+                "[${formatTimestamp(timestampMillis)}] ${type.ifBlank { "log" }} " +
+                    "${name.ifBlank { "untitled" }} (${source.ifBlank { "unknown" }}) -> " +
+                    "${status.ifBlank { "unknown" }}"
+            )
             if (message.isNotBlank()) {
+                appendLine()
                 appendLine("Message")
                 appendLine(message)
             }
@@ -57,17 +72,15 @@ data class DeveloperLogEntry(
             }
             if (details.isNotBlank()) {
                 appendLine()
-                appendLine("Log")
+                appendLine("Log details")
                 appendLine(details)
             }
             appendLine()
             appendLine("Metadata")
-            appendLine("Time: ${formatTimestamp(timestampMillis)}")
-            appendLine("Type: ${type.ifBlank { "log" }}")
             appendLine("Actor: ${actor.ifBlank { "unknown" }}")
-            appendLine("Name: ${name.ifBlank { "untitled" }}")
-            appendLine("Status: ${status.ifBlank { "unknown" }}")
+            appendLine("Type: ${type.ifBlank { "log" }}")
             appendLine("Source: ${source.ifBlank { "unknown" }}")
+            appendLine("Status: ${status.ifBlank { "unknown" }}")
         }.trim()
     }
 

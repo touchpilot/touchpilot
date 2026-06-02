@@ -2,6 +2,8 @@ package dev.touchpilot.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
@@ -1856,6 +1858,7 @@ class MainActivity : Activity() {
             }
         )
         header.addView(logStatusChip(entry.status.ifBlank { "log" }))
+        header.addView(copyLogButton(entry))
         content.addView(header)
         val preview = entry.result.ifBlank { entry.payloadSummary }.lineSequence().firstOrNull().orEmpty()
         content.addView(
@@ -1876,8 +1879,41 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle(entry.name.ifBlank { "Log details" })
             .setMessage(entry.detailText())
+            .setNeutralButton("Copy") { _, _ -> copyDeveloperLog(entry) }
             .setPositiveButton("Close", null)
             .show()
+    }
+
+    private fun copyLogButton(entry: DeveloperLogEntry): View {
+        return MaterialButton(this).apply {
+            icon = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_copy)
+            iconTint = ColorStateList.valueOf(Theme.BodyText)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = 0
+            iconSize = 34
+            minWidth = 38
+            minHeight = 38
+            insetTop = 0
+            insetBottom = 0
+            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
+            strokeWidth = 1
+            cornerRadius = 8
+            contentDescription = "Copy log"
+            setPadding(0, 0, 0, 0)
+            setOnClickListener { copyDeveloperLog(entry) }
+        }
+    }
+
+    private fun copyDeveloperLog(entry: DeveloperLogEntry) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText(
+                entry.name.ifBlank { "TouchPilot log" },
+                entry.fullLogText()
+            )
+        )
+        Toast.makeText(this, "Log copied", Toast.LENGTH_SHORT).show()
     }
 
     private fun logStatusChip(status: String): TextView {
