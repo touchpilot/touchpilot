@@ -39,33 +39,35 @@ data class DeveloperLogEntry(
     }
 
     fun detailText(): String {
+        val message = result.ifBlank { errorDetails.ifBlank { payloadSummary } }
         return buildString {
-            appendLine("Time: ${formatTimestamp(timestampMillis)}")
-            appendLine("Type: ${type.ifBlank { "log" }}")
-            appendLine("Actor: ${actor.ifBlank { "unknown" }}")
-            appendLine("Name: ${name.ifBlank { "untitled" }}")
-            appendLine("Status: ${status.ifBlank { "unknown" }}")
-            appendLine("Source: ${source.ifBlank { "unknown" }}")
-            if (payloadSummary.isNotBlank()) {
+            if (message.isNotBlank()) {
+                appendLine("Message")
+                appendLine(message)
+            }
+            if (payloadSummary.isNotBlank() && payloadSummary != message) {
                 appendLine()
                 appendLine("Payload")
                 appendLine(payloadSummary)
             }
-            if (result.isNotBlank()) {
-                appendLine()
-                appendLine("Result")
-                appendLine(result)
-            }
-            if (errorDetails.isNotBlank()) {
+            if (errorDetails.isNotBlank() && errorDetails != message) {
                 appendLine()
                 appendLine("Error details")
                 appendLine(errorDetails)
             }
             if (details.isNotBlank()) {
                 appendLine()
-                appendLine("Details")
+                appendLine("Log")
                 appendLine(details)
             }
+            appendLine()
+            appendLine("Metadata")
+            appendLine("Time: ${formatTimestamp(timestampMillis)}")
+            appendLine("Type: ${type.ifBlank { "log" }}")
+            appendLine("Actor: ${actor.ifBlank { "unknown" }}")
+            appendLine("Name: ${name.ifBlank { "untitled" }}")
+            appendLine("Status: ${status.ifBlank { "unknown" }}")
+            appendLine("Source: ${source.ifBlank { "unknown" }}")
         }.trim()
     }
 

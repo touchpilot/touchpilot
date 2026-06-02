@@ -9,6 +9,7 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
@@ -1816,20 +1817,21 @@ class MainActivity : Activity() {
     }
 
     private fun developerLogRow(entry: DeveloperLogEntry): View {
-        val accent = entry.status == "ok" || entry.status == "complete"
+        val statusColor = logStatusColor(entry.status)
         val card = MaterialCardView(this).apply {
             setCardBackgroundColor(Theme.Card)
-            strokeColor = if (accent) Theme.Accent else Theme.StrokeDark
-            strokeWidth = if (accent) 1 else 2
+            strokeColor = statusColor
+            strokeWidth = 1
             radius = 8f
             cardElevation = 0f
             isClickable = true
             isFocusable = true
+            foreground = selectableItemBackground()
             setOnClickListener { showDeveloperLogDetails(entry.id) }
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
+            setPadding(16, 11, 16, 11)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1841,50 +1843,32 @@ class MainActivity : Activity() {
                 textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
+                maxLines = 1
             },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        header.addView(statusChip(entry.status.ifBlank { "log" }, accent = accent))
-        content.addView(header)
-        content.addView(
+        header.addView(
             TextView(this).apply {
-                text = DeveloperLogEntry.formatTimestamp(entry.timestampMillis)
+                text = DeveloperLogEntry.formatShortTimestamp(entry.timestampMillis)
                 textSize = 11f
                 setTextColor(Theme.MutedText)
+                setPadding(8, 0, 10, 0)
+            }
+        )
+        header.addView(logStatusChip(entry.status.ifBlank { "log" }))
+        content.addView(header)
+        val preview = entry.result.ifBlank { entry.payloadSummary }.lineSequence().firstOrNull().orEmpty()
+        content.addView(
+            TextView(this).apply {
+                text = "${entry.type.ifBlank { "log" }} · ${entry.source.ifBlank { "unknown" }} · $preview"
+                textSize = 12.5f
+                setTextColor(Theme.BodyText)
+                maxLines = 1
                 setPadding(0, 5, 0, 0)
             }
         )
-        content.addView(
-            TextView(this).apply {
-                text = entry.compactSummary()
-                textSize = 12f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Theme.MutedText)
-                setPadding(0, 7, 0, 0)
-            }
-        )
-        val resultText = entry.result.ifBlank { entry.payloadSummary }
-        if (resultText.isNotBlank()) {
-            content.addView(
-                TextView(this).apply {
-                    text = resultText
-                    textSize = 12.5f
-                    setTextColor(Theme.BodyText)
-                    maxLines = 3
-                    setPadding(0, 7, 0, 0)
-                }
-            )
-        }
-        content.addView(
-            TextView(this).apply {
-                text = "Tap for full log details"
-                textSize = 11f
-                setTextColor(Theme.MutedText)
-                setPadding(0, 8, 0, 0)
-            }
-        )
         card.addView(content)
-        return card.withMargins(top = 6, bottom = 6)
+        return card.withMargins(top = 4, bottom = 4)
     }
 
     private fun showDeveloperLogDetails(id: Long) {
@@ -1894,6 +1878,28 @@ class MainActivity : Activity() {
             .setMessage(entry.detailText())
             .setPositiveButton("Close", null)
             .show()
+    }
+
+    private fun logStatusChip(status: String): TextView {
+        val color = logStatusColor(status)
+        return TextView(this).apply {
+            text = status.ifBlank { "log" }
+            textSize = 9f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(if (color == Theme.Accent || color == Theme.Warning) Theme.OnAccent else Color.WHITE)
+            isAllCaps = true
+            background = rounded(color, 7, color)
+            setPadding(8, 3, 8, 3)
+        }
+    }
+
+    private fun logStatusColor(status: String): Int {
+        return when (status.lowercase()) {
+            "ok", "complete" -> Theme.Accent
+            "fail", "failed", "error" -> Theme.Danger
+            "running", "pending", "info" -> Theme.Warning
+            else -> Theme.StrokeDark
+        }
     }
 
     private fun refreshStatus() {
@@ -2713,6 +2719,13 @@ class MainActivity : Activity() {
             setColor(fill)
             cornerRadius = radius.toFloat()
             setStroke(1, stroke)
+        }
+    }
+
+    private fun selectableItemBackground(): Drawable? {
+        val attrs = intArrayOf(android.R.attr.selectableItemBackground)
+        return obtainStyledAttributes(attrs).use { typedArray ->
+            typedArray.getDrawable(0)
         }
     }
 
