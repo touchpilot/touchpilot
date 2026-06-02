@@ -41,44 +41,52 @@ class AndroidToolExecutor(
     private val findElementMatcher: FindElementMatcher = FindElementMatcher(),
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
+    private val executionSource = ThreadLocal.withInitial { ToolSource.DIRECT_DEBUG }
+
     fun execute(
         name: String,
         args: Map<String, String>,
         source: ToolSource = ToolSource.DIRECT_DEBUG
     ): ToolResult {
-        val validationError = validate(name, args)
-        if (validationError != null) {
-            val argsForLog = if (validationError.startsWith("Unknown tool")) {
-                "args=${args.keys.joinToString()}"
-            } else {
-                "invalid args"
-            }
-            record(name, argsForLog, false, validationError)
-            return ToolResult(false, validationError)
-        }
-
-        val spec = AndroidToolCatalog.find(name)
-        if (spec != null) {
-            when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
-                is PolicyDecision.Block -> {
-                    record(name, "policy=block", false, decision.userMessage)
-                    return ToolResult(false, decision.userMessage)
+        val previousSource = executionSource.get()
+        executionSource.set(source)
+        try {
+            val validationError = validate(name, args)
+            if (validationError != null) {
+                val argsForLog = if (validationError.startsWith("Unknown tool")) {
+                    "args=${args.keys.joinToString()}"
+                } else {
+                    "invalid args"
                 }
-                is PolicyDecision.Deny -> {
-                    record(name, "policy=deny", false, decision.userMessage)
-                    return ToolResult(false, decision.userMessage)
-                }
-                is PolicyDecision.Allow,
-                is PolicyDecision.RequireApproval -> Unit
+                record(name, argsForLog, false, validationError)
+                return ToolResult(false, validationError)
             }
-        }
 
-        val result = executeWithRetry(name, args)
-        val retryConfig = retryPolicy.configFor(name)
-        if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
-            AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
+            val spec = AndroidToolCatalog.find(name)
+            if (spec != null) {
+                when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
+                    is PolicyDecision.Block -> {
+                        record(name, "policy=block", false, decision.userMessage)
+                        return ToolResult(false, decision.userMessage)
+                    }
+                    is PolicyDecision.Deny -> {
+                        record(name, "policy=deny", false, decision.userMessage)
+                        return ToolResult(false, decision.userMessage)
+                    }
+                    is PolicyDecision.Allow,
+                    is PolicyDecision.RequireApproval -> Unit
+                }
+            }
+
+            val result = executeWithRetry(name, args)
+            val retryConfig = retryPolicy.configFor(name)
+            if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
+                AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
+            }
+            return result
+        } finally {
+            executionSource.set(previousSource)
         }
-        return result
     }
 
     private fun executeWithRetry(name: String, args: Map<String, String>): ToolResult {
@@ -986,7 +994,13 @@ class AndroidToolExecutor(
     }
 
     private fun record(name: String, args: String, ok: Boolean, message: String) {
-        ToolExecutionLog.record(name, args, ok, message)
+        ToolExecutionLog.record(
+            name = name,
+            args = args,
+            ok = ok,
+            message = message,
+            source = (executionSource.get() ?: ToolSource.DIRECT_DEBUG).name.lowercase()
+        )
     }
 
     private fun ToolResult.withVerification(verification: ToolVerificationResult): ToolResult {
