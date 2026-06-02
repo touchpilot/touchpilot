@@ -2724,8 +2724,11 @@ class MainActivity : Activity() {
 
     private fun selectableItemBackground(): Drawable? {
         val attrs = intArrayOf(android.R.attr.selectableItemBackground)
-        return obtainStyledAttributes(attrs).use { typedArray ->
+        val typedArray = obtainStyledAttributes(attrs)
+        return try {
             typedArray.getDrawable(0)
+        } finally {
+            typedArray.recycle()
         }
     }
 
