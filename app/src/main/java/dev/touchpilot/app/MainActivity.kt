@@ -995,8 +995,8 @@ class MainActivity : Activity() {
                         conversation += ChatEvent.ToolCall(card)
                     }
                 conversation += ChatEvent.CompletionSummary(
-                    summary = AgentRunDetailFormatter.buildCompletionSummary(record, steps),
-                    runId = runId,
+                    summary = AgentRunDetailFormatter.buildCompletionSummary(record, timelineSteps),
+                    runId = record.id,
                 )
                 conversation += ChatEvent.Timeline(
                     title = "Action timeline",
