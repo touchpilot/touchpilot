@@ -1,6 +1,7 @@
 package dev.touchpilot.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
@@ -62,6 +63,7 @@ import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.localinference.LocalModelStatus
+import dev.touchpilot.app.logging.DeveloperLogEntry
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
@@ -92,7 +94,7 @@ class MainActivity : Activity() {
     private lateinit var chatInputBar: LinearLayout
     private lateinit var chatTaskInput: EditText
     private lateinit var statusView: TextView
-    private lateinit var executionLogView: TextView
+    private lateinit var executionLogList: LinearLayout
     private var bottomNav: TabLayout? = null
 
     private var activeSection = Section.CHAT
@@ -114,6 +116,7 @@ class MainActivity : Activity() {
 
         preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
         skills = SkillStore(this).loadSkills()
+        ToolExecutionLog.configure(this)
         toolExecutor = AndroidToolExecutor(this)
         localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
@@ -830,10 +833,20 @@ class MainActivity : Activity() {
         }
 
         conversation += ChatEvent.User(task)
+        ToolExecutionLog.recordChat(
+            name = if (pending != null) "clarification_reply" else "user_message",
+            actor = "User",
+            message = task
+        )
 
         val conversationalResponse = ConversationalGate.respond(agentTask)
         if (conversationalResponse != null) {
             conversation += ChatEvent.Agent(conversationalResponse.message, "")
+            ToolExecutionLog.recordChat(
+                name = "assistant_message",
+                actor = "TouchPilot",
+                message = conversationalResponse.message
+            )
             showSection(Section.CHAT)
             return
         }
@@ -849,6 +862,12 @@ class MainActivity : Activity() {
         val runId = AgentRunIds.next()
         val startedAtMillis = System.currentTimeMillis()
         val taskForRecord = originalTask ?: task
+        ToolExecutionLog.recordAction(
+            name = "agent_run_started",
+            result = taskForRecord,
+            status = "running",
+            source = currentProviderMode().toLogSource()
+        )
         val initialScreenRecord = AgentScreenRecord.capture(
             sequenceNumber = 0,
             phase = "initial",
@@ -944,6 +963,13 @@ class MainActivity : Activity() {
     ) {
         removeWorkingIndicator(workingIndex)
         agentRunHistory += record
+        ToolExecutionLog.recordAction(
+            name = "agent_run_finished",
+            result = record.errorMessage ?: AgentRunDetailFormatter.compactSummary(record),
+            status = if (runOutcome.isSuccess) "complete" else "fail",
+            source = currentProviderMode().toLogSource(),
+            details = "run_id=${record.id}"
+        )
         refreshExecutionLog()
         refreshStatus()
 
@@ -970,6 +996,11 @@ class MainActivity : Activity() {
                 if (prompt != null) {
                     val originalTask = resumeOriginalTask ?: record.task
                     pendingClarification = PendingClarification(originalTask = originalTask)
+                    ToolExecutionLog.recordChat(
+                        name = "clarification_prompt",
+                        actor = "TouchPilot",
+                        message = "${prompt.question}\n${prompt.detail}"
+                    )
                     conversation += ChatEvent.ClarificationPrompt(
                         question = prompt.question,
                         detail = prompt.detail,
@@ -981,12 +1012,22 @@ class MainActivity : Activity() {
                         "TouchPilot needs clarification before continuing.",
                         result.stopMessage
                     )
+                    ToolExecutionLog.recordChat(
+                        name = "assistant_message",
+                        actor = "TouchPilot",
+                        message = result.stopMessage
+                    )
                 }
             }
             result?.stopReason == AgentStepStopReason.COMPLETED &&
                 isInformationalAssistantRun(result) -> {
                 val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().last()
                 conversation += ChatEvent.Agent(assistant.text, assistant.detail)
+                ToolExecutionLog.recordChat(
+                    name = "assistant_message",
+                    actor = "TouchPilot",
+                    message = "${assistant.text}\n${assistant.detail}"
+                )
             }
             runOutcome.isSuccess -> {
                 record.result?.events
@@ -1010,11 +1051,23 @@ class MainActivity : Activity() {
                     else -> "Tap the timeline card to inspect tool calls, verification, and stop reason."
                 }
                 conversation += ChatEvent.Agent("Done.", doneDetail)
+                ToolExecutionLog.recordChat(
+                    name = "assistant_message",
+                    actor = "TouchPilot",
+                    message = doneDetail,
+                    status = "complete"
+                )
             }
             else -> {
                 conversation += ChatEvent.Agent(
                     "Run failed.",
                     record.errorMessage ?: "Unknown agent error"
+                )
+                ToolExecutionLog.recordChat(
+                    name = "assistant_message",
+                    actor = "TouchPilot",
+                    message = record.errorMessage ?: "Unknown agent error",
+                    status = "fail"
                 )
             }
         }
@@ -1612,15 +1665,12 @@ class MainActivity : Activity() {
             }.apply { id = R.id.export_debug_trace_button }
         )
         contentRoot.addView(timelineCard("Latest result", sectionResults.forLogs()))
-        executionLogView = TextView(this).apply {
-            id = R.id.execution_log_view
-            text = ToolExecutionLog.render()
-            textSize = 12f
-            setTextColor(Theme.BodyText)
-            setPadding(16, 16, 16, 16)
-            background = rounded(Theme.Card, 8, Theme.StrokeDark)
+        executionLogList = LinearLayout(this).apply {
+            id = R.id.execution_log_list
+            orientation = LinearLayout.VERTICAL
         }
-        contentRoot.addView(executionLogView)
+        contentRoot.addView(executionLogList)
+        refreshExecutionLog()
     }
 
     private fun renderSettingsScreen() {
@@ -1747,9 +1797,103 @@ class MainActivity : Activity() {
     }
 
     private fun refreshExecutionLog() {
-        if (::executionLogView.isInitialized) {
-            executionLogView.text = ToolExecutionLog.render()
+        if (::executionLogList.isInitialized) {
+            executionLogList.removeAllViews()
+            val entries = ToolExecutionLog.recentEntries()
+            if (entries.isEmpty()) {
+                executionLogList.addView(
+                    timelineCard(
+                        title = "No developer logs yet",
+                        body = "Run a chat task or tool action to record local logs."
+                    )
+                )
+                return
+            }
+            entries.forEach { entry ->
+                executionLogList.addView(developerLogRow(entry))
+            }
         }
+    }
+
+    private fun developerLogRow(entry: DeveloperLogEntry): View {
+        val accent = entry.status == "ok" || entry.status == "complete"
+        val card = MaterialCardView(this).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = if (accent) Theme.Accent else Theme.StrokeDark
+            strokeWidth = if (accent) 1 else 2
+            radius = 8f
+            cardElevation = 0f
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showDeveloperLogDetails(entry.id) }
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(
+            TextView(this).apply {
+                text = entry.name.ifBlank { entry.type }
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        header.addView(statusChip(entry.status.ifBlank { "log" }, accent = accent))
+        content.addView(header)
+        content.addView(
+            TextView(this).apply {
+                text = DeveloperLogEntry.formatTimestamp(entry.timestampMillis)
+                textSize = 11f
+                setTextColor(Theme.MutedText)
+                setPadding(0, 5, 0, 0)
+            }
+        )
+        content.addView(
+            TextView(this).apply {
+                text = entry.compactSummary()
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Theme.MutedText)
+                setPadding(0, 7, 0, 0)
+            }
+        )
+        val resultText = entry.result.ifBlank { entry.payloadSummary }
+        if (resultText.isNotBlank()) {
+            content.addView(
+                TextView(this).apply {
+                    text = resultText
+                    textSize = 12.5f
+                    setTextColor(Theme.BodyText)
+                    maxLines = 3
+                    setPadding(0, 7, 0, 0)
+                }
+            )
+        }
+        content.addView(
+            TextView(this).apply {
+                text = "Tap for full log details"
+                textSize = 11f
+                setTextColor(Theme.MutedText)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+        card.addView(content)
+        return card.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun showDeveloperLogDetails(id: Long) {
+        val entry = ToolExecutionLog.findEntry(id) ?: return
+        AlertDialog.Builder(this)
+            .setTitle(entry.name.ifBlank { "Log details" })
+            .setMessage(entry.detailText())
+            .setPositiveButton("Close", null)
+            .show()
     }
 
     private fun refreshStatus() {
@@ -2604,6 +2748,13 @@ class MainActivity : Activity() {
         return when (this) {
             AgentProviderMode.LOCAL_MODEL -> "Local model with router fallback"
             AgentProviderMode.LOCAL_ROUTER -> "Local router"
+        }
+    }
+
+    private fun AgentProviderMode.toLogSource(): String {
+        return when (this) {
+            AgentProviderMode.LOCAL_MODEL -> "local_model"
+            AgentProviderMode.LOCAL_ROUTER -> "local_router"
         }
     }
 
