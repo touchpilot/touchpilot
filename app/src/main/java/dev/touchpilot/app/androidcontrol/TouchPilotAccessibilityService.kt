@@ -316,6 +316,10 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return performGlobalAction(GLOBAL_ACTION_HOME)
     }
 
+    fun openRecents(): Boolean {
+        return performGlobalAction(GLOBAL_ACTION_RECENTS)
+    }
+
     fun isKeyboardVisible(): Boolean {
         // flagRetrieveInteractiveWindows is already declared in the service
         // config, so getWindows() surfaces the IME window when it is showing.

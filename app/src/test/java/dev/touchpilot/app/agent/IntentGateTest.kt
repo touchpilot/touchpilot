@@ -124,6 +124,33 @@ class IntentGateTest {
     }
 
     @Test
+    fun classifiesRecentAppsAsExactRecentApps() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("show recent apps"))
+        assertEquals("recent_apps", command.tool)
+        assertEquals(emptyMap(), command.args)
+    }
+
+    @Test
+    fun classifiesAppSwitcherAsExactRecentApps() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("open the app switcher"))
+        assertEquals("recent_apps", command.tool)
+    }
+
+    @Test
+    fun classifiesSwitchAppsAsExactRecentApps() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("switch apps"))
+        assertEquals("recent_apps", command.tool)
+    }
+
+    @Test
+    fun recentsPhraseTakesPrecedenceOverOpenApp() {
+        // "open recents" contains the open/launch keyword; recents detection
+        // must win so it does not become open_app with target "recents".
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("open recents"))
+        assertEquals("recent_apps", command.tool)
+    }
+
+    @Test
     fun classifiesPaymentAsUnsafe() {
         val unsafe = assertIs<IntentDecision.UnsafeRequest>(gate.classify("Send this payment"))
         assertEquals("payments are blocked", unsafe.reason)

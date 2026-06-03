@@ -230,6 +230,13 @@ class ToolsScreenRenderer(
             }.apply { id = R.id.home_button },
             rowButtonParams()
         )
+        actionRow.addView(
+            activity.secondaryButton("Recent Apps") {
+                toolExecutionController.executeAndRender("recent_apps", emptyMap())
+                refreshToolsScreen()
+            }.apply { id = R.id.recent_apps_button },
+            rowButtonParams()
+        )
         contentRoot.addView(actionRow)
 
         val scrollRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }

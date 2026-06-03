@@ -220,6 +220,11 @@ class AndroidToolExecutor(
                 record(name, "", ok, "pressHome")
                 ToolResult(ok, "pressHome")
             }
+            "recent_apps" -> {
+                val ok = AccessibilityBridge.openRecents()
+                record(name, "", ok, "openRecents")
+                ToolResult(ok, "openRecents")
+            }
             "wait_for_ui" -> {
                 val text = args["text"].orEmpty()
                 val timeout = args["timeout_ms"]?.toLongOrNull() ?: 5_000L
