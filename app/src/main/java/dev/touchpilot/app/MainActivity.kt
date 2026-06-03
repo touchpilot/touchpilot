@@ -77,6 +77,7 @@ import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.tools.ToolResult
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -1889,12 +1890,12 @@ class MainActivity : Activity() {
     private fun developerLogDetailView(entry: DeveloperLogEntry, onClose: () -> Unit): View {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 8, 0, 0)
+            setPadding(0, 6, 0, 0)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, 8)
+            setPadding(0, 0, 0, dp(8))
         }
         header.addView(
             LinearLayout(this).apply {
@@ -1902,19 +1903,20 @@ class MainActivity : Activity() {
                 addView(
                     TextView(this@MainActivity).apply {
                         text = entry.name.ifBlank { "Log details" }
-                        textSize = 14f
+                        textSize = 16f
                         typeface = Typeface.DEFAULT_BOLD
                         setTextColor(Color.WHITE)
+                        letterSpacing = 0.03f
                         maxLines = 1
                     }
                 )
                 addView(
                     TextView(this@MainActivity).apply {
-                        text = "${entry.type.ifBlank { "log" }} · ${entry.source.ifBlank { "unknown" }}"
+                        text = DeveloperLogEntry.formatTimestamp(entry.timestampMillis)
                         textSize = 11f
-                        typeface = Typeface.DEFAULT_BOLD
                         setTextColor(Theme.MutedText)
                         maxLines = 1
+                        setPadding(0, 3, 0, 0)
                     }
                 )
             },
@@ -1923,18 +1925,62 @@ class MainActivity : Activity() {
         header.addView(logIconButton(R.drawable.ic_copy, "Copy log") { copyDeveloperLog(entry) })
         header.addView(logIconButton(R.drawable.ic_close, "Close log details", onClose))
         content.addView(header)
+
+        content.addView(logMetaChipRow(entry))
+
+        val logTextView = TextView(this).apply {
+            text = formattedLogText(entry.detailText())
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setTextColor(Color.parseColor("#E8EAF6"))
+            setTextIsSelectable(true)
+            setLineSpacing(4f, 1f)
+            background = rounded(Color.parseColor("#161B22"), 12, Theme.StrokeDark)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        }
         content.addView(
-            TextView(this).apply {
-                text = entry.detailText()
-                textSize = 12.5f
-                setTextColor(Theme.BodyText)
-                setTextIsSelectable(true)
-                setLineSpacing(3f, 1f)
-                background = rounded(Theme.SurfaceRaised, 8, Theme.StrokeDark)
-                setPadding(12, 10, 12, 10)
+            ScrollView(this).apply {
+                addView(logTextView)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(320)
+                ).apply {
+                    setMargins(0, dp(12), 0, 0)
+                }
             }
         )
         return content
+    }
+
+    private fun logMetaChipRow(entry: DeveloperLogEntry): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(logMetaChip(entry.type.ifBlank { "log" }, Theme.Accent))
+            addView(spacer(dp(6)))
+            addView(logMetaChip(entry.source.ifBlank { "unknown" }, Theme.Warning))
+            addView(spacer(dp(6)))
+            addView(logMetaChip(entry.status.ifBlank { "log" }, logStatusColor(entry.status)))
+        }
+    }
+
+    private fun logMetaChip(text: String, bg: Int): TextView {
+        return TextView(this).apply {
+            this.text = text.uppercase()
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(if (bg == Theme.Accent || bg == Theme.Warning) Theme.OnAccent else Color.WHITE)
+            background = rounded(bg, 8, bg)
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+        }
+    }
+
+    private fun spacer(width: Int): View {
+        return View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(width, 1)
+        }
     }
 
     private fun logIconButton(
@@ -1948,20 +1994,34 @@ class MainActivity : Activity() {
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
             iconPadding = 0
             iconSize = 18
-            minWidth = 28
-            minHeight = 28
-            layoutParams = LinearLayout.LayoutParams(30, 30).apply {
-                setMargins(6, 0, 0, 0)
+            minWidth = dp(36)
+            minHeight = dp(36)
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
+                setMargins(dp(6), 0, 0, 0)
             }
             insetTop = 0
             insetBottom = 0
-            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            backgroundTintList = ColorStateList.valueOf(Theme.SurfaceRaised)
             strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
             strokeWidth = 1
-            cornerRadius = 7
+            cornerRadius = dp(18)
             contentDescription = description
             setPadding(0, 0, 0, 0)
             setOnClickListener { onClick() }
+        }
+    }
+
+    private fun formattedLogText(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return raw
+        return try {
+            when {
+                trimmed.startsWith("{") -> JSONObject(trimmed).toString(2)
+                trimmed.startsWith("[") -> JSONArray(trimmed).toString(2)
+                else -> raw
+            }
+        } catch (_: Exception) {
+            raw
         }
     }
 
@@ -2816,6 +2876,10 @@ class MainActivity : Activity() {
             cornerRadius = radius.toFloat()
             setStroke(1, stroke)
         }
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     private fun selectableItemBackground(): Drawable? {
