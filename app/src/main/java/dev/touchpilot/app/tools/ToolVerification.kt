@@ -25,6 +25,7 @@ class ToolVerifier {
             "long_press" -> verifyChangedOrFocused(before, after, "long_press")
             "type_text" -> verifyTypeText(args, after)
             "scroll" -> verifyScroll(result, before, after)
+            "scroll_to_element" -> verifyScrollToElement(args, after)
             "swipe" -> verifySwipe(result, before, after)
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
@@ -146,6 +147,28 @@ class ToolVerifier {
             ToolVerificationResult.Failed(
                 reason = "no focused or visible input field contains the typed text",
                 data = mapOf("text_length" to text.length.toString())
+            )
+        }
+    }
+
+    private fun verifyScrollToElement(
+        args: Map<String, String>,
+        after: ScreenContext,
+    ): ToolVerificationResult {
+        val query = ScrollToElement.queryFromArgs(args)
+        val matches = FindElementMatcher().match(after, query)
+        return if (matches.isNotEmpty()) {
+            ToolVerificationResult.Passed(
+                reason = "the requested element is visible after scrolling",
+                data = mapOf(
+                    "match_count" to matches.size.toString(),
+                    "match_mode" to query.match.wireName,
+                )
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "the requested element is not visible after scrolling",
+                data = mapOf("match_mode" to query.match.wireName)
             )
         }
     }

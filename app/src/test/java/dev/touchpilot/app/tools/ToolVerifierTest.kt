@@ -139,6 +139,33 @@ class ToolVerifierTest {
     }
 
     @Test
+    fun scrollToElementPassesWhenElementVisibleAfterScroll() {
+        val result = verifier.verify(
+            toolName = "scroll_to_element",
+            args = mapOf("text" to "Sign out"),
+            result = ToolResult(ok = true, message = "Scrolled to element"),
+            before = screen(nodes = listOf(button("0", "Profile"))),
+            after = screen(nodes = listOf(button("0", "Sign out"))),
+        )
+
+        val passed = assertIs<ToolVerificationResult.Passed>(result)
+        assertEquals("1", passed.data["match_count"])
+    }
+
+    @Test
+    fun scrollToElementFailsWhenElementStillNotVisible() {
+        val result = verifier.verify(
+            toolName = "scroll_to_element",
+            args = mapOf("text" to "Sign out", "match" to "exact"),
+            result = ToolResult(ok = true, message = "Scrolled to element"),
+            before = screen(nodes = listOf(button("0", "Profile"))),
+            after = screen(nodes = listOf(button("0", "Settings"))),
+        )
+
+        assertIs<ToolVerificationResult.Failed>(result)
+    }
+
+    @Test
     fun waitForUiPassesWhenExpectedTextIsPresent() {
         val result = verifier.verify(
             toolName = "wait_for_ui",

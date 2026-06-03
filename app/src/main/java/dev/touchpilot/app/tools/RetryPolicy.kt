@@ -92,6 +92,10 @@ class AndroidToolRetryPolicy(
                 "long_press" to action,
                 "type_text" to action,
                 "scroll" to action,
+                // Single attempt: scroll_to_element already runs its own bounded
+                // observe/scroll/match loop, so an outer retry would multiply the
+                // scroll budget for no benefit.
+                "scroll_to_element" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "swipe" to action,
                 "press_back" to action,
                 "press_home" to action,

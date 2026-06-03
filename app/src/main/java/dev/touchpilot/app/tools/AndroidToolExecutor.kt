@@ -186,6 +186,9 @@ class AndroidToolExecutor(
             "scroll" -> {
                 executeScroll(args)
             }
+            "scroll_to_element" -> {
+                executeScrollToElement(args)
+            }
             "swipe" -> {
                 executeSwipe(args)
             }
@@ -505,6 +508,49 @@ class AndroidToolExecutor(
                 )
             }
         }
+    }
+
+    private fun executeScrollToElement(args: Map<String, String>): ToolResult {
+        val query = ScrollToElement.queryFromArgs(args)
+        val maxScrolls = ScrollToElement.maxScrolls(args)
+        val logArgs = ScrollToElement.logArgs(args)
+        val scrollArgs = ScrollToElement.scrollArgs(args)
+
+        // Already visible — no scroll needed.
+        if (findElementMatcher.match(AccessibilityBridge.observeScreenContext(), query).isNotEmpty()) {
+            record("scroll_to_element", logArgs, true, "Element already visible")
+            return ScrollToElement.successResult(args, scrolls = 0, matchCount = 1)
+        }
+
+        var performed = 0
+        repeat(maxScrolls) {
+            val scrollResult = executeScroll(scrollArgs)
+            performed += 1
+            val screenChanged = scrollResult.data["screen_changed"]?.toBooleanStrictOrNull()
+                ?: scrollResult.ok
+            val matches = findElementMatcher.match(AccessibilityBridge.observeScreenContext(), query)
+            if (matches.isNotEmpty()) {
+                record("scroll_to_element", logArgs, true, "Scrolled to element after $performed step(s)")
+                return ScrollToElement.successResult(args, performed, matches.size)
+            }
+            if (!screenChanged) {
+                val result = ScrollToElement.notFoundResult(
+                    args,
+                    performed,
+                    "Reached end of scrollable content before the element appeared",
+                )
+                record("scroll_to_element", logArgs, false, result.message)
+                return result
+            }
+        }
+
+        val result = ScrollToElement.notFoundResult(
+            args,
+            performed,
+            "Element not found within $maxScrolls scroll step(s)",
+        )
+        record("scroll_to_element", logArgs, false, result.message)
+        return result
     }
 
     private fun executeScroll(args: Map<String, String>): ToolResult {
