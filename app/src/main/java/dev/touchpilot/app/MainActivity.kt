@@ -1890,12 +1890,12 @@ class MainActivity : Activity() {
     private fun developerLogDetailView(entry: DeveloperLogEntry, onClose: () -> Unit): View {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 6, 0, 0)
+            setPadding(dp(6), dp(8), dp(6), 0)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, dp(8))
+            setPadding(dp(2), dp(2), dp(2), dp(10))
         }
         header.addView(
             LinearLayout(this).apply {
@@ -1914,7 +1914,7 @@ class MainActivity : Activity() {
                     TextView(this@MainActivity).apply {
                         text = DeveloperLogEntry.formatTimestamp(entry.timestampMillis)
                         textSize = 11f
-                        setTextColor(Theme.MutedText)
+                        setTextColor(Color.rgb(88, 101, 112))
                         maxLines = 1
                         setPadding(0, 3, 0, 0)
                     }
@@ -1993,18 +1993,18 @@ class MainActivity : Activity() {
             iconTint = ColorStateList.valueOf(Theme.BodyText)
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
             iconPadding = 0
-            iconSize = 18
-            minWidth = dp(36)
-            minHeight = dp(36)
-            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
-                setMargins(dp(6), 0, 0, 0)
+            iconSize = 16
+            minWidth = dp(30)
+            minHeight = dp(30)
+            layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply {
+                setMargins(dp(5), 0, 0, 0)
             }
             insetTop = 0
             insetBottom = 0
             backgroundTintList = ColorStateList.valueOf(Theme.SurfaceRaised)
             strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
             strokeWidth = 1
-            cornerRadius = dp(18)
+            cornerRadius = dp(15)
             contentDescription = description
             setPadding(0, 0, 0, 0)
             setOnClickListener { onClick() }
