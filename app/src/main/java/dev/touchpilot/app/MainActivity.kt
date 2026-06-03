@@ -90,6 +90,7 @@ import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
+import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import dev.touchpilot.app.ui.withMargins
 import org.json.JSONArray
 import org.json.JSONObject
@@ -1227,323 +1228,25 @@ class MainActivity : Activity() {
     }
 
     private fun renderToolsScreen() {
-        contentRoot.addView(sectionTitle("Android Tools"))
-        contentRoot.addView(statusPill())
-        contentRoot.addView(
-            secondaryButton("Open Accessibility Settings") {
-                openAccessibilitySettings()
-            }.apply { id = R.id.open_accessibility_settings_button }
-        )
-
-        contentRoot.addView(
-            primaryButton("Observe Current Screen") {
-                executeAndRender("observe_screen", emptyMap())
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.observe_screen_button }
-        )
-
-        contentRoot.addView(
-            secondaryButton("Observe Screen Context") {
-                executeAndRender("observe_screen_context", emptyMap())
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.observe_screen_context_button }
-        )
-
-        contentRoot.addView(
-            secondaryButton("Get Foreground App") {
-                executeAndRender("get_foreground_app", emptyMap())
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.get_foreground_app_button }
-        )
-
-        val appInput = editText("App package or launcher label").apply { id = R.id.open_app_input }
-        contentRoot.addView(appInput)
-        contentRoot.addView(
-            secondaryButton("Open App") {
-                hideKeyboard(appInput)
-                executeAndRender("open_app", mapOf("target" to appInput.text.toString()))
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.open_app_button }
-        )
-
-        val settingsPanelInput = editText(
-            "Settings panel: wifi, bluetooth, accessibility, app_info, notifications, system_settings"
-        ).apply { id = R.id.open_settings_panel_input }
-        contentRoot.addView(settingsPanelInput)
-        contentRoot.addView(
-            secondaryButton("Open Settings Panel") {
-                hideKeyboard(settingsPanelInput)
-                executeAndRender(
-                    "open_settings_panel",
-                    mapOf("panel" to settingsPanelInput.text.toString())
-                )
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.open_settings_panel_button }
-        )
-
-        val waitAppInput = editText("App package or launcher label to wait for").apply {
-            id = R.id.wait_for_app_input
-        }
-        contentRoot.addView(waitAppInput)
-        contentRoot.addView(
-            secondaryButton("Wait For App") {
-                val expected = waitAppInput.text.toString()
-                val args = if (expected.contains(".")) {
-                    mapOf("package" to expected, "timeout_ms" to "5000")
-                } else {
-                    mapOf("label" to expected, "timeout_ms" to "5000")
-                }
-                hideKeyboard(waitAppInput)
-                Thread {
-                    val result = toolExecutor.execute("wait_for_app", args, ToolSource.DIRECT_DEBUG)
-                    runOnUiThread {
-                        sectionResults.recordToolsResult(
-                            SensitiveTextRedactor.redact("wait_for_app -> ${result.ok}: ${result.message}")
-                        )
-                        refreshExecutionLog()
-                        showSection(Section.TOOLS)
-                    }
-                }.start()
-            }.apply { id = R.id.wait_for_app_button }
-        )
-
-        val tapInput = editText("Visible text to tap").apply { id = R.id.tap_text_input }
-        contentRoot.addView(tapInput)
-        contentRoot.addView(
-            secondaryButton("Tap Text") {
-                val targetText = tapInput.text.toString()
-                hideKeyboard(tapInput)
-                contentRoot.postDelayed({
-                    val result = executeAndRender("tap", mapOf("text" to targetText))
-                    showToolResultToast("Tap", result)
-                    showSection(Section.TOOLS)
-                }, ToolActionKeyboardSettleMs)
-            }.apply { id = R.id.tap_text_button }
-        )
-
-        val longPressInput = editText("Visible text to long-press").apply { id = R.id.long_press_text_input }
-        contentRoot.addView(longPressInput)
-        contentRoot.addView(
-            secondaryButton("Long-Press Text") {
-                val targetText = longPressInput.text.toString()
-                hideKeyboard(longPressInput)
-                contentRoot.postDelayed({
-                    val result = executeAndRender("long_press", mapOf("text" to targetText))
-                    showToolResultToast("Long-press", result)
-                    showSection(Section.TOOLS)
-                }, ToolActionKeyboardSettleMs)
-            }.apply { id = R.id.long_press_text_button }
-        )
-
-        val typeInput = editText("Text to type into focused field").apply { id = R.id.type_text_input }
-        contentRoot.addView(typeInput)
-        contentRoot.addView(
-            secondaryButton("Type Into Focused Field") {
-                val value = typeInput.text.toString()
-                hideKeyboard(typeInput)
-                val focusResult = lastFocusInputArgs?.let { focusArgs ->
-                    executeAndRender("focus_input", focusArgs)
-                }
-                if (focusResult == null || focusResult.ok) {
-                    executeAndRender("type_text", mapOf("text" to value))
-                }
-            }.apply { id = R.id.type_text_button }
-        )
-
-        contentRoot.addView(formLabel("Focus selector"))
-
-        val focusInputField = editText(FocusInputSelectorHints[focusSelectorIndex]).apply {
-            id = R.id.focus_input_input
-        }
-        val segmentButtons = mutableListOf<MaterialButton>()
-
-        fun refreshSegments() {
-            segmentButtons.forEachIndexed { i, btn ->
-                val active = i == focusSelectorIndex
-                btn.backgroundTintList = ColorStateList.valueOf(
-                    if (active) Theme.Accent else Theme.SurfaceRaised
-                )
-                btn.setTextColor(if (active) Theme.OnAccent else Theme.MutedText)
-                btn.strokeWidth = if (active) 0 else 1
-            }
-            focusInputField.hint = FocusInputSelectorHints[focusSelectorIndex]
-        }
-
-        val selectorRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 8, 0, 4) }
-        }
-        FocusInputSelectorLabels.forEachIndexed { i, label ->
-            val btn = MaterialButton(this).apply {
-                text = label
-                textSize = 11f
-                isAllCaps = false
-                cornerRadius = 16
-                minHeight = 44
-                insetTop = 0
-                insetBottom = 0
-                strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
-                setOnClickListener {
-                    focusSelectorIndex = i
-                    refreshSegments()
-                }
-            }
-            segmentButtons.add(btn)
-            selectorRow.addView(
-                btn,
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    setMargins(3, 0, 3, 0)
-                }
-            )
-        }
-        refreshSegments()
-
-        contentRoot.addView(selectorRow)
-        contentRoot.addView(focusInputField)
-        contentRoot.addView(
-            secondaryButton("Focus Input Field") {
-                hideKeyboard(focusInputField)
-                val args = mapOf(focusInputSelectorKey(focusSelectorIndex) to focusInputField.text.toString())
-                val result = executeAndRender("focus_input", args)
-                if (result.ok) {
-                    lastFocusInputArgs = args
-                } else {
-                    lastFocusInputArgs = null
-                }
-            }.apply { id = R.id.focus_input_button }
-        )
-
-        contentRoot.addView(
-            secondaryButton("Clear Focused Field") {
-                executeAndRender("clear_text", emptyMap())
-            }.apply { id = R.id.clear_text_button }
-        )
-
-        val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        actionRow.addView(
-            secondaryButton("Back") {
-                executeAndRender("press_back", emptyMap())
-            }.apply { id = R.id.back_button },
-            rowButtonParams()
-        )
-        actionRow.addView(
-            secondaryButton("Home") {
-                executeAndRender("press_home", emptyMap())
-            }.apply { id = R.id.home_button },
-            rowButtonParams()
-        )
-        contentRoot.addView(actionRow)
-
-        val scrollRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        scrollRow.addView(
-            secondaryButton("Scroll Down") {
-                executeAndRender("scroll", mapOf("direction" to "forward"))
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.scroll_down_button },
-            rowButtonParams()
-        )
-        scrollRow.addView(
-            secondaryButton("Scroll Up") {
-                executeAndRender("scroll", mapOf("direction" to "backward"))
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.scroll_up_button },
-            rowButtonParams()
-        )
-        contentRoot.addView(scrollRow)
-
-        val swipeHorizontalRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        swipeHorizontalRow.addView(
-            secondaryButton("Swipe Left") {
-                executeAndRender("swipe", mapOf("direction" to "left"))
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.swipe_left_button },
-            rowButtonParams()
-        )
-        swipeHorizontalRow.addView(
-            secondaryButton("Swipe Right") {
-                executeAndRender("swipe", mapOf("direction" to "right"))
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.swipe_right_button },
-            rowButtonParams()
-        )
-        contentRoot.addView(swipeHorizontalRow)
-
-        val swipeVerticalRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        swipeVerticalRow.addView(
-            secondaryButton("Swipe Up") {
-                executeAndRender("swipe", mapOf("direction" to "up"))
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.swipe_up_button },
-            rowButtonParams()
-        )
-        swipeVerticalRow.addView(
-            secondaryButton("Swipe Down") {
-                executeAndRender("swipe", mapOf("direction" to "down"))
-                showSection(Section.TOOLS)
-            }.apply { id = R.id.swipe_down_button },
-            rowButtonParams()
-        )
-        contentRoot.addView(swipeVerticalRow)
-
-        val waitInput = editText("Text to wait for").apply { id = R.id.wait_for_text_input }
-        contentRoot.addView(waitInput)
-        contentRoot.addView(
-            secondaryButton("Wait For Text") {
-                val expected = waitInput.text.toString()
-                Thread {
-                    val result = toolExecutor.execute(
-                        "wait_for_ui",
-                        mapOf("text" to expected, "timeout_ms" to "5000"),
-                        ToolSource.DIRECT_DEBUG
-                    )
-                    runOnUiThread {
-                        sectionResults.recordToolsResult(
-                            SensitiveTextRedactor.redact("wait_for_ui -> ${result.ok}: ${result.message}")
-                        )
-                        refreshExecutionLog()
-                        showSection(Section.TOOLS)
-                    }
-                }.start()
-            }.apply { id = R.id.wait_for_text_button }
-        )
-
-        contentRoot.addView(
-            secondaryButton("Wait For Idle") {
-                Thread {
-                    val result = toolExecutor.execute(
-                        "wait_for_idle",
-                        emptyMap(),
-                        ToolSource.DIRECT_DEBUG
-                    )
-                    runOnUiThread {
-                        sectionResults.recordToolsResult(
-                            SensitiveTextRedactor.redact("wait_for_idle -> ${result.ok}: ${result.message}")
-                        )
-                        refreshExecutionLog()
-                        showSection(Section.TOOLS)
-                    }
-                }.start()
-            }.apply { id = R.id.wait_for_idle_button }
-        )
-
-        contentRoot.addView(timelineCard("Latest result", sectionResults.forTools()))
-
-        // Tail spacer so the Focus / Dismiss row can scroll above the soft
-        // keyboard when an input is focused (adjustResize alone leaves them
-        // flush against the IME). The spacer is 0 dp tall when the keyboard
-        // is hidden and grows only while the IME is visible, so it does not
-        // add visible whitespace in the resting layout.
-        val keyboardScrollSpacer = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0
-            )
-        }
-        contentRoot.addView(keyboardScrollSpacer)
-        bindKeyboardScrollSpacer(keyboardScrollSpacer)
+        ToolsScreenRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            toolExecutor = toolExecutor,
+            statusPill = ::statusPill,
+            openAccessibilitySettings = ::openAccessibilitySettings,
+            executeAndRender = ::executeAndRender,
+            recordToolsResult = sectionResults::recordToolsResult,
+            toolsResult = sectionResults::forTools,
+            refreshExecutionLog = ::refreshExecutionLog,
+            refreshToolsScreen = { showSection(Section.TOOLS) },
+            hideKeyboard = ::hideKeyboard,
+            bindKeyboardScrollSpacer = ::bindKeyboardScrollSpacer,
+            getFocusSelectorIndex = { focusSelectorIndex },
+            setFocusSelectorIndex = { focusSelectorIndex = it },
+            getLastFocusInputArgs = { lastFocusInputArgs },
+            setLastFocusInputArgs = { lastFocusInputArgs = it },
+            showToolResultToast = ::showToolResultToast
+        ).render()
     }
 
     private fun bindKeyboardScrollSpacer(spacer: View) {
@@ -2114,14 +1817,6 @@ class MainActivity : Activity() {
 
     private fun selectedSkill(): Skill? {
         return skills.firstOrNull { it.id == selectedSkillId }
-    }
-
-    private fun focusInputSelectorKey(index: Int): String {
-        return when (index) {
-            1 -> "node_id"
-            2 -> "view_id"
-            else -> "text"
-        }
     }
 
     private fun userBubble(text: String): View {
@@ -3104,14 +2799,7 @@ class MainActivity : Activity() {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
         const val MaxApprovalArgLength = 500
         const val MaxToolCardFieldLength = 700
-        const val ToolActionKeyboardSettleMs = 250L
         val ProviderModeLabels = listOf("Local router", "Local model")
-        val FocusInputSelectorLabels = listOf("Text", "Node ID", "View ID")
-        val FocusInputSelectorHints = listOf(
-            "Text or content description",
-            "Node path  ·  e.g. 0.1.2",
-            "Resource ID  ·  e.g. com.app:id/field"
-        )
     }
 
 }
