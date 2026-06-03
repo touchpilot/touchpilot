@@ -28,6 +28,8 @@ Tools are the only way an agent may affect the Android device.
   bounds, or view ID.
 - `type_text`: type text into the focused field or selected target.
 - `scroll`: scroll the current view.
+- `scroll_to_element`: scroll a container or the active screen until a node
+  matching a structured query becomes visible, or the scroll budget runs out.
 - `swipe`: swipe a gesture surface (pager, carousel, drawer, map) by direction
   or between explicit coordinates — distinct from `scroll`, which drives a
   scrollable container's accessibility scroll action.
@@ -78,6 +80,18 @@ setting.
 `view_id`. Like `tap`, it resolves the target through the shared selector
 resolver before dispatching. Ambiguous or missing targets fail safely instead
 of guessing.
+
+`scroll_to_element` is a composite tool built on `scroll` and the `find_element`
+matcher. It accepts the `find_element` query filters (`text`,
+`content_description`, `node_id`, `class_name`, optional `match` mode) to
+describe the element to reveal, plus an optional scroll `direction`
+(`forward`/`backward`, default `forward`), an optional `max_scrolls` budget
+(1–30, default 8), and the optional `scroll` container selectors (`target_*`).
+It checks whether the element is already visible, then repeatedly scrolls and
+re-matches until the element appears (success), the screen stops changing
+(end-of-content failure), or the scroll budget is exhausted. It performs scroll
+actions (MEDIUM risk) but never logs raw query text — only filter lengths and
+scroll counts.
 
 ## Structured vs. raw observation
 

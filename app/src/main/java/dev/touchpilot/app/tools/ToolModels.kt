@@ -131,6 +131,27 @@ object AndroidToolCatalog {
             requiredArguments = emptySet()
         ),
         ToolSpec(
+            name = "scroll_to_element",
+            description = "Scroll a container or the active screen until a node matching a structured query " +
+                "(text, content description, node_id, or class name) becomes visible, or the scroll budget runs out.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                ScrollToElement.TextArg to "Visible text query for the element to reveal.",
+                ScrollToElement.ContentDescriptionArg to "Accessibility content description query.",
+                ScrollToElement.NodeIdArg to "Stable node_id from observe_screen.",
+                ScrollToElement.ClassNameArg to "Android class name filter (e.g. android.widget.Button).",
+                ScrollToElement.MatchArg to "Match mode: exact, contains, or semantic. Defaults to contains.",
+                ScrollToElement.DirectionArg to "forward or backward. Defaults to forward.",
+                ScrollToElement.MaxScrollsArg to "Maximum scroll steps (1-30). Defaults to 8.",
+                ScrollTarget.TargetTextArg to "Visible text of the scrollable container to scroll.",
+                ScrollTarget.TargetNodeIdArg to "Container node_id from observe_screen.",
+                ScrollTarget.TargetBoundsArg to "Container bounds from observe_screen as left,top,right,bottom.",
+                ScrollTarget.TargetViewIdArg to "Container viewIdResourceName from observe_screen.",
+                ScrollTarget.TargetContentDescriptionArg to "Container content description.",
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "press_back",
             description = "Send Android back.",
             risk = ToolRisk.MEDIUM,
@@ -377,6 +398,10 @@ object AndroidToolCatalog {
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
             }
+        }
+
+        if (name == "scroll_to_element") {
+            ScrollToElement.validate(args)?.let { return it }
         }
 
         if (name == "find_element") {
