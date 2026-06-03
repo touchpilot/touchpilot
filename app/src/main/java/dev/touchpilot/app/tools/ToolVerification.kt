@@ -31,6 +31,7 @@ class ToolVerifier(
             "swipe" -> verifySwipe(result, before, after)
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
+            "recent_apps" -> verifyChangedOrFocused(before, after, "recent_apps")
             "wait_for_ui" -> verifyWaitForUi(args, after)
             "wait_for_idle" -> ToolVerificationResult.Passed(
                 reason = "screen context stayed stable for requested idle window",
