@@ -16,8 +16,10 @@ import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.description
 import dev.touchpilot.app.ui.editText
 import dev.touchpilot.app.ui.formLabel
+import dev.touchpilot.app.ui.label
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rowButtonParams
 import dev.touchpilot.app.ui.secondaryButton
@@ -41,8 +43,6 @@ class SettingsScreenRenderer(
     private val expandedSkillReferenceId: () -> String?,
     private val commitSelectedSkill: (String?) -> Unit,
     private val currentProviderMode: () -> AgentProviderMode,
-    private val modeLabel: (AgentProviderMode) -> String,
-    private val modeDescription: (AgentProviderMode) -> String,
     private val openAccessibilitySettings: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
     private val recordMcpResult: (String) -> Unit,
@@ -128,7 +128,7 @@ class SettingsScreenRenderer(
         contentRoot.addView(
             activity.summaryCard(
                 title = "Current runtime",
-                value = modeLabel(mode),
+                value = mode.label(),
                 chipText = if (localStatus.available) "model ready" else "fallback",
                 chipAccent = localStatus.available
             )
@@ -138,8 +138,8 @@ class SettingsScreenRenderer(
         AgentProviderMode.values().forEach { option ->
             contentRoot.addView(
                 skillSelectRow(
-                    title = modeLabel(option),
-                    subtitle = modeDescription(option),
+                    title = option.label(),
+                    subtitle = option.description(),
                     badge = null,
                     selected = option == mode
                 ) {

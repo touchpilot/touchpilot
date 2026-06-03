@@ -48,7 +48,6 @@ import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
-import dev.touchpilot.app.localinference.LocalModelStatus
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -59,10 +58,12 @@ import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.tools.ToolResult
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.label
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rounded
 import dev.touchpilot.app.ui.secondaryButton
 import dev.touchpilot.app.ui.sectionTitle
+import dev.touchpilot.app.ui.shortLine
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
@@ -759,8 +760,6 @@ class MainActivity : Activity() {
             expandedSkillReferenceId = { expandedSkillReferenceId },
             commitSelectedSkill = ::commitSelectedSkill,
             currentProviderMode = ::currentProviderMode,
-            modeLabel = { it.label() },
-            modeDescription = { it.description() },
             openAccessibilitySettings = ::openAccessibilitySettings,
             hideKeyboard = ::hideKeyboard,
             recordMcpResult = sectionResults::recordMcpResult,
@@ -887,34 +886,10 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun AgentProviderMode.label(): String {
-        return when (this) {
-            AgentProviderMode.LOCAL_MODEL -> "Local model with router fallback"
-            AgentProviderMode.LOCAL_ROUTER -> "Local router"
-        }
-    }
-
     private fun AgentProviderMode.toLogSource(): String {
         return when (this) {
             AgentProviderMode.LOCAL_MODEL -> "local_model"
             AgentProviderMode.LOCAL_ROUTER -> "local_router"
-        }
-    }
-
-    private fun AgentProviderMode.description(): String {
-        return when (this) {
-            AgentProviderMode.LOCAL_MODEL ->
-                "Use LiteRT command model first; fall back to deterministic routing if unavailable."
-            AgentProviderMode.LOCAL_ROUTER ->
-                "Use the deterministic router only. Predictable, no on-device model load."
-        }
-    }
-
-    private fun LocalModelStatus.shortLine(): String {
-        return if (available) {
-            "$runtime model available"
-        } else {
-            "$runtime fallback: ${message.substringBefore(';')}"
         }
     }
 
