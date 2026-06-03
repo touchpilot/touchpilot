@@ -81,6 +81,12 @@ class LocalRouterCommandProvider(
             return LocalRoute("scroll", mapOf("direction" to "forward"))
         }
 
+        // Match recents before the open/launch pattern so "open recents" and
+        // similar phrases route to recent_apps rather than open_app.
+        if (RecentsPhrases.any { it in normalized }) {
+            return LocalRoute("recent_apps")
+        }
+
         SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
             return LocalRoute("open_settings_panel", mapOf(SettingsPanelIntent.PanelArg to panel))
         }
@@ -139,5 +145,19 @@ class LocalRouterCommandProvider(
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
         }
+    }
+
+    private companion object {
+        // Mirrors IntentGate.RecentsPhrases so the deterministic router and the
+        // intent gate route the same recents/overview phrasing identically.
+        val RecentsPhrases: List<String> = listOf(
+            "recent apps",
+            "recent app",
+            "recents",
+            "app switcher",
+            "task switcher",
+            "switch apps",
+            "switch app"
+        )
     }
 }

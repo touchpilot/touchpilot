@@ -1421,6 +1421,13 @@ class MainActivity : Activity() {
             }.apply { id = R.id.home_button },
             rowButtonParams()
         )
+        actionRow.addView(
+            secondaryButton("Recent Apps") {
+                executeAndRender("recent_apps", emptyMap())
+                showSection(Section.TOOLS)
+            }.apply { id = R.id.recent_apps_button },
+            rowButtonParams()
+        )
         contentRoot.addView(actionRow)
 
         val scrollRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }

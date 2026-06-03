@@ -139,6 +139,33 @@ class ToolVerifierTest {
     }
 
     @Test
+    fun recentAppsPassesWhenScreenChanges() {
+        val result = verifier.verify(
+            toolName = "recent_apps",
+            args = emptyMap(),
+            result = ToolResult(ok = true, message = "openRecents"),
+            before = screen(nodes = listOf(button("0", "Inbox"))),
+            after = screen(nodes = listOf(button("0", "Recent apps"))),
+        )
+
+        assertIs<ToolVerificationResult.Passed>(result)
+    }
+
+    @Test
+    fun recentAppsFailsWhenScreenDoesNotChange() {
+        val before = screen(nodes = listOf(button("0", "Inbox")))
+        val result = verifier.verify(
+            toolName = "recent_apps",
+            args = emptyMap(),
+            result = ToolResult(ok = true, message = "openRecents"),
+            before = before,
+            after = before,
+        )
+
+        assertIs<ToolVerificationResult.Failed>(result)
+    }
+
+    @Test
     fun waitForUiPassesWhenExpectedTextIsPresent() {
         val result = verifier.verify(
             toolName = "wait_for_ui",

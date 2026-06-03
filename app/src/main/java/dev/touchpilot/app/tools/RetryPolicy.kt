@@ -95,6 +95,7 @@ class AndroidToolRetryPolicy(
                 "swipe" to action,
                 "press_back" to action,
                 "press_home" to action,
+                "recent_apps" to action,
                 "wait_for_ui" to action.copy(waitForIdleAfterSuccess = false),
                 "wait_for_idle" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "wait_for_app" to ToolRetryConfig(maxAttempts = 1, retryable = false),

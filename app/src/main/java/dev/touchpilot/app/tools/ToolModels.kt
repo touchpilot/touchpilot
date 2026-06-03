@@ -143,6 +143,12 @@ object AndroidToolCatalog {
             arguments = emptyMap()
         ),
         ToolSpec(
+            name = "recent_apps",
+            description = "Open the Android recents/overview screen (app switcher) so the agent can switch between recently used apps.",
+            risk = ToolRisk.MEDIUM,
+            arguments = emptyMap()
+        ),
+        ToolSpec(
             name = "wait_for_ui",
             description = "Wait until text appears in the current accessibility tree.",
             risk = ToolRisk.LOW,
