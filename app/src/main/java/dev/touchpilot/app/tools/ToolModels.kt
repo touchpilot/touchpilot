@@ -175,6 +175,21 @@ object AndroidToolCatalog {
             requiredArguments = emptySet()
         ),
         ToolSpec(
+            name = "wait_for_element",
+            description = "Wait until a node matching a structured query (text, content description, " +
+                "node_id, or class name) appears on screen. Structured counterpart of wait_for_ui.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                WaitForElement.TextArg to "Visible text query.",
+                WaitForElement.ContentDescriptionArg to "Accessibility content description query.",
+                WaitForElement.NodeIdArg to "Stable node_id from observe_screen.",
+                WaitForElement.ClassNameArg to "Android class name filter (e.g. android.widget.Button).",
+                WaitForElement.MatchArg to "Match mode: exact, contains, or semantic. Defaults to contains.",
+                WaitForElement.TimeoutArg to "Maximum wait time in milliseconds."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "focus_input",
             description = "Focus a visible editable input field without typing text.",
             risk = ToolRisk.MEDIUM,
@@ -322,6 +337,10 @@ object AndroidToolCatalog {
             if (selectors.isEmpty()) {
                 return "wait_for_app requires package or label"
             }
+        }
+
+        if (name == "wait_for_element") {
+            WaitForElement.validate(args)?.let { return it }
         }
 
         if (name == "scroll") {
