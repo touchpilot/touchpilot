@@ -1858,7 +1858,6 @@ class MainActivity : Activity() {
             }
         )
         header.addView(logStatusChip(entry.status.ifBlank { "log" }))
-        header.addView(copyLogButton(entry))
         content.addView(header)
         val preview = entry.result.ifBlank { entry.payloadSummary }.lineSequence().firstOrNull().orEmpty()
         content.addView(
@@ -1876,14 +1875,18 @@ class MainActivity : Activity() {
 
     private fun showDeveloperLogDetails(id: Long) {
         val entry = ToolExecutionLog.findEntry(id) ?: return
-        AlertDialog.Builder(this)
-            .setTitle(entry.name.ifBlank { "Log details" })
-            .setView(developerLogDetailView(entry))
-            .setPositiveButton("Close", null)
-            .show()
+        lateinit var dialog: AlertDialog
+        val detailView = developerLogDetailView(
+            entry = entry,
+            onClose = { dialog.dismiss() }
+        )
+        dialog = AlertDialog.Builder(this)
+            .setView(detailView)
+            .create()
+        dialog.show()
     }
 
-    private fun developerLogDetailView(entry: DeveloperLogEntry): View {
+    private fun developerLogDetailView(entry: DeveloperLogEntry, onClose: () -> Unit): View {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, 8, 0, 0)
@@ -1894,16 +1897,31 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, 8)
         }
         header.addView(
-            TextView(this).apply {
-                text = "${entry.type.ifBlank { "log" }} · ${entry.source.ifBlank { "unknown" }}"
-                textSize = 12f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Theme.MutedText)
-                maxLines = 1
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(
+                    TextView(this@MainActivity).apply {
+                        text = entry.name.ifBlank { "Log details" }
+                        textSize = 14f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.WHITE)
+                        maxLines = 1
+                    }
+                )
+                addView(
+                    TextView(this@MainActivity).apply {
+                        text = "${entry.type.ifBlank { "log" }} · ${entry.source.ifBlank { "unknown" }}"
+                        textSize = 11f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Theme.MutedText)
+                        maxLines = 1
+                    }
+                )
             },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        header.addView(copyLogButton(entry))
+        header.addView(logIconButton(R.drawable.ic_copy, "Copy log") { copyDeveloperLog(entry) })
+        header.addView(logIconButton(R.drawable.ic_close, "Close log details", onClose))
         content.addView(header)
         content.addView(
             TextView(this).apply {
@@ -1919,24 +1937,31 @@ class MainActivity : Activity() {
         return content
     }
 
-    private fun copyLogButton(entry: DeveloperLogEntry): View {
+    private fun logIconButton(
+        @DrawableRes iconRes: Int,
+        description: String,
+        onClick: () -> Unit
+    ): View {
         return MaterialButton(this).apply {
-            icon = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_copy)
+            icon = ContextCompat.getDrawable(this@MainActivity, iconRes)
             iconTint = ColorStateList.valueOf(Theme.BodyText)
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
             iconPadding = 0
-            iconSize = 34
-            minWidth = 38
-            minHeight = 38
+            iconSize = 18
+            minWidth = 28
+            minHeight = 28
+            layoutParams = LinearLayout.LayoutParams(30, 30).apply {
+                setMargins(6, 0, 0, 0)
+            }
             insetTop = 0
             insetBottom = 0
             backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
             strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
             strokeWidth = 1
-            cornerRadius = 8
-            contentDescription = "Copy log"
+            cornerRadius = 7
+            contentDescription = description
             setPadding(0, 0, 0, 0)
-            setOnClickListener { copyDeveloperLog(entry) }
+            setOnClickListener { onClick() }
         }
     }
 
