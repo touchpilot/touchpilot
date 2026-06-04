@@ -15,6 +15,7 @@ import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.description
 import dev.touchpilot.app.ui.editText
@@ -37,8 +38,8 @@ class SettingsScreenRenderer(
     private val skills: List<Skill>,
     private val localModelRuntime: LiteRtCommandModelRuntime,
     private val activeSettingsPanel: () -> SettingsPanel?,
-    private val setActiveSettingsPanel: (SettingsPanel?) -> Unit,
-    private val setPendingAnimationDirection: (Int) -> Unit,
+    private val openSettingsPanel: (SettingsPanel) -> Unit,
+    private val closeSettingsPanel: () -> Unit,
     private val selectedSkillId: () -> String?,
     private val expandedSkillReferenceId: () -> String?,
     private val commitSelectedSkill: (String?) -> Unit,
@@ -322,8 +323,7 @@ class SettingsScreenRenderer(
 
     private fun settingsGoBackButton(): View {
         return activity.secondaryButton("Go Back") {
-            setActiveSettingsPanel(null)
-            setPendingAnimationDirection(-1)
+            closeSettingsPanel()
             refreshSettingsScreen()
         }.apply {
             minHeight = 46
@@ -346,8 +346,7 @@ class SettingsScreenRenderer(
                 isFocusable = true
                 setOnClickListener {
                     if (activeSettingsPanel() != panel) {
-                        setActiveSettingsPanel(panel)
-                        setPendingAnimationDirection(1)
+                        openSettingsPanel(panel)
                         refreshSettingsScreen()
                     }
                 }

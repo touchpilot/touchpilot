@@ -1,4 +1,4 @@
-package dev.touchpilot.app.ui.settings
+package dev.touchpilot.app.navigation
 
 enum class SettingsPanel(val label: String, val intro: String) {
     SKILLS(
