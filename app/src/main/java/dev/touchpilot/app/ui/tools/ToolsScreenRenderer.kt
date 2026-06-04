@@ -7,10 +7,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import com.google.android.material.button.MaterialButton
 import dev.touchpilot.app.R
-import dev.touchpilot.app.security.SensitiveTextRedactor
-import dev.touchpilot.app.security.ToolSource
-import dev.touchpilot.app.tools.AndroidToolExecutor
-import dev.touchpilot.app.tools.ToolResult
+import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.editText
 import dev.touchpilot.app.ui.formLabel
@@ -23,21 +20,17 @@ import dev.touchpilot.app.ui.timelineCard
 class ToolsScreenRenderer(
     private val activity: Activity,
     private val contentRoot: LinearLayout,
-    private val toolExecutor: AndroidToolExecutor,
+    private val toolExecutionController: ToolExecutionController,
     private val statusPill: () -> View,
     private val openAccessibilitySettings: () -> Unit,
-    private val executeAndRender: (String, Map<String, String>) -> ToolResult,
-    private val recordToolsResult: (String) -> Unit,
     private val toolsResult: () -> String,
-    private val refreshExecutionLog: () -> Unit,
     private val refreshToolsScreen: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
     private val bindKeyboardScrollSpacer: (View) -> Unit,
     private val getFocusSelectorIndex: () -> Int,
     private val setFocusSelectorIndex: (Int) -> Unit,
     private val getLastFocusInputArgs: () -> Map<String, String>?,
-    private val setLastFocusInputArgs: (Map<String, String>?) -> Unit,
-    private val showToolResultToast: (String, ToolResult) -> Unit
+    private val setLastFocusInputArgs: (Map<String, String>?) -> Unit
 ) {
     fun render() {
         contentRoot.addView(activity.sectionTitle("Android Tools"))
@@ -50,21 +43,21 @@ class ToolsScreenRenderer(
 
         contentRoot.addView(
             activity.primaryButton("Observe Current Screen") {
-                executeAndRender("observe_screen", emptyMap())
+                toolExecutionController.executeAndRender("observe_screen", emptyMap())
                 refreshToolsScreen()
             }.apply { id = R.id.observe_screen_button }
         )
 
         contentRoot.addView(
             activity.secondaryButton("Observe Screen Context") {
-                executeAndRender("observe_screen_context", emptyMap())
+                toolExecutionController.executeAndRender("observe_screen_context", emptyMap())
                 refreshToolsScreen()
             }.apply { id = R.id.observe_screen_context_button }
         )
 
         contentRoot.addView(
             activity.secondaryButton("Get Foreground App") {
-                executeAndRender("get_foreground_app", emptyMap())
+                toolExecutionController.executeAndRender("get_foreground_app", emptyMap())
                 refreshToolsScreen()
             }.apply { id = R.id.get_foreground_app_button }
         )
@@ -74,7 +67,7 @@ class ToolsScreenRenderer(
         contentRoot.addView(
             activity.secondaryButton("Open App") {
                 hideKeyboard(appInput)
-                executeAndRender("open_app", mapOf("target" to appInput.text.toString()))
+                toolExecutionController.executeAndRender("open_app", mapOf("target" to appInput.text.toString()))
                 refreshToolsScreen()
             }.apply { id = R.id.open_app_button }
         )
@@ -86,7 +79,7 @@ class ToolsScreenRenderer(
         contentRoot.addView(
             activity.secondaryButton("Open Settings Panel") {
                 hideKeyboard(settingsPanelInput)
-                executeAndRender(
+                toolExecutionController.executeAndRender(
                     "open_settings_panel",
                     mapOf("panel" to settingsPanelInput.text.toString())
                 )
@@ -107,16 +100,7 @@ class ToolsScreenRenderer(
                     mapOf("label" to expected, "timeout_ms" to "5000")
                 }
                 hideKeyboard(waitAppInput)
-                Thread {
-                    val result = toolExecutor.execute("wait_for_app", args, ToolSource.DIRECT_DEBUG)
-                    activity.runOnUiThread {
-                        recordToolsResult(
-                            SensitiveTextRedactor.redact("wait_for_app -> ${result.ok}: ${result.message}")
-                        )
-                        refreshExecutionLog()
-                        refreshToolsScreen()
-                    }
-                }.start()
+                toolExecutionController.executeAsyncAndRender("wait_for_app", args)
             }.apply { id = R.id.wait_for_app_button }
         )
 
@@ -126,11 +110,12 @@ class ToolsScreenRenderer(
             activity.secondaryButton("Tap Text") {
                 val targetText = tapInput.text.toString()
                 hideKeyboard(tapInput)
-                contentRoot.postDelayed({
-                    val result = executeAndRender("tap", mapOf("text" to targetText))
-                    showToolResultToast("Tap", result)
-                    refreshToolsScreen()
-                }, TOOL_ACTION_KEYBOARD_SETTLE_MS)
+                toolExecutionController.executeAndRenderDelayed(
+                    delayMillis = TOOL_ACTION_KEYBOARD_SETTLE_MS,
+                    name = "tap",
+                    args = mapOf("text" to targetText),
+                    toastLabel = "Tap"
+                )
             }.apply { id = R.id.tap_text_button }
         )
 
@@ -142,11 +127,12 @@ class ToolsScreenRenderer(
             activity.secondaryButton("Long-Press Text") {
                 val targetText = longPressInput.text.toString()
                 hideKeyboard(longPressInput)
-                contentRoot.postDelayed({
-                    val result = executeAndRender("long_press", mapOf("text" to targetText))
-                    showToolResultToast("Long-press", result)
-                    refreshToolsScreen()
-                }, TOOL_ACTION_KEYBOARD_SETTLE_MS)
+                toolExecutionController.executeAndRenderDelayed(
+                    delayMillis = TOOL_ACTION_KEYBOARD_SETTLE_MS,
+                    name = "long_press",
+                    args = mapOf("text" to targetText),
+                    toastLabel = "Long-press"
+                )
             }.apply { id = R.id.long_press_text_button }
         )
 
@@ -157,10 +143,10 @@ class ToolsScreenRenderer(
                 val value = typeInput.text.toString()
                 hideKeyboard(typeInput)
                 val focusResult = getLastFocusInputArgs()?.let { focusArgs ->
-                    executeAndRender("focus_input", focusArgs)
+                    toolExecutionController.executeAndRender("focus_input", focusArgs)
                 }
                 if (focusResult == null || focusResult.ok) {
-                    executeAndRender("type_text", mapOf("text" to value))
+                    toolExecutionController.executeAndRender("type_text", mapOf("text" to value))
                 }
             }.apply { id = R.id.type_text_button }
         )
@@ -222,7 +208,7 @@ class ToolsScreenRenderer(
             activity.secondaryButton("Focus Input Field") {
                 hideKeyboard(focusInputField)
                 val args = mapOf(focusInputSelectorKey(getFocusSelectorIndex()) to focusInputField.text.toString())
-                val result = executeAndRender("focus_input", args)
+                val result = toolExecutionController.executeAndRender("focus_input", args)
                 if (result.ok) {
                     setLastFocusInputArgs(args)
                 } else {
@@ -233,20 +219,20 @@ class ToolsScreenRenderer(
 
         contentRoot.addView(
             activity.secondaryButton("Clear Focused Field") {
-                executeAndRender("clear_text", emptyMap())
+                toolExecutionController.executeAndRender("clear_text", emptyMap())
             }.apply { id = R.id.clear_text_button }
         )
 
         val actionRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         actionRow.addView(
             activity.secondaryButton("Back") {
-                executeAndRender("press_back", emptyMap())
+                toolExecutionController.executeAndRender("press_back", emptyMap())
             }.apply { id = R.id.back_button },
             rowButtonParams()
         )
         actionRow.addView(
             activity.secondaryButton("Home") {
-                executeAndRender("press_home", emptyMap())
+                toolExecutionController.executeAndRender("press_home", emptyMap())
             }.apply { id = R.id.home_button },
             rowButtonParams()
         )
@@ -255,14 +241,14 @@ class ToolsScreenRenderer(
         val scrollRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         scrollRow.addView(
             activity.secondaryButton("Scroll Down") {
-                executeAndRender("scroll", mapOf("direction" to "forward"))
+                toolExecutionController.executeAndRender("scroll", mapOf("direction" to "forward"))
                 refreshToolsScreen()
             }.apply { id = R.id.scroll_down_button },
             rowButtonParams()
         )
         scrollRow.addView(
             activity.secondaryButton("Scroll Up") {
-                executeAndRender("scroll", mapOf("direction" to "backward"))
+                toolExecutionController.executeAndRender("scroll", mapOf("direction" to "backward"))
                 refreshToolsScreen()
             }.apply { id = R.id.scroll_up_button },
             rowButtonParams()
@@ -272,14 +258,14 @@ class ToolsScreenRenderer(
         val swipeHorizontalRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         swipeHorizontalRow.addView(
             activity.secondaryButton("Swipe Left") {
-                executeAndRender("swipe", mapOf("direction" to "left"))
+                toolExecutionController.executeAndRender("swipe", mapOf("direction" to "left"))
                 refreshToolsScreen()
             }.apply { id = R.id.swipe_left_button },
             rowButtonParams()
         )
         swipeHorizontalRow.addView(
             activity.secondaryButton("Swipe Right") {
-                executeAndRender("swipe", mapOf("direction" to "right"))
+                toolExecutionController.executeAndRender("swipe", mapOf("direction" to "right"))
                 refreshToolsScreen()
             }.apply { id = R.id.swipe_right_button },
             rowButtonParams()
@@ -289,14 +275,14 @@ class ToolsScreenRenderer(
         val swipeVerticalRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         swipeVerticalRow.addView(
             activity.secondaryButton("Swipe Up") {
-                executeAndRender("swipe", mapOf("direction" to "up"))
+                toolExecutionController.executeAndRender("swipe", mapOf("direction" to "up"))
                 refreshToolsScreen()
             }.apply { id = R.id.swipe_up_button },
             rowButtonParams()
         )
         swipeVerticalRow.addView(
             activity.secondaryButton("Swipe Down") {
-                executeAndRender("swipe", mapOf("direction" to "down"))
+                toolExecutionController.executeAndRender("swipe", mapOf("direction" to "down"))
                 refreshToolsScreen()
             }.apply { id = R.id.swipe_down_button },
             rowButtonParams()
@@ -308,39 +294,16 @@ class ToolsScreenRenderer(
         contentRoot.addView(
             activity.secondaryButton("Wait For Text") {
                 val expected = waitInput.text.toString()
-                Thread {
-                    val result = toolExecutor.execute(
-                        "wait_for_ui",
-                        mapOf("text" to expected, "timeout_ms" to "5000"),
-                        ToolSource.DIRECT_DEBUG
-                    )
-                    activity.runOnUiThread {
-                        recordToolsResult(
-                            SensitiveTextRedactor.redact("wait_for_ui -> ${result.ok}: ${result.message}")
-                        )
-                        refreshExecutionLog()
-                        refreshToolsScreen()
-                    }
-                }.start()
+                toolExecutionController.executeAsyncAndRender(
+                    "wait_for_ui",
+                    mapOf("text" to expected, "timeout_ms" to "5000")
+                )
             }.apply { id = R.id.wait_for_text_button }
         )
 
         contentRoot.addView(
             activity.secondaryButton("Wait For Idle") {
-                Thread {
-                    val result = toolExecutor.execute(
-                        "wait_for_idle",
-                        emptyMap(),
-                        ToolSource.DIRECT_DEBUG
-                    )
-                    activity.runOnUiThread {
-                        recordToolsResult(
-                            SensitiveTextRedactor.redact("wait_for_idle -> ${result.ok}: ${result.message}")
-                        )
-                        refreshExecutionLog()
-                        refreshToolsScreen()
-                    }
-                }.start()
+                toolExecutionController.executeAsyncAndRender("wait_for_idle", emptyMap())
             }.apply { id = R.id.wait_for_idle_button }
         )
 

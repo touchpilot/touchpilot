@@ -21,7 +21,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.annotation.DrawableRes
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
@@ -40,6 +39,8 @@ import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
+import dev.touchpilot.app.runtime.ToolExecutionCallbacks
+import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolApprovalProvider
@@ -47,7 +48,6 @@ import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.runtime.AgentRunController
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
-import dev.touchpilot.app.tools.ToolResult
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.label
 import dev.touchpilot.app.ui.primaryButton
@@ -417,22 +417,38 @@ class MainActivity : Activity() {
         ToolsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
-            toolExecutor = toolExecutor,
+            toolExecutionController = toolExecutionController(),
             statusPill = ::statusPill,
             openAccessibilitySettings = ::openAccessibilitySettings,
-            executeAndRender = ::executeAndRender,
-            recordToolsResult = sectionResults::recordToolsResult,
             toolsResult = sectionResults::forTools,
-            refreshExecutionLog = ::refreshExecutionLog,
             refreshToolsScreen = { showSection(Section.TOOLS) },
             hideKeyboard = ::hideKeyboard,
             bindKeyboardScrollSpacer = ::bindKeyboardScrollSpacer,
             getFocusSelectorIndex = { focusSelectorIndex },
             setFocusSelectorIndex = { focusSelectorIndex = it },
             getLastFocusInputArgs = { lastFocusInputArgs },
-            setLastFocusInputArgs = { lastFocusInputArgs = it },
-            showToolResultToast = ::showToolResultToast
+            setLastFocusInputArgs = { lastFocusInputArgs = it }
         ).render()
+    }
+
+    private fun toolExecutionController(): ToolExecutionController {
+        return ToolExecutionController(
+            activity = this,
+            toolExecutor = toolExecutor,
+            callbacks = object : ToolExecutionCallbacks {
+                override fun recordToolsResult(message: String) {
+                    sectionResults.recordToolsResult(message)
+                }
+
+                override fun refreshDeveloperLogs() {
+                    refreshExecutionLog()
+                }
+
+                override fun refreshToolsScreen() {
+                    showSection(Section.TOOLS)
+                }
+            }
+        )
     }
 
     private fun bindKeyboardScrollSpacer(spacer: View) {
@@ -495,27 +511,6 @@ class MainActivity : Activity() {
     }
 
     private val sectionResults = SectionResultStore()
-
-    private fun executeAndRender(name: String, args: Map<String, String>): ToolResult {
-        val result = toolExecutor.execute(name, args, ToolSource.DIRECT_DEBUG)
-        sectionResults.recordToolsResult(
-            SensitiveTextRedactor.redact("$name($args) -> ${result.ok}: ${result.message}")
-        )
-        refreshExecutionLog()
-        return result
-    }
-
-    private fun showToolResultToast(label: String, result: ToolResult) {
-        Toast.makeText(
-            this,
-            if (result.ok) {
-                "$label succeeded"
-            } else {
-                "$label failed: ${result.message}"
-            },
-            Toast.LENGTH_LONG
-        ).show()
-    }
 
     private fun refreshExecutionLog() {
         if (::executionLogList.isInitialized) {
