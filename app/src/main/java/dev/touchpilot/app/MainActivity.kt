@@ -244,8 +244,6 @@ class MainActivity : Activity() {
 
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab) {
-                    (tab.tag as? Section)?.let { section ->
-                        if (section != nav.activeSection) {
                     (tab.tag as? AppSection)?.let { section ->
                         if (section != navigationController.activeSection) {
                             showSection(section)
