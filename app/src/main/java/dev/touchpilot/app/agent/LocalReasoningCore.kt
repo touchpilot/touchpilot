@@ -23,8 +23,16 @@ interface LocalReasoningCore {
     fun run(
         task: String,
         timeline: AgentStepTimelineBuilder? = null,
-        listener: AgentEventListener = AgentEventListener {}
+        listener: AgentEventListener = AgentEventListener {},
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
     ): AgentRunResult
+}
+
+/**
+ * Convenience overload for LocalReasoningCore.run() without timeline or cancellation support.
+ */
+fun LocalReasoningCore.run(task: String, listener: AgentEventListener = AgentEventListener {}): AgentRunResult {
+    return run(task, timeline = null, listener, java.util.concurrent.atomic.AtomicBoolean(false))
 }
 
 fun interface AgentEventListener {
@@ -54,8 +62,16 @@ fun interface AgentRunInvocation {
         task: String,
         context: LocalReasoningContext,
         listener: AgentEventListener,
-        timeline: AgentStepTimelineBuilder?
+        timeline: AgentStepTimelineBuilder?,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
     ): AgentRunResult
+}
+
+/**
+ * Convenience overload for invocation without timeline, listener, or cancellation support.
+ */
+fun AgentRunInvocation.invoke(task: String, context: LocalReasoningContext): AgentRunResult {
+    return invoke(task, context, AgentEventListener {}, null, java.util.concurrent.atomic.AtomicBoolean(false))
 }
 
 class DefaultLocalReasoningCore(
@@ -68,19 +84,19 @@ class DefaultLocalReasoningCore(
     private val screenSummarizer: ScreenContextSummarizer = ScreenContextSummarizer()
 ) : LocalReasoningCore {
 
-    override fun run(
-        task: String,
-        timeline: AgentStepTimelineBuilder?,
-        listener: AgentEventListener
-    ): AgentRunResult {
-        val streamed = mutableSetOf<String>()
-        fun forward(event: AgentEvent) {
-            if (streamed.add(event.id)) {
-                listener.onEvent(event)
-                timeline?.onEvent(event)
-            }
+override fun run(
+    task: String,
+    timeline: AgentStepTimelineBuilder?,
+    listener: AgentEventListener,
+    cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
+): AgentRunResult {
+    val streamed = mutableSetOf<String>()
+    fun forward(event: AgentEvent) {
+        if (streamed.add(event.id)) {
+            listener.onEvent(event)
+            timeline?.onEvent(event)
         }
-
+    }
         intents.respond(task)?.let { canned ->
             val userEvent = AgentEvent.UserMessage(task)
             val finalEvent = AgentEvent.FinalAnswer(canned.message)
@@ -149,7 +165,8 @@ class DefaultLocalReasoningCore(
             task = task,
             context = effectiveCtx,
             listener = AgentEventListener(::forward),
-            timeline = timeline
+            timeline = timeline,
+            cancellationSignal = cancellationSignal
         )
         result.events.forEach(::forward)
         return result
@@ -256,14 +273,15 @@ fun defaultAgentRunInvocation(
     approvalProvider: ToolApprovalProvider,
     localModelRuntime: LocalCommandModelRuntime,
     policy: ActionPolicy = DefaultActionPolicy()
-): AgentRunInvocation = AgentRunInvocation { task, context, listener, timeline ->
+): AgentRunInvocation = AgentRunInvocation { task, context, listener, timeline, cancellationSignal ->
     buildDefaultAgentRunner(
         task = task,
         context = context,
         toolExecutor = toolExecutor,
         approvalProvider = approvalProvider,
         localModelRuntime = localModelRuntime,
-        policy = policy
+        policy = policy,
+        cancellationSignal = cancellationSignal
     ).run(task, listener = listener, timeline = timeline)
 }
 
@@ -278,7 +296,8 @@ fun buildDefaultAgentRunner(
     toolExecutor: AndroidToolExecutor,
     approvalProvider: ToolApprovalProvider,
     localModelRuntime: LocalCommandModelRuntime,
-    policy: ActionPolicy = DefaultActionPolicy()
+    policy: ActionPolicy = DefaultActionPolicy(),
+    cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
 ): AgentRunner {
     val commandProvider = buildCommandProvider(task, context, localModelRuntime)
     return AgentRunner(
@@ -287,7 +306,8 @@ fun buildDefaultAgentRunner(
         commandProvider = commandProvider,
         skill = context.skill,
         source = context.providerMode.toToolSource(),
-        policy = policy
+        policy = policy,
+        cancellationSignal = cancellationSignal
     )
 }
 

@@ -41,44 +41,52 @@ class AndroidToolExecutor(
     private val findElementMatcher: FindElementMatcher = FindElementMatcher(),
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
+    private val executionSource = ThreadLocal.withInitial { ToolSource.DIRECT_DEBUG }
+
     fun execute(
         name: String,
         args: Map<String, String>,
         source: ToolSource = ToolSource.DIRECT_DEBUG
     ): ToolResult {
-        val validationError = validate(name, args)
-        if (validationError != null) {
-            val argsForLog = if (validationError.startsWith("Unknown tool")) {
-                "args=${args.keys.joinToString()}"
-            } else {
-                "invalid args"
-            }
-            record(name, argsForLog, false, validationError)
-            return ToolResult(false, validationError)
-        }
-
-        val spec = AndroidToolCatalog.find(name)
-        if (spec != null) {
-            when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
-                is PolicyDecision.Block -> {
-                    record(name, "policy=block", false, decision.userMessage)
-                    return ToolResult(false, decision.userMessage)
+        val previousSource = executionSource.get()
+        executionSource.set(source)
+        try {
+            val validationError = validate(name, args)
+            if (validationError != null) {
+                val argsForLog = if (validationError.startsWith("Unknown tool")) {
+                    "args=${args.keys.joinToString()}"
+                } else {
+                    "invalid args"
                 }
-                is PolicyDecision.Deny -> {
-                    record(name, "policy=deny", false, decision.userMessage)
-                    return ToolResult(false, decision.userMessage)
-                }
-                is PolicyDecision.Allow,
-                is PolicyDecision.RequireApproval -> Unit
+                record(name, argsForLog, false, validationError)
+                return ToolResult(false, validationError)
             }
-        }
 
-        val result = executeWithRetry(name, args)
-        val retryConfig = retryPolicy.configFor(name)
-        if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
-            AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
+            val spec = AndroidToolCatalog.find(name)
+            if (spec != null) {
+                when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
+                    is PolicyDecision.Block -> {
+                        record(name, "policy=block", false, decision.userMessage)
+                        return ToolResult(false, decision.userMessage)
+                    }
+                    is PolicyDecision.Deny -> {
+                        record(name, "policy=deny", false, decision.userMessage)
+                        return ToolResult(false, decision.userMessage)
+                    }
+                    is PolicyDecision.Allow,
+                    is PolicyDecision.RequireApproval -> Unit
+                }
+            }
+
+            val result = executeWithRetry(name, args)
+            val retryConfig = retryPolicy.configFor(name)
+            if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
+                AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
+            }
+            return result
+        } finally {
+            executionSource.set(previousSource)
         }
-        return result
     }
 
     private fun executeWithRetry(name: String, args: Map<String, String>): ToolResult {
@@ -168,6 +176,9 @@ class AndroidToolExecutor(
             }
             "tap" -> {
                 executeTap(args)
+            }
+            "long_press" -> {
+                executeLongPress(args)
             }
             "type_text" -> {
                 executeTypeText(args)
@@ -335,6 +346,35 @@ class AndroidToolExecutor(
     }
 
     private fun executeTap(args: Map<String, String>): ToolResult {
+        return executeResolvedPress(
+            toolName = "tap",
+            args = args,
+            dispatchByNodeId = AccessibilityBridge::tapByNodeId,
+            dispatchByBounds = AccessibilityBridge::tapByBounds,
+            successMessage = "tap",
+            failureVerb = "tap"
+        )
+    }
+
+    private fun executeLongPress(args: Map<String, String>): ToolResult {
+        return executeResolvedPress(
+            toolName = "long_press",
+            args = args,
+            dispatchByNodeId = AccessibilityBridge::longPressByNodeId,
+            dispatchByBounds = AccessibilityBridge::longPressByBounds,
+            successMessage = "longPress",
+            failureVerb = "long-press"
+        )
+    }
+
+    private fun executeResolvedPress(
+        toolName: String,
+        args: Map<String, String>,
+        dispatchByNodeId: (String) -> Boolean,
+        dispatchByBounds: (String) -> Boolean,
+        successMessage: String,
+        failureVerb: String,
+    ): ToolResult {
         val selector = TargetSelectorBuilder.fromLegacyArgs(args)
         val resolution = targetResolver.resolve(
             context = AccessibilityBridge.observeScreenContext(),
@@ -347,22 +387,21 @@ class AndroidToolExecutor(
                 val nodeId = candidate.node.nodeId
                 val boundsArg = candidate.selector.bounds?.toBoundsArg()
                 val ok = when {
-                    !nodeId.isNullOrBlank() -> AccessibilityBridge.tapByNodeId(nodeId)
-                    boundsArg != null -> AccessibilityBridge.tapByBounds(boundsArg)
+                    !nodeId.isNullOrBlank() -> dispatchByNodeId(nodeId)
+                    boundsArg != null -> dispatchByBounds(boundsArg)
                     else -> false
                 }
                 val message = when {
-                    ok -> "tap"
-                    nodeId.isNullOrBlank() && boundsArg == null ->
-                        "Resolved tap target has no stable node id or bounds"
-                    else -> "Unable to perform tap on resolved target"
+                    ok -> successMessage
+                    nodeId.isNullOrBlank() && boundsArg == null -> "Resolved $failureVerb target has no stable node id or bounds"
+                    else -> "Unable to perform $failureVerb on resolved target"
                 }
-                record("tap", tapLogArgs(candidate.selector), ok, message)
+                record(toolName, targetLogArgs(candidate.selector), ok, message)
                 ToolResult(
                     ok = ok,
                     message = message,
                     data = buildMap {
-                        put("selector", tapLogArgs(candidate.selector))
+                        put("selector", targetLogArgs(candidate.selector))
                         if (!nodeId.isNullOrBlank()) put("node_id", nodeId)
                         put("confidence", candidate.confidence.toString())
                         put("match_reasons", candidate.matchReasons.joinToString(","))
@@ -370,8 +409,8 @@ class AndroidToolExecutor(
                 )
             }
             is TargetResolutionResult.Ambiguous -> {
-                val message = "Ambiguous tap target: ${resolution.reason}"
-                record("tap", "target=ambiguous", false, message)
+                val message = "Ambiguous $failureVerb target: ${resolution.reason}"
+                record(toolName, "target=ambiguous", false, message)
                 ToolResult(
                     ok = false,
                     message = message,
@@ -381,8 +420,8 @@ class AndroidToolExecutor(
                 )
             }
             is TargetResolutionResult.NotFound -> {
-                val message = "Tap target not found: ${resolution.reason}"
-                record("tap", "target=not_found", false, message)
+                val message = "${failureVerb.replaceFirstChar { it.uppercase() }} target not found: ${resolution.reason}"
+                record(toolName, "target=not_found", false, message)
                 ToolResult(
                     ok = false,
                     message = message,
@@ -392,7 +431,7 @@ class AndroidToolExecutor(
         }
     }
 
-    private fun tapLogArgs(selector: TargetSelector): String {
+    private fun targetLogArgs(selector: TargetSelector): String {
         val label = selector.text?.displaySafe?.takeIf { it.isNotBlank() }
             ?: selector.contentDescription?.displaySafe?.takeIf { it.isNotBlank() }
             ?: selector.nodeId?.let { "node_id=$it" }
@@ -955,7 +994,13 @@ class AndroidToolExecutor(
     }
 
     private fun record(name: String, args: String, ok: Boolean, message: String) {
-        ToolExecutionLog.record(name, args, ok, message)
+        ToolExecutionLog.record(
+            name = name,
+            args = args,
+            ok = ok,
+            message = message,
+            source = (executionSource.get() ?: ToolSource.DIRECT_DEBUG).name.lowercase()
+        )
     }
 
     private fun ToolResult.withVerification(verification: ToolVerificationResult): ToolResult {

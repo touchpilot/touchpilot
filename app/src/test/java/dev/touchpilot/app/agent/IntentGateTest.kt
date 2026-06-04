@@ -65,6 +65,13 @@ class IntentGateTest {
     }
 
     @Test
+    fun classifiesLongPressTextAsExactLongPress() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("long-press App info"))
+        assertEquals("long_press", command.tool)
+        assertEquals("app info", command.args["text"])
+    }
+
+    @Test
     fun classifiesPaymentAsUnsafe() {
         val unsafe = assertIs<IntentDecision.UnsafeRequest>(gate.classify("Send this payment"))
         assertEquals("payments are blocked", unsafe.reason)

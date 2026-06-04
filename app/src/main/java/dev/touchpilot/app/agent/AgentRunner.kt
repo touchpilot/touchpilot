@@ -18,31 +18,35 @@ class AgentRunner(
     private val skill: Skill? = null,
     private val source: ToolSource = ToolSource.LOCAL_ROUTER,
     private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false),
     private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
     fun run(
         task: String,
         maxSteps: Int = AgentRunLimits.DefaultMaxSteps,
         listener: AgentEventListener = AgentEventListener {},
-        timeline: AgentStepTimelineBuilder? = null
+        timeline: AgentStepTimelineBuilder? = null,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
     ): AgentRunResult {
         return run(
             task = task,
             limits = AgentRunLimits(maxSteps = maxSteps),
             listener = listener,
-            timeline = timeline
+            timeline = timeline,
+            cancellationSignal = cancellationSignal
         )
     }
 
     fun run(task: String, limits: AgentRunLimits): AgentRunResult {
-        return run(task, limits, AgentEventListener {}, null)
+        return run(task, limits, AgentEventListener {}, null, java.util.concurrent.atomic.AtomicBoolean(false))
     }
 
     fun run(
         task: String,
         limits: AgentRunLimits,
         listener: AgentEventListener,
-        timeline: AgentStepTimelineBuilder?
+        timeline: AgentStepTimelineBuilder?,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
     ): AgentRunResult {
         return BoundedLocalAgentLoop(
             tools = AndroidLoopTools(toolExecutor),
@@ -51,12 +55,14 @@ class AgentRunner(
             skill = skill,
             source = source,
             policy = policy,
+            cancellationSignal = cancellationSignal,
             clarificationDecider = clarificationDecider
         ).run(
             task = task,
             limits = limits,
             listener = listener,
-            onStepsUpdated = timeline?.let { builder -> { steps -> builder.replaceAll(steps) } }
+            onStepsUpdated = timeline?.let { builder -> { steps -> builder.replaceAll(steps) } },
+            cancellationSignal = cancellationSignal
         )
     }
 
