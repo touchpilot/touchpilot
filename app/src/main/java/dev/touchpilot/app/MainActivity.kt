@@ -41,6 +41,7 @@ import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
+import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
@@ -76,6 +77,7 @@ class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
     private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
+    private lateinit var debugTraceExporter: DebugTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var agentRunController: AgentRunController
@@ -104,6 +106,11 @@ class MainActivity : Activity() {
         skills = SkillStore(this).loadSkills()
         ToolExecutionLog.configure(this)
         toolExecutor = AndroidToolExecutor(this)
+        debugTraceExporter = DebugTraceExporter(
+            context = this,
+            accessibilityConnected = { AccessibilityBridge.isConnected() },
+            observeScreen = { toolExecutor.observeScreen() }
+        )
         localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
 
@@ -842,6 +849,13 @@ class MainActivity : Activity() {
 
     private fun exportDebugTrace(): File =
         DebugTraceExporter.export(this, toolExecutor)
+    private fun exportRunTrace(record: AgentRunRecord): File {
+        return debugTraceExporter.exportRunTrace(record)
+    }
+
+    private fun exportDebugTrace(): File {
+        return debugTraceExporter.exportDebugTrace()
+    }
 
     private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
         CHAT("Chat", R.drawable.ic_chat),
