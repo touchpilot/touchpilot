@@ -37,6 +37,7 @@ import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
+import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
@@ -66,14 +67,12 @@ import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import dev.touchpilot.app.ui.withMargins
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
     private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
+    private lateinit var debugTraceExporter: DebugTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var agentRunController: AgentRunController
@@ -102,6 +101,11 @@ class MainActivity : Activity() {
         skills = SkillStore(this).loadSkills()
         ToolExecutionLog.configure(this)
         toolExecutor = AndroidToolExecutor(this)
+        debugTraceExporter = DebugTraceExporter(
+            context = this,
+            accessibilityConnected = { AccessibilityBridge.isConnected() },
+            observeScreen = { toolExecutor.observeScreen() }
+        )
         localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
 
@@ -836,36 +840,11 @@ class MainActivity : Activity() {
     }
 
     private fun exportRunTrace(record: AgentRunRecord): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-run-${record.id}-$timestamp.txt")
-        file.writeText(AgentRunDetailFormatter.exportRedactedTrace(record))
-        return file
+        return debugTraceExporter.exportRunTrace(record)
     }
 
     private fun exportDebugTrace(): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-trace-$timestamp.txt")
-        file.writeText(
-            buildString {
-                appendLine("TouchPilot debug trace")
-                appendLine("timestamp=$timestamp")
-                appendLine()
-                appendLine("Accessibility connected=${AccessibilityBridge.isConnected()}")
-                appendLine()
-                appendLine("Tool executions")
-                appendLine(ToolExecutionLog.renderChronological())
-                appendLine()
-                appendLine("Current screen")
-                appendLine(SensitiveTextRedactor.redact(toolExecutor.observeScreen()))
-            }
-        )
-        return file
+        return debugTraceExporter.exportDebugTrace()
     }
 
     private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
