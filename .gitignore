@@ -16,7 +16,7 @@ captures/
 
 # Logs
 *.log
-logs/
+/logs/
 
 # Local research and generated working files
 docs/research/

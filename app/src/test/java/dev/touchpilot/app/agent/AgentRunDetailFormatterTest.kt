@@ -15,6 +15,137 @@ import kotlin.test.assertTrue
 
 class AgentRunDetailFormatterTest {
     @Test
+    fun buildCompletionSummaryIncludesStructuredRunDetails() {
+        val record = sampleRecord(
+            steps = listOf(
+                AgentStepFactory.act(
+                    sequenceNumber = 1,
+                    tool = "tap",
+                    args = emptyMap(),
+                    source = "local_router",
+                    result = ToolResult(ok = true, message = "Tapped target"),
+                ),
+                AgentStepFactory.verify(
+                    sequenceNumber = 2,
+                    verification = ToolVerificationResult.Passed("screen changed"),
+                ),
+                AgentStepFactory.stop(
+                    sequenceNumber = 3,
+                    reason = AgentStepStopReason.COMPLETED,
+                    outputSummary = "Done.",
+                ),
+            ),
+            stopReason = AgentStepStopReason.COMPLETED,
+            stopMessage = AgentStepStopReason.COMPLETED.userMessage,
+            finalAnswer = "Done.",
+        )
+
+        val summary = AgentRunDetailFormatter.buildCompletionSummary(record)
+
+        assertEquals(AgentRunCompletionStatus.COMPLETED, summary.status)
+        assertEquals(3, summary.stepCount)
+        assertContains(summary.stopReason, AgentStepStopReason.COMPLETED.userMessage)
+        assertContains(summary.lastVerificationOutcome.orEmpty(), "Passed")
+        assertContains(summary.lastVerificationOutcome.orEmpty(), "screen changed")
+        assertEquals(null, summary.nextAction)
+    }
+
+    @Test
+    fun buildCompletionSummaryMapsBlockedPolicyStop() {
+        val record = sampleRecord(
+            steps = listOf(
+                AgentStepFactory.stop(
+                    sequenceNumber = 1,
+                    reason = AgentStepStopReason.POLICY_BLOCKED,
+                    outputSummary = "TouchPilot will not enter secrets.",
+                ),
+            ),
+            stopReason = AgentStepStopReason.POLICY_BLOCKED,
+            stopMessage = "TouchPilot stopped because policy blocked the next action.",
+        )
+
+        val summary = AgentRunDetailFormatter.buildCompletionSummary(record)
+
+        assertEquals(AgentRunCompletionStatus.BLOCKED, summary.status)
+        assertContains(summary.stopReason, "policy blocked")
+        assertContains(summary.nextAction.orEmpty(), "safer alternative")
+    }
+
+    @Test
+    fun buildCompletionSummaryUsesDisplayStepsWhenResultMissing() {
+        val record = AgentRunRecord(
+            id = "run-failed",
+            task = "Open settings",
+            startedAtMillis = 1L,
+            completedAtMillis = 2L,
+            result = null,
+            errorMessage = "Agent failed: timeout",
+        )
+        val displaySteps = listOf(
+            AgentStepFactory.act(
+                sequenceNumber = 1,
+                tool = "observe_screen",
+                args = emptyMap(),
+                source = "local_router",
+            ),
+            AgentStepFactory.stop(
+                sequenceNumber = 2,
+                reason = AgentStepStopReason.EXECUTOR_ERROR,
+                outputSummary = "Agent failed: timeout",
+            ),
+        )
+
+        val summary = AgentRunDetailFormatter.buildCompletionSummary(record, displaySteps)
+
+        assertEquals(AgentRunCompletionStatus.FAILED, summary.status)
+        assertEquals(2, summary.stepCount)
+        assertContains(summary.stopReason, "timeout")
+        assertContains(summary.nextAction.orEmpty(), "retry")
+    }
+
+    @Test
+    fun buildCompletionSummaryMapsClarificationNeeded() {
+        val record = sampleRecord(
+            steps = listOf(
+                AgentStepFactory.clarify(
+                    sequenceNumber = 1,
+                    clarification = AgentStepClarification(
+                        reason = AgentStepClarificationReason.AMBIGUOUS_REQUEST,
+                        question = "Which button should I tap?",
+                    ),
+                ),
+            ),
+            stopReason = AgentStepStopReason.CLARIFICATION_NEEDED,
+            stopMessage = AgentStepStopReason.CLARIFICATION_NEEDED.userMessage,
+        )
+
+        val summary = AgentRunDetailFormatter.buildCompletionSummary(record)
+
+        assertEquals(AgentRunCompletionStatus.NEEDS_CLARIFICATION, summary.status)
+        assertContains(summary.nextAction.orEmpty(), "Which button should I tap?")
+    }
+
+    @Test
+    fun buildCompletionSummaryMapsCancelledStop() {
+        val record = sampleRecord(
+            steps = listOf(
+                AgentStepFactory.stop(
+                    sequenceNumber = 1,
+                    reason = AgentStepStopReason.USER_CANCELLED,
+                    outputSummary = "Approval not granted",
+                ),
+            ),
+            stopReason = AgentStepStopReason.USER_CANCELLED,
+            stopMessage = AgentStepStopReason.USER_CANCELLED.userMessage,
+        )
+
+        val summary = AgentRunDetailFormatter.buildCompletionSummary(record)
+
+        assertEquals(AgentRunCompletionStatus.CANCELLED, summary.status)
+        assertContains(summary.nextAction.orEmpty(), "Approve")
+    }
+
+    @Test
     fun compactSummaryPrefersStructuredSteps() {
         val record = sampleRecord(
             steps = listOf(

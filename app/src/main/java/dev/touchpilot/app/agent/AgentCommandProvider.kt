@@ -95,6 +95,16 @@ class LocalRouterCommandProvider(
                 return LocalRoute("open_app", mapOf("target" to target))
             }
 
+        Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
+            .find(normalized)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { text ->
+                return LocalRoute("long_press", mapOf("text" to text))
+            }
+
         Regex("(?:tap|press)\\s+([\\w .-]+)")
             .find(normalized)
             ?.groupValues

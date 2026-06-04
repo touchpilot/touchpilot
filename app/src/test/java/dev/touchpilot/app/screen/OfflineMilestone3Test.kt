@@ -1,6 +1,7 @@
 package dev.touchpilot.app.screen
 
 import dev.touchpilot.app.agent.AgentEvent
+import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
@@ -172,7 +173,7 @@ class OfflineMilestone3Test {
     }
 
     private fun runScreenInquiry(context: ScreenContext) = DefaultLocalReasoningCore(
-        invocation = { _, _, _, _ -> error("screen inquiry must not invoke the agent runner") },
+        invocation = { _, _, _, _, _ -> error("screen inquiry must not invoke the agent runner") },
         sessionContext = {
             LocalReasoningContext(
                 skill = null,
@@ -180,7 +181,7 @@ class OfflineMilestone3Test {
             )
         },
         screenContextProvider = { context }
-    ).run("what can you do here")
+    ).run("what can you do here", null, AgentEventListener {}, java.util.concurrent.atomic.AtomicBoolean(false))
 
     private fun contextFrom(
         appLabel: String,

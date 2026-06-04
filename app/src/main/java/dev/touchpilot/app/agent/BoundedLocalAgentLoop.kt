@@ -19,13 +19,15 @@ class BoundedLocalAgentLoop(
     private val skill: Skill? = null,
     private val source: ToolSource = ToolSource.LOCAL_ROUTER,
     private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false),
     private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
     fun run(
         task: String,
         limits: AgentRunLimits = AgentRunLimits(),
         listener: AgentEventListener = AgentEventListener {},
-        onStepsUpdated: ((List<AgentStep>) -> Unit)? = null
+        onStepsUpdated: ((List<AgentStep>) -> Unit)? = null,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
     ): AgentRunResult {
         val transcript = StringBuilder()
         val events = mutableListOf<AgentEvent>()
@@ -50,6 +52,17 @@ class BoundedLocalAgentLoop(
 
         repeat(limits.maxSteps) { step ->
             val stepIndex = step + 1
+            if (cancellationSignal.get()) {
+                transcript.appendLine("Run cancelled by user at step $stepIndex")
+                events += AgentEvent.RunCancelled(reason = "Cancelled by user")
+                steps += AgentStepFactory.stop(
+                    sequenceNumber = stepIndex,
+                    reason = AgentStepStopReason.USER_CANCELLED,
+                    outputSummary = "Cancelled by user",
+                    inputSummary = "observed ${currentScreen.length} character(s)"
+                )
+                return stopped(transcript, events, steps, AgentStepStopReason.USER_CANCELLED)
+            }
             transcript.appendLine("Step $stepIndex")
             val raw = runCatching {
                 commandProvider.complete(AgentPrompts.systemPrompt(skill), context)

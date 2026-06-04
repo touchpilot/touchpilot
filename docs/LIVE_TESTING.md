@@ -51,6 +51,8 @@ Launch TouchPilot:
   Settings is foreground before follow-up actions.
 - [x] `Tap Text` taps a visible target.
 - [ ] `Tap Text` followed by `wait_for_idle` settles after the tap transition.
+- [ ] `long_press({text=...})` opens a target context menu or selection state.
+- [ ] `long_press` returns clear failures for missing or ambiguous targets.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
 - [ ] `Swipe Left` and `Swipe Right` advance a horizontal pager/carousel (e.g.
