@@ -44,6 +44,13 @@ class IntentGateTest {
     }
 
     @Test
+    fun classifiesOpenWifiSettingsAsSettingsPanel() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("Open Wi-Fi settings"))
+        assertEquals("open_settings_panel", command.tool)
+        assertEquals("wifi", command.args["panel"])
+    }
+
+    @Test
     fun classifiesLaunchAppAsExactOpenApp() {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("launch maps"))
         assertEquals("open_app", command.tool)
@@ -55,6 +62,13 @@ class IntentGateTest {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("tap OK"))
         assertEquals("tap", command.tool)
         assertEquals("ok", command.args["text"])
+    }
+
+    @Test
+    fun classifiesLongPressTextAsExactLongPress() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("long-press App info"))
+        assertEquals("long_press", command.tool)
+        assertEquals("app info", command.args["text"])
     }
 
     @Test

@@ -7,6 +7,7 @@ import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.screen.ScreenContextSummarizer
 import dev.touchpilot.app.screen.ScreenSummary
 import dev.touchpilot.app.security.ActionPolicy
+import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
@@ -19,7 +20,19 @@ import dev.touchpilot.app.tools.AndroidToolExecutor
  * channel.
  */
 interface LocalReasoningCore {
-    fun run(task: String, listener: AgentEventListener = AgentEventListener {}): AgentRunResult
+    fun run(
+        task: String,
+        timeline: AgentStepTimelineBuilder? = null,
+        listener: AgentEventListener = AgentEventListener {},
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
+    ): AgentRunResult
+}
+
+/**
+ * Convenience overload for LocalReasoningCore.run() without timeline or cancellation support.
+ */
+fun LocalReasoningCore.run(task: String, listener: AgentEventListener = AgentEventListener {}): AgentRunResult {
+    return run(task, timeline = null, listener, java.util.concurrent.atomic.AtomicBoolean(false))
 }
 
 fun interface AgentEventListener {
@@ -45,7 +58,20 @@ data class LocalReasoningContext(
  * [defaultAgentRunInvocation] which builds and runs a real [AgentRunner].
  */
 fun interface AgentRunInvocation {
-    fun invoke(task: String, context: LocalReasoningContext): AgentRunResult
+    fun invoke(
+        task: String,
+        context: LocalReasoningContext,
+        listener: AgentEventListener,
+        timeline: AgentStepTimelineBuilder?,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
+    ): AgentRunResult
+}
+
+/**
+ * Convenience overload for invocation without timeline, listener, or cancellation support.
+ */
+fun AgentRunInvocation.invoke(task: String, context: LocalReasoningContext): AgentRunResult {
+    return invoke(task, context, AgentEventListener {}, null, java.util.concurrent.atomic.AtomicBoolean(false))
 }
 
 class DefaultLocalReasoningCore(
@@ -58,12 +84,24 @@ class DefaultLocalReasoningCore(
     private val screenSummarizer: ScreenContextSummarizer = ScreenContextSummarizer()
 ) : LocalReasoningCore {
 
-    override fun run(task: String, listener: AgentEventListener): AgentRunResult {
+override fun run(
+    task: String,
+    timeline: AgentStepTimelineBuilder?,
+    listener: AgentEventListener,
+    cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
+): AgentRunResult {
+    val streamed = mutableSetOf<String>()
+    fun forward(event: AgentEvent) {
+        if (streamed.add(event.id)) {
+            listener.onEvent(event)
+            timeline?.onEvent(event)
+        }
+    }
         intents.respond(task)?.let { canned ->
             val userEvent = AgentEvent.UserMessage(task)
             val finalEvent = AgentEvent.FinalAnswer(canned.message)
-            listener.onEvent(userEvent)
-            listener.onEvent(finalEvent)
+            forward(userEvent)
+            forward(finalEvent)
             return AgentRunResult(
                 transcript = "Conversational reply",
                 finalAnswer = canned.message,
@@ -78,9 +116,9 @@ class DefaultLocalReasoningCore(
         val intent = intentClassifier.classify(task, skills)
 
         when (intent) {
-            is IntentDecision.UnsafeRequest -> return blockUnsafe(task, intent, listener)
-            is IntentDecision.ClarificationNeeded -> return askForClarification(task, intent, listener)
-            is IntentDecision.ScreenInquiry -> return answerScreenInquiry(task, intent, listener)
+            is IntentDecision.UnsafeRequest -> return blockUnsafe(task, intent, ::forward)
+            is IntentDecision.ClarificationNeeded -> return askForClarification(task, intent, ::forward, timeline)
+            is IntentDecision.ScreenInquiry -> return answerScreenInquiry(task, intent, ::forward)
             is IntentDecision.ExactCommand,
             is IntentDecision.KnownSkill,
             is IntentDecision.LocalModelNeeded -> Unit
@@ -111,7 +149,8 @@ class DefaultLocalReasoningCore(
                             reason = "matched skill '${intent.skillId}' is unavailable",
                             clarification = "I couldn't load that skill. Please pick another skill or rephrase the request."
                         ),
-                        listener = listener
+                        forward = ::forward,
+                        timeline = timeline
                     )
                 }
                 baseCtx.copy(skill = matchedSkill)
@@ -122,15 +161,21 @@ class DefaultLocalReasoningCore(
             is IntentDecision.ScreenInquiry -> error("handled above")
         }
 
-        val result = invocation.invoke(task, effectiveCtx)
-        result.events.forEach(listener::onEvent)
+        val result = invocation.invoke(
+            task = task,
+            context = effectiveCtx,
+            listener = AgentEventListener(::forward),
+            timeline = timeline,
+            cancellationSignal = cancellationSignal
+        )
+        result.events.forEach(::forward)
         return result
     }
 
     private fun blockUnsafe(
         task: String,
         intent: IntentDecision.UnsafeRequest,
-        listener: AgentEventListener
+        forward: (AgentEvent) -> Unit
     ): AgentRunResult {
         val userEvent = AgentEvent.UserMessage(task)
         val blocked = AgentEvent.PolicyBlocked(
@@ -139,9 +184,9 @@ class DefaultLocalReasoningCore(
             userMessage = intent.userMessage
         )
         val finalEvent = AgentEvent.FinalAnswer(intent.userMessage)
-        listener.onEvent(userEvent)
-        listener.onEvent(blocked)
-        listener.onEvent(finalEvent)
+        forward(userEvent)
+        forward(blocked)
+        forward(finalEvent)
         return AgentRunResult(
             transcript = "Blocked by intent gate: ${intent.reason}",
             finalAnswer = intent.userMessage,
@@ -154,15 +199,18 @@ class DefaultLocalReasoningCore(
     private fun askForClarification(
         task: String,
         intent: IntentDecision.ClarificationNeeded,
-        listener: AgentEventListener
+        forward: (AgentEvent) -> Unit,
+        timeline: AgentStepTimelineBuilder?
     ): AgentRunResult {
         val userEvent = AgentEvent.UserMessage(task)
         val assistant = AgentEvent.AssistantMessage(
             text = intent.clarification,
-            detail = intent.reason
+            detail = intent.reason,
+            choices = intent.candidateLabels.map { SensitiveTextRedactor.redact(it) }
         )
-        listener.onEvent(userEvent)
-        listener.onEvent(assistant)
+        forward(userEvent)
+        timeline?.requestClarification(intent.clarification)
+        forward(assistant)
         return AgentRunResult(
             transcript = "Clarification requested: ${intent.reason}",
             finalAnswer = intent.clarification,
@@ -175,7 +223,7 @@ class DefaultLocalReasoningCore(
     private fun answerScreenInquiry(
         task: String,
         intent: IntentDecision.ScreenInquiry,
-        listener: AgentEventListener
+        forward: (AgentEvent) -> Unit
     ): AgentRunResult {
         val context = screenContextProvider()
         val summary = screenSummarizer.summarize(context)
@@ -186,9 +234,9 @@ class DefaultLocalReasoningCore(
             detail = suggestionBlock
         )
         val finalEvent = AgentEvent.FinalAnswer(summary.sentence)
-        listener.onEvent(userEvent)
-        listener.onEvent(assistant)
-        listener.onEvent(finalEvent)
+        forward(userEvent)
+        forward(assistant)
+        forward(finalEvent)
         val transcript = if (suggestionBlock.isBlank()) {
             summary.sentence
         } else {
@@ -225,15 +273,16 @@ fun defaultAgentRunInvocation(
     approvalProvider: ToolApprovalProvider,
     localModelRuntime: LocalCommandModelRuntime,
     policy: ActionPolicy = DefaultActionPolicy()
-): AgentRunInvocation = AgentRunInvocation { task, context ->
+): AgentRunInvocation = AgentRunInvocation { task, context, listener, timeline, cancellationSignal ->
     buildDefaultAgentRunner(
         task = task,
         context = context,
         toolExecutor = toolExecutor,
         approvalProvider = approvalProvider,
         localModelRuntime = localModelRuntime,
-        policy = policy
-    ).run(task)
+        policy = policy,
+        cancellationSignal = cancellationSignal
+    ).run(task, listener = listener, timeline = timeline)
 }
 
 /**
@@ -247,7 +296,8 @@ fun buildDefaultAgentRunner(
     toolExecutor: AndroidToolExecutor,
     approvalProvider: ToolApprovalProvider,
     localModelRuntime: LocalCommandModelRuntime,
-    policy: ActionPolicy = DefaultActionPolicy()
+    policy: ActionPolicy = DefaultActionPolicy(),
+    cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
 ): AgentRunner {
     val commandProvider = buildCommandProvider(task, context, localModelRuntime)
     return AgentRunner(
@@ -256,7 +306,8 @@ fun buildDefaultAgentRunner(
         commandProvider = commandProvider,
         skill = context.skill,
         source = context.providerMode.toToolSource(),
-        policy = policy
+        policy = policy,
+        cancellationSignal = cancellationSignal
     )
 }
 

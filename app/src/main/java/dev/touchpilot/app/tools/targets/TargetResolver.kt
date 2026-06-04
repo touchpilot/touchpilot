@@ -126,9 +126,11 @@ class TargetResolver(
             nodeText = node.text.raw,
             exactReason = "text_exact",
             normalizedReason = "text_normalized",
+            containsReason = "text_contains",
             reasons = reasons,
             exactPoints = 75,
             normalizedPoints = 65,
+            containsPoints = 55,
         )
 
         score += scoreText(
@@ -136,9 +138,11 @@ class TargetResolver(
             nodeText = node.text.raw,
             exactReason = "content_description_exact",
             normalizedReason = "content_description_normalized",
+            containsReason = "content_description_contains",
             reasons = reasons,
             exactPoints = 70,
             normalizedPoints = 60,
+            containsPoints = 55,
         )
 
         if (score == 0) return null
@@ -175,9 +179,11 @@ class TargetResolver(
         nodeText: String,
         exactReason: String,
         normalizedReason: String,
+        containsReason: String,
         reasons: MutableList<String>,
         exactPoints: Int,
         normalizedPoints: Int,
+        containsPoints: Int,
     ): Int {
         val query = requested?.takeIf { it.isNotBlank() } ?: return 0
         if (nodeText.isBlank()) return 0
@@ -189,6 +195,13 @@ class TargetResolver(
         if (query.normalizedForResolve() == nodeText.normalizedForResolve()) {
             reasons += normalizedReason
             return normalizedPoints
+        }
+
+        val normalizedQuery = query.normalizedForResolve()
+        val normalizedNodeText = nodeText.normalizedForResolve()
+        if (normalizedQuery.isNotBlank() && normalizedQuery in normalizedNodeText) {
+            reasons += containsReason
+            return containsPoints
         }
 
         return 0

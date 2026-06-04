@@ -1,6 +1,7 @@
 package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.tools.SettingsPanelIntent
 
 fun interface AgentCommandProvider {
     fun complete(systemPrompt: String, context: String): String
@@ -80,6 +81,10 @@ class LocalRouterCommandProvider(
             return LocalRoute("scroll", mapOf("direction" to "forward"))
         }
 
+        SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
+            return LocalRoute("open_settings_panel", mapOf(SettingsPanelIntent.PanelArg to panel))
+        }
+
         Regex("(?:open|launch)\\s+([\\w .-]+)")
             .find(normalized)
             ?.groupValues
@@ -88,6 +93,16 @@ class LocalRouterCommandProvider(
             ?.takeIf { it.isNotBlank() }
             ?.let { target ->
                 return LocalRoute("open_app", mapOf("target" to target))
+            }
+
+        Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
+            .find(normalized)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { text ->
+                return LocalRoute("long_press", mapOf("text" to text))
             }
 
         Regex("(?:tap|press)\\s+([\\w .-]+)")

@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import dev.touchpilot.app.screen.NodeBounds
 import android.view.accessibility.AccessibilityWindowInfo
 import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.screen.ScreenContextBuilder
@@ -115,6 +116,69 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         val bounds = parseBounds(boundsText) ?: return false
         if (bounds.isEmpty) return false
         return tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
+    /**
+     * Bounds of the active window in screen pixels, used by the `swipe` tool to
+     * plan a full-screen direction swipe when no container target is given.
+     */
+    fun activeWindowBounds(): NodeBounds? {
+        val root = rootInActiveWindow ?: return null
+        val bounds = Rect()
+        root.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return null
+        return NodeBounds(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    }
+
+    /**
+     * Dispatch a swipe: a single drag stroke from (startX, startY) to
+     * (endX, endY) held for [durationMs]. Unlike `scroll`, this is a raw gesture
+     * and works on surfaces that expose no accessibility scroll action (pagers,
+     * carousels, drawers, maps).
+     */
+    fun swipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Long): Boolean {
+        val duration = durationMs.coerceIn(MinSwipeDurationMs, MaxSwipeDurationMs)
+        val path = Path().apply {
+            moveTo(startX.toFloat(), startY.toFloat())
+            lineTo(endX.toFloat(), endY.toFloat())
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, duration))
+            .build()
+        val completed = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    completed.set(true)
+                    latch.countDown()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    completed.set(false)
+                    latch.countDown()
+                }
+            },
+            null
+        )
+
+        if (!dispatched) return false
+        latch.await(duration + GestureCallbackTimeoutMs, TimeUnit.MILLISECONDS)
+        return completed.get()
+    }
+
+    fun longPressByNodeId(nodeId: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val node = findNodeById(root, nodeId) ?: return false
+        return longClickNodeOrParent(node) || longPressNodeCenter(node)
+    }
+
+    fun longPressByBounds(boundsText: String): Boolean {
+        val bounds = parseBounds(boundsText) ?: return false
+        if (bounds.isEmpty) return false
+        return longPress(bounds.centerX().toFloat(), bounds.centerY().toFloat())
     }
 
     fun typeIntoFocusedField(text: String): Boolean {
@@ -420,6 +484,19 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return false
     }
 
+    private fun longClickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
+        var current: AccessibilityNodeInfo? = node
+        while (current != null) {
+            val supportsLongClick = current.isLongClickable ||
+                current.actionList.any { it.id == AccessibilityNodeInfo.ACTION_LONG_CLICK }
+            if (supportsLongClick && current.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) {
+                return true
+            }
+            current = current.parent
+        }
+        return false
+    }
+
     private fun setNodeText(node: AccessibilityNodeInfo, text: String): Boolean {
         if (!node.isEnabled || !node.isEditableTarget()) return false
         val args = Bundle().apply {
@@ -442,10 +519,30 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
     }
 
+    private fun longPressNodeCenter(node: AccessibilityNodeInfo): Boolean {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return false
+        return longPress(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
     private fun tap(x: Float, y: Float): Boolean {
+        return dispatchPressGesture(x = x, y = y, durationMs = 60L, timeoutMs = 1_000L)
+    }
+
+    private fun longPress(x: Float, y: Float): Boolean {
+        return dispatchPressGesture(x = x, y = y, durationMs = 650L, timeoutMs = 1_750L)
+    }
+
+    private fun dispatchPressGesture(
+        x: Float,
+        y: Float,
+        durationMs: Long,
+        timeoutMs: Long
+    ): Boolean {
         val path = Path().apply { moveTo(x, y) }
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0L, 60L))
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, durationMs))
             .build()
         val completed = AtomicBoolean(false)
         val latch = CountDownLatch(1)
@@ -467,7 +564,7 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         )
 
         if (!dispatched) return false
-        latch.await(1_000L, TimeUnit.MILLISECONDS)
+        latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         return completed.get()
     }
 
@@ -486,5 +583,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
                 ?: ""
             label.contains(text, ignoreCase = true)
         } != null
+    }
+
+    private companion object {
+        /** Lower bound so a swipe still registers as a gesture rather than a tap. */
+        const val MinSwipeDurationMs = 50L
+
+        /** Upper bound so a runaway duration cannot hold the gesture indefinitely. */
+        const val MaxSwipeDurationMs = 5_000L
+
+        /** Extra time beyond the gesture duration to wait for the result callback. */
+        const val GestureCallbackTimeoutMs = 1_000L
     }
 }

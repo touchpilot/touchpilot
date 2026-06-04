@@ -19,12 +19,32 @@ class BoundedLocalAgentLoop(
     private val skill: Skill? = null,
     private val source: ToolSource = ToolSource.LOCAL_ROUTER,
     private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false),
     private val clarificationDecider: ClarificationDecider = ClarificationDecider()
 ) {
-    fun run(task: String, limits: AgentRunLimits = AgentRunLimits()): AgentRunResult {
+    fun run(
+        task: String,
+        limits: AgentRunLimits = AgentRunLimits(),
+        listener: AgentEventListener = AgentEventListener {},
+        onStepsUpdated: ((List<AgentStep>) -> Unit)? = null,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
+    ): AgentRunResult {
         val transcript = StringBuilder()
-        val events = mutableListOf<AgentEvent>(AgentEvent.UserMessage(task))
+        val events = mutableListOf<AgentEvent>()
         val steps = mutableListOf<AgentStep>()
+
+        fun emit(event: AgentEvent) {
+            events += event
+            listener.onEvent(event)
+        }
+
+        fun publishSteps() {
+            onStepsUpdated?.invoke(steps.toList())
+        }
+
+        emit(AgentEvent.UserMessage(task))
+        publishSteps()
+
         var currentScreen = tools.observeScreen()
         var context = initialContext(task, currentScreen)
         var nextStepContext = NextStepContext.initial(task)
@@ -32,12 +52,24 @@ class BoundedLocalAgentLoop(
 
         repeat(limits.maxSteps) { step ->
             val stepIndex = step + 1
+            if (cancellationSignal.get()) {
+                transcript.appendLine("Run cancelled by user at step $stepIndex")
+                events += AgentEvent.RunCancelled(reason = "Cancelled by user")
+                steps += AgentStepFactory.stop(
+                    sequenceNumber = stepIndex,
+                    reason = AgentStepStopReason.USER_CANCELLED,
+                    outputSummary = "Cancelled by user",
+                    inputSummary = "observed ${currentScreen.length} character(s)"
+                )
+                return stopped(transcript, events, steps, AgentStepStopReason.USER_CANCELLED)
+            }
             transcript.appendLine("Step $stepIndex")
             val raw = runCatching {
                 commandProvider.complete(AgentPrompts.systemPrompt(skill), context)
             }.getOrElse { error ->
                 transcript.appendLine("Command provider error: ${error.message}")
                 steps += invalidStep(stepIndex, currentScreen, "Command provider error: ${error.message}")
+                publishSteps()
                 return stopped(transcript, events, steps, AgentStepStopReason.NO_VALID_ACTION)
             }
             transcript.appendLine("Model: $raw")
@@ -47,17 +79,19 @@ class BoundedLocalAgentLoop(
             }.getOrElse { error ->
                 transcript.appendLine("Command parse error: ${error.message}")
                 steps += invalidStep(stepIndex, currentScreen, "Command parse error: ${error.message}")
+                publishSteps()
                 return stopped(transcript, events, steps, AgentStepStopReason.NO_VALID_ACTION)
             }
             if (command.finalAnswer != null) {
                 transcript.appendLine("Final: ${command.finalAnswer}")
-                events += AgentEvent.FinalAnswer(command.finalAnswer)
+                emit(AgentEvent.FinalAnswer(command.finalAnswer))
                 steps += AgentStepFactory.stop(
                     sequenceNumber = stepIndex,
                     reason = AgentStepStopReason.COMPLETED,
                     outputSummary = command.finalAnswer,
                     inputSummary = "final answer produced"
                 )
+                publishSteps()
                 return AgentRunResult(
                     transcript = transcript.toString(),
                     finalAnswer = command.finalAnswer,
@@ -107,6 +141,7 @@ class BoundedLocalAgentLoop(
             if (toolName == null) {
                 transcript.appendLine("No tool or final answer returned.")
                 steps += invalidStep(stepIndex, currentScreen, "No tool or final answer returned.")
+                publishSteps()
                 return stopped(transcript, events, steps, AgentStepStopReason.NO_VALID_ACTION)
             }
             val redactedArgs = SensitiveTextRedactor.redact(command.args)
@@ -119,7 +154,8 @@ class BoundedLocalAgentLoop(
                 outputSummary = "Tool selected.",
                 status = AgentStepStatus.PENDING
             )
-            AgentEvent.toolRequested(command, source)?.let { events += it }
+            AgentEvent.toolRequested(command, source)?.let(::emit)
+            publishSteps()
 
             val validationError = tools.validate(toolName, command.args)
             val spec = tools.findTool(toolName)
@@ -132,16 +168,19 @@ class BoundedLocalAgentLoop(
                     ok = false,
                     message = "denied by skill allowlist"
                 )
-                events += AgentEvent.PolicyBlocked(
-                    tool = toolName,
-                    reason = "denied by skill allowlist",
-                    userMessage = allowlistError
+                emit(
+                    AgentEvent.PolicyBlocked(
+                        tool = toolName,
+                        reason = "denied by skill allowlist",
+                        userMessage = allowlistError
+                    )
                 )
                 steps.replaceLast(
                     status = AgentStepStatus.BLOCKED,
                     message = allowlistError,
                     stopReason = AgentStepStopReason.POLICY_BLOCKED
                 )
+                publishSteps()
                 return stopped(transcript, events, steps, AgentStepStopReason.POLICY_BLOCKED)
             } else if (validationError != null) {
                 transcript.appendLine("Tool validation failed: $validationError")
@@ -150,6 +189,7 @@ class BoundedLocalAgentLoop(
                     message = validationError,
                     stopReason = AgentStepStopReason.NO_VALID_ACTION
                 )
+                publishSteps()
                 return stopped(transcript, events, steps, AgentStepStopReason.NO_VALID_ACTION)
             } else if (spec != null) {
                 val decision = policy.evaluate(
@@ -168,7 +208,8 @@ class BoundedLocalAgentLoop(
                     is PolicyDecision.RequireApproval -> {
                         transcript.appendLine("Approval requested for $toolName: ${decision.reason}")
                         val approvalRequest = ToolApprovalRequest(spec, command.args, decision)
-                        events += AgentEvent.approvalRequired(approvalRequest)
+                        emit(AgentEvent.approvalRequired(approvalRequest))
+                        publishSteps()
                         val approved = approvalProvider.approve(approvalRequest)
                         if (!approved) {
                             transcript.appendLine("Tool denied by user: $toolName")
@@ -178,16 +219,19 @@ class BoundedLocalAgentLoop(
                                 ok = false,
                                 message = "denied by user: ${decision.reason}"
                             )
-                            events += AgentEvent.PolicyBlocked(
-                                tool = toolName,
-                                reason = "denied by user: ${decision.reason}",
-                                userMessage = "The user did not approve $toolName."
+                            emit(
+                                AgentEvent.PolicyBlocked(
+                                    tool = toolName,
+                                    reason = "denied by user: ${decision.reason}",
+                                    userMessage = "The user did not approve $toolName."
+                                )
                             )
                             steps.replaceLast(
                                 status = AgentStepStatus.BLOCKED,
                                 message = "The user did not approve $toolName.",
                                 stopReason = AgentStepStopReason.USER_CANCELLED
                             )
+                            publishSteps()
                             return stopped(transcript, events, steps, AgentStepStopReason.USER_CANCELLED)
                         }
                         transcript.appendLine("Tool approved by user: $toolName")
@@ -195,36 +239,39 @@ class BoundedLocalAgentLoop(
                     is PolicyDecision.Deny -> {
                         transcript.appendLine("Policy denied $toolName: ${decision.reason}")
                         tools.recordExecution(toolName, "policy=deny", false, decision.userMessage)
-                        AgentEvent.policyBlocked(toolName, decision)?.let { events += it }
+                        AgentEvent.policyBlocked(toolName, decision)?.let(::emit)
                         steps.replaceLast(
                             status = AgentStepStatus.BLOCKED,
                             message = decision.userMessage,
                             stopReason = AgentStepStopReason.POLICY_BLOCKED
                         )
+                        publishSteps()
                         return stopped(transcript, events, steps, AgentStepStopReason.POLICY_BLOCKED)
                     }
                     is PolicyDecision.Block -> {
                         transcript.appendLine("Policy blocked $toolName: ${decision.reason}")
                         tools.recordExecution(toolName, "policy=block", false, decision.userMessage)
-                        AgentEvent.policyBlocked(toolName, decision)?.let { events += it }
+                        AgentEvent.policyBlocked(toolName, decision)?.let(::emit)
                         steps.replaceLast(
                             status = AgentStepStatus.BLOCKED,
                             message = decision.userMessage,
                             stopReason = AgentStepStopReason.POLICY_BLOCKED
                         )
+                        publishSteps()
                         return stopped(transcript, events, steps, AgentStepStopReason.POLICY_BLOCKED)
                     }
                 }
             }
 
             steps.replaceLast(status = AgentStepStatus.RUNNING, message = "Tool is running.")
-            AgentEvent.toolRunning(command, source)?.let { events += it }
+            publishSteps()
+            AgentEvent.toolRunning(command, source)?.let(::emit)
             val result = runCatching {
                 tools.execute(toolName, command.args, source)
             }.getOrElse { error ->
                 val message = error.message ?: "Tool execution error"
                 transcript.appendLine("Tool execution error: $message")
-                events += AgentEvent.ToolFailed(tool = toolName, message = message)
+                emit(AgentEvent.ToolFailed(tool = toolName, message = message))
                 consecutiveFailures += 1
                 steps.replaceLast(
                     status = AgentStepStatus.FAILED,
@@ -235,6 +282,7 @@ class BoundedLocalAgentLoop(
                         null
                     }
                 )
+                publishSteps()
                 if (consecutiveFailures >= limits.maxConsecutiveFailures) {
                     return stopped(transcript, events, steps, AgentStepStopReason.REPEATED_TOOL_FAILURE)
                 }
@@ -249,7 +297,7 @@ class BoundedLocalAgentLoop(
                 )
                 return@repeat
             }
-            events += AgentEvent.toolResult(toolName, result)
+            emit(AgentEvent.toolResult(toolName, result))
             transcript.appendLine("Tool result: ${result.ok} ${SensitiveTextRedactor.redact(result.message)}")
             if (result.data.isNotEmpty()) {
                 transcript.appendLine("Tool data: ${SensitiveTextRedactor.redact(result.data)}")
@@ -284,9 +332,11 @@ class BoundedLocalAgentLoop(
                     }
                 )
                 if (consecutiveFailures >= limits.maxConsecutiveFailures) {
+                    publishSteps()
                     return stopped(transcript, events, steps, AgentStepStopReason.REPEATED_TOOL_FAILURE)
                 }
             }
+            publishSteps()
 
             currentScreen = verificationScreen
             context = nextContext(task, transcript.toString(), verificationScreen)
@@ -295,10 +345,16 @@ class BoundedLocalAgentLoop(
                 stepNumber = stepIndex,
                 previousCommand = command,
                 previousToolResult = result,
-                failureReason = if (result.ok) null else result.message
+                failureReason = if (result.ok) null else result.message,
+                candidateTargets = if (result.ok) {
+                    emptyList()
+                } else {
+                    ClarificationFromToolResult.candidatesFromResult(result)
+                },
             )
         }
 
+        publishSteps()
         return stopped(transcript, events, steps, AgentStepStopReason.MAX_STEPS)
     }
 

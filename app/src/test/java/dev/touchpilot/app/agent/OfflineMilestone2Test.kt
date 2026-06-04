@@ -44,7 +44,7 @@ class OfflineMilestone2Test {
     private fun core(
         sessionContext: LocalReasoningContext = baseContext,
         skills: List<Skill> = emptyList(),
-        invocation: AgentRunInvocation = AgentRunInvocation { _, _ ->
+        invocation: AgentRunInvocation = AgentRunInvocation { _, _, _, _, _ ->
             error("invocation should not run for this flow")
         }
     ): DefaultLocalReasoningCore = DefaultLocalReasoningCore(
@@ -91,7 +91,7 @@ class OfflineMilestone2Test {
 
     @Test
     fun openSettingsRoutesThroughIntentGateAsExactCommand() {
-        val capture = CapturingInvocation { _, ctx ->
+        val capture = CapturingInvocation { _, ctx, _, _ ->
             val cmd = assertNotNull(ctx.exactCommand)
             scriptedRunnerEvents(
                 task = "Open Settings",
@@ -134,7 +134,7 @@ class OfflineMilestone2Test {
 
     @Test
     fun goBackRoutesThroughIntentGateAsExactCommand() {
-        val capture = CapturingInvocation { _, ctx ->
+        val capture = CapturingInvocation { _, ctx, _, _ ->
             val cmd = assertNotNull(ctx.exactCommand)
             scriptedRunnerEvents(
                 task = "Go back",
@@ -164,7 +164,7 @@ class OfflineMilestone2Test {
     @Test
     fun passwordTaskBlockedByIntentGateBeforeReachingRunner() {
         val result = core(
-            invocation = AgentRunInvocation { _, _ ->
+            invocation = AgentRunInvocation { _, _, _, _, _ ->
                 error("unsafe requests must not reach the runner")
             }
         ).run("change my password please")
@@ -191,7 +191,7 @@ class OfflineMilestone2Test {
     @Test
     fun ambiguousReferencePromptsForClarification() {
         val result = core(
-            invocation = AgentRunInvocation { _, _ ->
+            invocation = AgentRunInvocation { _, _, _, _, _ ->
                 error("ambiguous references must not reach the runner")
             }
         ).run("do the thing")
@@ -210,7 +210,7 @@ class OfflineMilestone2Test {
 
     @Test
     fun unmatchedRequestRoutesToLocalModelNeededAndPreservesSessionMode() {
-        val capture = CapturingInvocation { task, _ ->
+        val capture = CapturingInvocation { task, _, _, _ ->
             // The runner would normally produce events here; we only need to
             // confirm the core hands off to invocation with the right context.
             AgentRunResult(
@@ -256,14 +256,20 @@ class OfflineMilestone2Test {
 
     /** Captures the context the core passes to invocation so tests can assert on it. */
     private class CapturingInvocation(
-        private val producer: (String, LocalReasoningContext) -> AgentRunResult
+        private val producer: (String, LocalReasoningContext, AgentEventListener, AgentStepTimelineBuilder?) -> AgentRunResult
     ) : AgentRunInvocation {
         var context: LocalReasoningContext? = null
             private set
 
-        override fun invoke(task: String, context: LocalReasoningContext): AgentRunResult {
+        override fun invoke(
+            task: String,
+            context: LocalReasoningContext,
+            listener: AgentEventListener,
+            timeline: AgentStepTimelineBuilder?,
+            cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
+        ): AgentRunResult {
             this.context = context
-            return producer(task, context)
+            return producer(task, context, listener, timeline)
         }
     }
 

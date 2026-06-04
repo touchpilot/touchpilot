@@ -2,7 +2,10 @@ package dev.touchpilot.app.tools
 
 import android.content.Context
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.content.pm.ResolveInfo
+import android.net.Uri
+import dev.touchpilot.app.agent.ClarificationFromToolResult
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.androidcontrol.DismissKeyboardOutcome
 import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
@@ -14,13 +17,21 @@ import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.screen.NodeBounds
 import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollResolution
 import dev.touchpilot.app.tools.targets.ScrollResolver
 import dev.touchpilot.app.tools.targets.ScrollTarget
+import dev.touchpilot.app.tools.targets.SwipeDirection
+import dev.touchpilot.app.tools.targets.SwipeGesture
+import dev.touchpilot.app.tools.targets.SwipeRequest
+import dev.touchpilot.app.tools.targets.SwipeTarget
+import dev.touchpilot.app.tools.targets.TargetBounds
 import dev.touchpilot.app.tools.targets.TargetResolutionResult
 import dev.touchpilot.app.tools.targets.TargetResolver
 import dev.touchpilot.app.tools.targets.TargetSelector
+import dev.touchpilot.app.tools.targets.TargetSelectorBuilder
+import dev.touchpilot.app.tools.targets.displayLabels
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 class AndroidToolExecutor(
@@ -31,8 +42,11 @@ class AndroidToolExecutor(
     private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver),
     private val retryPolicy: AndroidToolRetryPolicy = AndroidToolRetryPolicy(),
     private val verifier: ToolVerifier = ToolVerifier(),
+    private val findElementMatcher: FindElementMatcher = FindElementMatcher(),
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
+    private val executionSource = ThreadLocal.withInitial { ToolSource.DIRECT_DEBUG }
+
     fun execute(
         name: String,
         args: Map<String, String>,
@@ -60,10 +74,33 @@ class AndroidToolExecutor(
                 is PolicyDecision.Block -> {
                     record(name, "policy=block", false, decision.userMessage)
                     return ToolResult(false, decision.userMessage)
+        val previousSource = executionSource.get()
+        executionSource.set(source)
+        try {
+            val validationError = validate(name, args)
+            if (validationError != null) {
+                val argsForLog = if (validationError.startsWith("Unknown tool")) {
+                    "args=${args.keys.joinToString()}"
+                } else {
+                    "invalid args"
                 }
-                is PolicyDecision.Deny -> {
-                    record(name, "policy=deny", false, decision.userMessage)
-                    return ToolResult(false, decision.userMessage)
+                record(name, argsForLog, false, validationError)
+                return ToolResult(false, validationError)
+            }
+
+            val spec = AndroidToolCatalog.find(name)
+            if (spec != null) {
+                when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
+                    is PolicyDecision.Block -> {
+                        record(name, "policy=block", false, decision.userMessage)
+                        return ToolResult(false, decision.userMessage)
+                    }
+                    is PolicyDecision.Deny -> {
+                        record(name, "policy=deny", false, decision.userMessage)
+                        return ToolResult(false, decision.userMessage)
+                    }
+                    is PolicyDecision.Allow,
+                    is PolicyDecision.RequireApproval -> Unit
                 }
                 is PolicyDecision.RequireApproval -> {
                     val provider = approvalProvider
@@ -75,14 +112,16 @@ class AndroidToolExecutor(
                 }
                 is PolicyDecision.Allow -> Unit
             }
-        }
 
-        val result = executeWithRetry(name, args)
-        val retryConfig = retryPolicy.configFor(name)
-        if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
-            AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
+            val result = executeWithRetry(name, args)
+            val retryConfig = retryPolicy.configFor(name)
+            if (result.ok && retryConfig.waitForIdleAfterSuccess && retryConfig.idleTimeoutMs > 0L) {
+                AccessibilityBridge.waitForIdle(retryConfig.idleTimeoutMs)
+            }
+            return result
+        } finally {
+            executionSource.set(previousSource)
         }
-        return result
     }
 
     private fun executeWithRetry(name: String, args: Map<String, String>): ToolResult {
@@ -120,7 +159,7 @@ class AndroidToolExecutor(
     private fun executeOnceVerified(name: String, args: Map<String, String>): ToolResult {
         val before = AccessibilityBridge.observeScreenContext()
         val result = executeOnce(name, args)
-        val after = if (name == "observe_screen") {
+        val after = if (name == "observe_screen" || name == "observe_screen_context") {
             before
         } else {
             AccessibilityBridge.observeScreenContext()
@@ -147,34 +186,43 @@ class AndroidToolExecutor(
                 record(name, "", AccessibilityBridge.isConnected(), "snapshot length=${snapshot.length}")
                 ToolResult(AccessibilityBridge.isConnected(), SensitiveTextRedactor.redact(snapshot))
             }
+            "observe_screen_context" -> {
+                val connected = AccessibilityBridge.isConnected()
+                val screenContext = AccessibilityBridge.observeScreenContext()
+                val json = screenContext.toRedactedJson()
+                record(name, "", connected, "context nodes=${screenContext.nodes.size}")
+                ToolResult(
+                    ok = connected,
+                    message = json,
+                    data = mapOf(
+                        "nodes" to screenContext.nodes.size.toString(),
+                        "contains_sensitive_content" to screenContext.containsSensitiveContent.toString()
+                    )
+                )
+            }
             "open_app" -> {
                 val target = args["target"].orEmpty()
                 val ok = openApp(target)
                 record(name, "target=\"$target\"", ok, "openApp")
                 ToolResult(ok, "openApp")
             }
+            "open_settings_panel" -> {
+                executeOpenSettingsPanel(args)
+            }
             "tap" -> {
-                val text = args["text"].orEmpty()
-                val nodeId = args["node_id"].orEmpty()
-                val bounds = args["bounds"].orEmpty()
-                val ok = when {
-                    nodeId.isNotBlank() -> AccessibilityBridge.tapByNodeId(nodeId)
-                    bounds.isNotBlank() -> AccessibilityBridge.tapByBounds(bounds)
-                    else -> AccessibilityBridge.tapByText(text)
-                }
-                val selector = when {
-                    nodeId.isNotBlank() -> "node_id=\"$nodeId\""
-                    bounds.isNotBlank() -> "bounds=\"$bounds\""
-                    else -> "text=\"$text\""
-                }
-                record(name, selector, ok, "tap")
-                ToolResult(ok, "tap", mapOf("selector" to selector))
+                executeTap(args)
+            }
+            "long_press" -> {
+                executeLongPress(args)
             }
             "type_text" -> {
                 executeTypeText(args)
             }
             "scroll" -> {
                 executeScroll(args)
+            }
+            "swipe" -> {
+                executeSwipe(args)
             }
             "press_back" -> {
                 val ok = AccessibilityBridge.pressBack()
@@ -192,6 +240,12 @@ class AndroidToolExecutor(
                 val ok = AccessibilityBridge.waitForText(text, timeout)
                 record(name, "text=\"$text\", timeout_ms=$timeout", ok, "waitForText")
                 ToolResult(ok, "waitForText")
+            }
+            "wait_for_idle" -> {
+                executeWaitForIdle(args)
+            }
+            "wait_for_app" -> {
+                executeWaitForApp(args)
             }
             "focus_input" -> {
                 val text = args["text"].orEmpty()
@@ -226,6 +280,9 @@ class AndroidToolExecutor(
                     data = foregroundAppData(info)
                 )
             }
+            "find_element" -> {
+                executeFindElement(args)
+            }
             "clear_text" -> {
                 executeClearText(args)
             }
@@ -234,6 +291,189 @@ class AndroidToolExecutor(
                 ToolResult(false, "Unhandled tool: $name")
             }
         }
+    }
+
+    private fun executeFindElement(args: Map<String, String>): ToolResult {
+        val query = FindElementQuery(
+            text = args["text"]?.takeIf { it.isNotBlank() },
+            contentDescription = args["content_description"]?.takeIf { it.isNotBlank() },
+            nodeId = args["node_id"]?.takeIf { it.isNotBlank() },
+            className = args["class_name"]?.takeIf { it.isNotBlank() },
+            match = MatchMode.fromWire(args["match"]) ?: MatchMode.Default,
+            limit = args["limit"]?.toIntOrNull() ?: FindElementQuery.DefaultLimit,
+        )
+        val screen = AccessibilityBridge.observeScreenContext()
+        val candidates = findElementMatcher.match(screen, query)
+        val payload = FindElementResultEncoder.encode(candidates, query)
+        val message = "find_element matched ${candidates.size} candidate(s)"
+        val logArgs = "match=\"${query.match.wireName}\", limit=${query.effectiveLimit()}, " +
+            "filters=${findElementFilterSummary(query)}"
+        record("find_element", logArgs, true, message)
+        return ToolResult(
+            ok = true,
+            message = message,
+            data = mapOf(
+                "count" to candidates.size.toString(),
+                "candidates_json" to payload,
+                "match_mode" to query.match.wireName,
+                "limit" to query.effectiveLimit().toString(),
+            )
+        )
+    }
+
+    private fun findElementFilterSummary(query: FindElementQuery): String {
+        val parts = mutableListOf<String>()
+        if (!query.text.isNullOrBlank()) parts += "text_length=${query.text.length}"
+        if (!query.contentDescription.isNullOrBlank()) {
+            parts += "content_description_length=${query.contentDescription.length}"
+        }
+        if (!query.nodeId.isNullOrBlank()) parts += "node_id=\"${query.nodeId}\""
+        if (!query.className.isNullOrBlank()) parts += "class_name=\"${query.className}\""
+        return parts.joinToString(prefix = "[", postfix = "]")
+    }
+
+    private fun executeWaitForIdle(args: Map<String, String>): ToolResult {
+        val result = WaitForIdle.waitUntilIdle(
+            args = args,
+            observe = { AccessibilityBridge.observeScreenContext() },
+            sleeper = sleeper
+        )
+        record(
+            "wait_for_idle",
+            "stable_ms=${WaitForIdle.stableMs(args)}, timeout_ms=${WaitForIdle.timeoutMs(args)}, " +
+                "include_bounds=${WaitForIdle.includeBounds(args)}",
+            result.ok,
+            result.message
+        )
+        return result
+    }
+
+    private fun executeWaitForApp(args: Map<String, String>): ToolResult {
+        val timeout = WaitForApp.timeoutMs(args)
+        val deadline = System.currentTimeMillis() + timeout
+        var latest = AccessibilityBridge.getForegroundApp()
+
+        while (System.currentTimeMillis() <= deadline) {
+            val match = WaitForApp.matches(args, latest)
+            if (match.matched) {
+                record(
+                    "wait_for_app",
+                    "${WaitForApp.expectedSummary(args)}, timeout_ms=$timeout",
+                    true,
+                    "waitForApp"
+                )
+                return WaitForApp.successResult(args, latest, match.matchedBy)
+            }
+            val remainingMs = deadline - System.currentTimeMillis()
+            if (remainingMs <= 0L) break
+            sleeper(minOf(150L, remainingMs))
+            latest = AccessibilityBridge.getForegroundApp()
+        }
+
+        val result = WaitForApp.timeoutResult(args, latest, timeout)
+        record(
+            "wait_for_app",
+            "${WaitForApp.expectedSummary(args)}, timeout_ms=$timeout",
+            false,
+            result.message
+        )
+        return result
+    }
+
+    private fun executeTap(args: Map<String, String>): ToolResult {
+        return executeResolvedPress(
+            toolName = "tap",
+            args = args,
+            dispatchByNodeId = AccessibilityBridge::tapByNodeId,
+            dispatchByBounds = AccessibilityBridge::tapByBounds,
+            successMessage = "tap",
+            failureVerb = "tap"
+        )
+    }
+
+    private fun executeLongPress(args: Map<String, String>): ToolResult {
+        return executeResolvedPress(
+            toolName = "long_press",
+            args = args,
+            dispatchByNodeId = AccessibilityBridge::longPressByNodeId,
+            dispatchByBounds = AccessibilityBridge::longPressByBounds,
+            successMessage = "longPress",
+            failureVerb = "long-press"
+        )
+    }
+
+    private fun executeResolvedPress(
+        toolName: String,
+        args: Map<String, String>,
+        dispatchByNodeId: (String) -> Boolean,
+        dispatchByBounds: (String) -> Boolean,
+        successMessage: String,
+        failureVerb: String,
+    ): ToolResult {
+        val selector = TargetSelectorBuilder.fromLegacyArgs(args)
+        val resolution = targetResolver.resolve(
+            context = AccessibilityBridge.observeScreenContext(),
+            selector = selector
+        )
+
+        return when (resolution) {
+            is TargetResolutionResult.Resolved -> {
+                val candidate = resolution.candidate
+                val nodeId = candidate.node.nodeId
+                val boundsArg = candidate.selector.bounds?.toBoundsArg()
+                val ok = when {
+                    !nodeId.isNullOrBlank() -> dispatchByNodeId(nodeId)
+                    boundsArg != null -> dispatchByBounds(boundsArg)
+                    else -> false
+                }
+                val message = when {
+                    ok -> successMessage
+                    nodeId.isNullOrBlank() && boundsArg == null -> "Resolved $failureVerb target has no stable node id or bounds"
+                    else -> "Unable to perform $failureVerb on resolved target"
+                }
+                record(toolName, targetLogArgs(candidate.selector), ok, message)
+                ToolResult(
+                    ok = ok,
+                    message = message,
+                    data = buildMap {
+                        put("selector", targetLogArgs(candidate.selector))
+                        if (!nodeId.isNullOrBlank()) put("node_id", nodeId)
+                        put("confidence", candidate.confidence.toString())
+                        put("match_reasons", candidate.matchReasons.joinToString(","))
+                    }
+                )
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous $failureVerb target: ${resolution.reason}"
+                record(toolName, "target=ambiguous", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "${failureVerb.replaceFirstChar { it.uppercase() }} target not found: ${resolution.reason}"
+                record(toolName, "target=not_found", false, message)
+                ToolResult(
+                    ok = false,
+                    message = message,
+                    data = mapOf("debug_context" to resolution.debugContext)
+                )
+            }
+        }
+    }
+
+    private fun targetLogArgs(selector: TargetSelector): String {
+        val label = selector.text?.displaySafe?.takeIf { it.isNotBlank() }
+            ?: selector.contentDescription?.displaySafe?.takeIf { it.isNotBlank() }
+            ?: selector.nodeId?.let { "node_id=$it" }
+            ?: selector.viewIdResourceName?.let { "view_id=$it" }
+            ?: selector.bounds?.let { "bounds=${it.toBoundsArg()}" }
+            ?: "resolved"
+        return "target=\"$label\""
     }
 
     private fun executeTypeText(args: Map<String, String>): ToolResult {
@@ -285,7 +525,9 @@ class AndroidToolExecutor(
                 ToolResult(
                     ok = false,
                     message = message,
-                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
                 )
             }
             is TargetResolutionResult.NotFound -> {
@@ -354,7 +596,9 @@ class AndroidToolExecutor(
                 ToolResult(
                     ok = false,
                     message = message,
-                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
                 )
             }
             is ScrollResolution.NotFound -> {
@@ -406,12 +650,152 @@ class AndroidToolExecutor(
         }
     }
 
+    private fun executeSwipe(args: Map<String, String>): ToolResult {
+        val before = AccessibilityBridge.observeScreenContext()
+
+        val explicit = SwipeTarget.explicitCoordinates(args)
+        if (explicit != null) {
+            val window = AccessibilityBridge.activeWindowBounds()?.toTargetBounds()
+            if (window != null && !window.isEmpty && !explicit.within(window)) {
+                val message = "Swipe coordinates (${explicit.startX},${explicit.startY})->" +
+                    "(${explicit.endX},${explicit.endY}) are outside the screen bounds ${window.toBoundsArg()}"
+                record("swipe", swipeLogArgs("coordinates", explicit), false, message)
+                return ToolResult(false, message, mapOf("screen_bounds" to window.toBoundsArg()))
+            }
+            return dispatchSwipe(explicit, before, "coordinates")
+        }
+
+        val direction = SwipeDirection.parse(args[SwipeTarget.DirectionArg])
+            ?: return ToolResult(false, "Invalid swipe direction")
+        val duration = SwipeTarget.durationOrDefault(args)
+
+        val area = if (SwipeTarget.hasTarget(args)) {
+            when (val resolved = resolveSwipeContainer(args, before)) {
+                is SwipeArea.Resolved -> resolved.bounds
+                is SwipeArea.Failure -> return resolved.result
+            }
+        } else {
+            val window = AccessibilityBridge.activeWindowBounds()?.toTargetBounds()
+            if (window == null || window.isEmpty) {
+                val message = "No active window is available to swipe."
+                record("swipe", swipeLogArgs(direction.label(), null), false, message)
+                return ToolResult(false, message)
+            }
+            window
+        }
+
+        val request = SwipeGesture.forDirection(direction, area, duration)
+        return dispatchSwipe(request, before, direction.label())
+    }
+
+    private fun resolveSwipeContainer(
+        args: Map<String, String>,
+        context: dev.touchpilot.app.screen.ScreenContext,
+    ): SwipeArea {
+        val selector = SwipeTarget.selectorFromArgs(args)
+        return when (val resolution = targetResolver.resolve(context, selector)) {
+            is TargetResolutionResult.Resolved -> {
+                val bounds = resolution.candidate.node.bounds.toTargetBounds()
+                if (bounds.isEmpty) {
+                    val message = "Resolved swipe container has no usable bounds"
+                    record("swipe", "target=resolved_no_bounds", false, message)
+                    SwipeArea.Failure(
+                        ToolResult(
+                            ok = false,
+                            message = message,
+                            data = mapOf("target" to resolution.candidate.selector.toRedactedJson())
+                        )
+                    )
+                } else {
+                    SwipeArea.Resolved(bounds)
+                }
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous swipe target: ${resolution.reason}"
+                record("swipe", "target=ambiguous", false, message)
+                SwipeArea.Failure(
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    )
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "Swipe target not found: ${resolution.reason}"
+                record("swipe", "target=not_found", false, message)
+                SwipeArea.Failure(
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf("debug_context" to resolution.debugContext)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun dispatchSwipe(
+        request: SwipeRequest,
+        beforeContext: dev.touchpilot.app.screen.ScreenContext,
+        label: String,
+    ): ToolResult {
+        val attempted = AccessibilityBridge.swipe(
+            request.startX,
+            request.startY,
+            request.endX,
+            request.endY,
+            request.durationMs,
+        )
+        val verification = verifyScreenChanged(
+            beforeContext = beforeContext,
+            scrollAttempted = attempted,
+            idleTimeoutMs = retryPolicy.configFor("swipe").idleTimeoutMs,
+        )
+        val message = when {
+            !attempted -> "Unable to perform swipe"
+            !verification.changed -> "Swipe performed but screen did not change"
+            else -> "swipe"
+        }
+        val ok = attempted && verification.changed
+        record("swipe", swipeLogArgs(label, request), ok, message)
+        return ToolResult(
+            ok = ok,
+            message = message,
+            data = mapOf(
+                "gesture" to label,
+                "start" to "${request.startX},${request.startY}",
+                "end" to "${request.endX},${request.endY}",
+                "duration_ms" to request.durationMs.toString(),
+                "screen_changed" to verification.changed.toString(),
+            )
+        )
+    }
+
+    private fun swipeLogArgs(label: String, request: SwipeRequest?): String {
+        if (request == null) return "gesture=\"$label\""
+        return "gesture=\"$label\", start=${request.startX},${request.startY}, " +
+            "end=${request.endX},${request.endY}, duration_ms=${request.durationMs}"
+    }
+
+    private fun SwipeDirection.label(): String = name.lowercase()
+
+    private fun NodeBounds.toTargetBounds(): TargetBounds {
+        return TargetBounds(left = left, top = top, right = right, bottom = bottom)
+    }
+
+    private sealed class SwipeArea {
+        data class Resolved(val bounds: TargetBounds) : SwipeArea()
+        data class Failure(val result: ToolResult) : SwipeArea()
+    }
+
     private fun verifyScreenChanged(
         beforeContext: dev.touchpilot.app.screen.ScreenContext,
-        scrollAttempted: Boolean
+        scrollAttempted: Boolean,
+        idleTimeoutMs: Long = retryPolicy.configFor("scroll").idleTimeoutMs,
     ): ScrollVerification {
         if (!scrollAttempted) return ScrollVerification(changed = false)
-        AccessibilityBridge.waitForIdle(retryPolicy.configFor("scroll").idleTimeoutMs)
+        AccessibilityBridge.waitForIdle(idleTimeoutMs)
         val after = AccessibilityBridge.observeScreenContext()
         val changed = !sameSnapshot(beforeContext, after)
         return ScrollVerification(changed = changed)
@@ -519,7 +903,9 @@ class AndroidToolExecutor(
                 ToolResult(
                     ok = false,
                     message = message,
-                    data = mapOf("candidate_count" to resolution.candidates.size.toString())
+                    data = ClarificationFromToolResult.dataFromCandidateLabels(
+                        resolution.candidates.displayLabels()
+                    )
                 )
             }
             is TargetResolutionResult.NotFound -> {
@@ -586,6 +972,43 @@ class AndroidToolExecutor(
         return true
     }
 
+    private fun executeOpenSettingsPanel(args: Map<String, String>): ToolResult {
+        val panel = args[SettingsPanelIntent.PanelArg].orEmpty()
+        val spec = SettingsPanelIntent.resolve(panel)
+            ?: return ToolResult(false, SettingsPanelIntent.unsupportedMessage(panel))
+        val packageName = context.packageName
+        val intent = Intent(spec.action).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            spec.dataUri
+                ?.replace(SettingsPanelIntent.AppPackagePlaceholder, packageName)
+                ?.let { data = Uri.parse(it) }
+            spec.extras.forEach { (key, value) ->
+                putExtra(key, value.replace(SettingsPanelIntent.AppPackagePlaceholder, packageName))
+            }
+        }
+        return try {
+            context.startActivity(intent)
+            record(
+                "open_settings_panel",
+                "panel=\"${spec.panel}\"",
+                true,
+                "opened ${spec.panel} settings panel"
+            )
+            ToolResult(
+                ok = true,
+                message = "Opened ${spec.panel} settings panel",
+                data = mapOf(
+                    "panel" to spec.panel,
+                    "action" to spec.action,
+                )
+            )
+        } catch (_: ActivityNotFoundException) {
+            val message = "No settings activity found for panel: ${spec.panel}"
+            record("open_settings_panel", "panel=\"${spec.panel}\"", false, message)
+            ToolResult(false, message, data = mapOf("panel" to spec.panel, "action" to spec.action))
+        }
+    }
+
     private fun ResolveInfo.launcherLabel(): String {
         return loadLabel(context.packageManager)?.toString().orEmpty()
     }
@@ -606,7 +1029,13 @@ class AndroidToolExecutor(
     }
 
     private fun record(name: String, args: String, ok: Boolean, message: String) {
-        ToolExecutionLog.record(name, args, ok, message)
+        ToolExecutionLog.record(
+            name = name,
+            args = args,
+            ok = ok,
+            message = message,
+            source = (executionSource.get() ?: ToolSource.DIRECT_DEBUG).name.lowercase()
+        )
     }
 
     private fun ToolResult.withVerification(verification: ToolVerificationResult): ToolResult {

@@ -94,7 +94,14 @@ data class ScreenNode(
      */
     val sensitive: Boolean = false,
     val viewIdResourceName: String? = null,
-    val className: String? = null
+    val className: String? = null,
+    /**
+     * Raw accessibility `contentDescription` kept separate from [text] so
+     * tools like `find_element` can query and report the two independently.
+     * The builder still falls back to `contentDescription` when populating
+     * [text] so existing downstream callers continue to see a usable label.
+     */
+    val contentDescription: ScreenText? = null
 ) {
     fun toJson(redacted: Boolean = true): JSONObject {
         val nodeToSerialize = if (redacted) redactedCopy() else this
@@ -113,12 +120,14 @@ data class ScreenNode(
             put("sensitive", nodeToSerialize.sensitive)
             put("viewIdResourceName", nodeToSerialize.viewIdResourceName)
             put("className", nodeToSerialize.className)
+            put("contentDescription", nodeToSerialize.contentDescription?.toJson(redacted))
         }
     }
 
     fun redactedCopy(): ScreenNode {
         return copy(
-            text = text.redactedCopy()
+            text = text.redactedCopy(),
+            contentDescription = contentDescription?.redactedCopy()
         )
     }
 
@@ -130,7 +139,7 @@ data class ScreenNode(
             } catch (e: IllegalArgumentException) {
                 NodeRole.OTHER
             }
-            
+
             return ScreenNode(
                 nodeId = if (json.has("nodeId") && !json.isNull("nodeId")) json.getString("nodeId") else null,
                 role = role,
@@ -145,7 +154,9 @@ data class ScreenNode(
                 isInputField = json.optBoolean("isInputField", false),
                 sensitive = json.optBoolean("sensitive", false),
                 viewIdResourceName = if (json.has("viewIdResourceName") && !json.isNull("viewIdResourceName")) json.getString("viewIdResourceName") else null,
-                className = if (json.has("className") && !json.isNull("className")) json.getString("className") else null
+                className = if (json.has("className") && !json.isNull("className")) json.getString("className") else null,
+                contentDescription = if (json.has("contentDescription") && !json.isNull("contentDescription"))
+                    ScreenText.fromJson(json.getJSONObject("contentDescription")) else null
             )
         }
     }

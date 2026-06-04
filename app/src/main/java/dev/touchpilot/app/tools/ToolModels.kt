@@ -2,6 +2,9 @@ package dev.touchpilot.app.tools
 
 import dev.touchpilot.app.tools.targets.ClearTextTarget
 import dev.touchpilot.app.tools.targets.ScrollTarget
+import dev.touchpilot.app.tools.targets.SwipeDirection
+import dev.touchpilot.app.tools.targets.SwipeTarget
+import dev.touchpilot.app.tools.targets.TargetBounds
 import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 enum class ToolRisk {
@@ -34,19 +37,49 @@ object AndroidToolCatalog {
             arguments = emptyMap()
         ),
         ToolSpec(
+            name = "observe_screen_context",
+            description = "Serialize the current screen as a normalized ScreenContext " +
+                "with sensitive text redacted. Prefer this over observe_screen for agent decisions.",
+            risk = ToolRisk.LOW,
+            arguments = emptyMap()
+        ),
+        ToolSpec(
             name = "open_app",
             description = "Launch an installed app by package name or visible label.",
             risk = ToolRisk.MEDIUM,
             arguments = mapOf("target" to "Package name or launcher label.")
         ),
         ToolSpec(
+            name = "open_settings_panel",
+            description = "Open an allowlisted Android Settings panel using a Settings intent. Does not toggle settings.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                SettingsPanelIntent.PanelArg to
+                    "Panel name: ${SettingsPanelIntent.supportedPanels.joinToString()}."
+            )
+        ),
+        ToolSpec(
             name = "tap",
-            description = "Tap a visible UI target by semantic text, node_id, or bounds.",
+            description = "Tap a visible UI target resolved from text, node_id, or bounds. " +
+                "Fails safely when the target is ambiguous or cannot be found.",
             risk = ToolRisk.MEDIUM,
             arguments = mapOf(
                 "text" to "Visible text or content description to tap.",
                 "node_id" to "Stable node_id from observe_screen.",
                 "bounds" to "Bounds from observe_screen as left,top,right,bottom."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
+            name = "long_press",
+            description = "Long-press a visible UI target resolved from text, node_id, bounds, or view_id. " +
+                "Fails safely when the target is ambiguous or cannot be found.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                "text" to "Visible text or content description to long-press.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "bounds" to "Bounds from observe_screen as left,top,right,bottom.",
+                "view_id" to "Resource ID of the view (e.g., dev.example.app:id/item)."
             ),
             requiredArguments = emptySet()
         ),
@@ -79,6 +112,25 @@ object AndroidToolCatalog {
             requiredArguments = setOf("direction")
         ),
         ToolSpec(
+            name = "swipe",
+            description = "Swipe a gesture surface (pager, carousel, drawer, map) by direction, or between explicit start/end coordinates.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                SwipeTarget.DirectionArg to "left, right, up, or down (direction the finger travels).",
+                SwipeTarget.StartXArg to "Optional gesture start x in screen pixels.",
+                SwipeTarget.StartYArg to "Optional gesture start y in screen pixels.",
+                SwipeTarget.EndXArg to "Optional gesture end x in screen pixels.",
+                SwipeTarget.EndYArg to "Optional gesture end y in screen pixels.",
+                SwipeTarget.DurationArg to "Optional gesture duration in milliseconds.",
+                SwipeTarget.TargetTextArg to "Visible text of the container to swipe within.",
+                SwipeTarget.TargetNodeIdArg to "Container node_id from observe_screen.",
+                SwipeTarget.TargetBoundsArg to "Container bounds from observe_screen as left,top,right,bottom.",
+                SwipeTarget.TargetViewIdArg to "Container viewIdResourceName from observe_screen.",
+                SwipeTarget.TargetContentDescriptionArg to "Container content description.",
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "press_back",
             description = "Send Android back.",
             risk = ToolRisk.MEDIUM,
@@ -101,6 +153,28 @@ object AndroidToolCatalog {
             requiredArguments = setOf("text")
         ),
         ToolSpec(
+            name = "wait_for_idle",
+            description = "Wait until the redacted screen context remains stable for a bounded window.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                WaitForIdle.StableArg to "Milliseconds the screen context must remain stable.",
+                WaitForIdle.TimeoutArg to "Maximum wait time in milliseconds.",
+                WaitForIdle.IncludeBoundsArg to "true if bounds changes should count as instability."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
+            name = "wait_for_app",
+            description = "Wait until a package name or launcher label becomes the foreground app.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                WaitForApp.PackageArg to "Expected Android package name.",
+                WaitForApp.LabelArg to "Expected launcher/app label.",
+                WaitForApp.TimeoutArg to "Maximum wait time in milliseconds."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "focus_input",
             description = "Focus a visible editable input field without typing text.",
             risk = ToolRisk.MEDIUM,
@@ -117,6 +191,20 @@ object AndroidToolCatalog {
             description = "Return the foreground app's package, label, window title, and activity for post-action verification.",
             risk = ToolRisk.LOW,
             arguments = emptyMap()
+        ),
+        ToolSpec(
+            name = "find_element",
+            description = "Search the current screen for elements matching a structured query and return ranked candidates.",
+            risk = ToolRisk.LOW,
+            arguments = mapOf(
+                "text" to "Visible text query.",
+                "content_description" to "Accessibility content description query.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "class_name" to "Android class name filter (e.g. android.widget.Button).",
+                "match" to "Match mode: exact, contains, or semantic. Defaults to contains.",
+                "limit" to "Maximum number of candidates to return (1-25). Defaults to 5."
+            ),
+            requiredArguments = emptySet()
         ),
         ToolSpec(
             name = "clear_text",
@@ -170,6 +258,21 @@ object AndroidToolCatalog {
             }
         }
 
+        if (name == "long_press") {
+            val selectors = listOf("text", "node_id", "bounds", "view_id")
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.size != 1) {
+                return "long_press requires exactly one selector: text, node_id, bounds, or view_id"
+            }
+            val malformedBounds = args["bounds"]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "bounds must be left,top,right,bottom"
+            }
+        }
+
         if (name == "type_text") {
             val malformedBounds = args[TypeTextTarget.TargetBoundsArg]
                 ?.takeIf { it.isNotBlank() }
@@ -188,6 +291,17 @@ object AndroidToolCatalog {
             }
         }
 
+        if (name == "open_settings_panel") {
+            val panel = args[SettingsPanelIntent.PanelArg].orEmpty()
+            if (SettingsPanelIntent.resolve(panel) == null) {
+                return SettingsPanelIntent.unsupportedMessage(panel)
+            }
+        }
+
+        if (name == "wait_for_idle") {
+            return WaitForIdle.validate(args)
+        }
+
         if (name == "clear_text") {
             val selectors = ClearTextTarget.selectorArgs.filter { args[it].isNullOrBlank().not() }
             if (selectors.size > 1) {
@@ -199,6 +313,14 @@ object AndroidToolCatalog {
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "wait_for_app") {
+            val selectors = listOf(WaitForApp.PackageArg, WaitForApp.LabelArg)
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.isEmpty()) {
+                return "wait_for_app requires package or label"
             }
         }
 
@@ -215,6 +337,45 @@ object AndroidToolCatalog {
                 ?: false
             if (malformedBounds) {
                 return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "swipe") {
+            val direction = args[SwipeTarget.DirectionArg]?.takeIf { it.isNotBlank() }
+            val hasCoordinate = SwipeTarget.hasAnyCoordinate(args)
+            if (direction == null && !hasCoordinate) {
+                return "swipe requires a direction (left, right, up, down) or explicit start/end coordinates"
+            }
+            if (direction != null && SwipeDirection.parse(direction) == null) {
+                return "Invalid swipe direction: $direction. Use left, right, up, or down."
+            }
+            SwipeTarget.validateCoordinates(args)?.let { return it }
+            SwipeTarget.validateDuration(args)?.let { return it }
+            val malformedBounds = args[SwipeTarget.TargetBoundsArg]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "target_bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "find_element") {
+            val filters = listOf("text", "content_description", "node_id", "class_name")
+                .filter { args[it].isNullOrBlank().not() }
+            if (filters.isEmpty()) {
+                return "find_element requires at least one filter: text, content_description, node_id, or class_name"
+            }
+            val match = args["match"]
+            if (!match.isNullOrBlank() && MatchMode.fromWire(match) == null) {
+                return "find_element match must be one of: exact, contains, semantic"
+            }
+            val limit = args["limit"]
+            if (!limit.isNullOrBlank()) {
+                val parsed = limit.toIntOrNull()
+                if (parsed == null || parsed < 1 || parsed > FindElementQuery.MaxLimit) {
+                    return "find_element limit must be an integer between 1 and ${FindElementQuery.MaxLimit}"
+                }
             }
         }
 

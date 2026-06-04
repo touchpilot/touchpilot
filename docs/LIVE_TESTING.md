@@ -39,9 +39,30 @@ Launch TouchPilot:
 - [x] Accessibility status shows connected.
 - [x] `Observe Current Screen` returns a non-empty UI tree.
 - [x] `Open App` opens Settings by label.
+- [ ] `open_settings_panel({panel=wifi})` opens Wi-Fi Settings directly.
+- [ ] `open_settings_panel({panel=bluetooth})` opens Bluetooth Settings directly.
+- [ ] `open_settings_panel({panel=accessibility})` opens Accessibility Settings directly.
+- [ ] `open_settings_panel({panel=app_info})` opens TouchPilot app details.
+- [ ] `open_settings_panel({panel=notifications})` opens TouchPilot notification settings.
+- [ ] `open_settings_panel({panel=system_settings})` opens top-level Android Settings.
+- [ ] `open_settings_panel` rejects unsupported panel names before launching an intent.
+- [ ] `Open App` followed by `wait_for_idle` settles after launch.
+- [ ] `Open App` followed by `wait_for_app({label=Settings})` confirms
+  Settings is foreground before follow-up actions.
 - [x] `Tap Text` taps a visible target.
+- [ ] `Tap Text` followed by `wait_for_idle` settles after the tap transition.
+- [ ] `long_press({text=...})` opens a target context menu or selection state.
+- [ ] `long_press` returns clear failures for missing or ambiguous targets.
 - [x] `Type Into Focused Field` enters text into a focused field.
 - [x] `Scroll Down` and `Scroll Up` work on a scrollable screen.
+- [ ] `Swipe Left` and `Swipe Right` advance a horizontal pager/carousel (e.g.
+      the launcher home screens or a photo viewer). Added in Milestone 4
+      (issue #86); pending a live emulator pass.
+- [ ] `Swipe Up` and `Swipe Down` move a vertical gesture surface (e.g. the
+      notification shade or a bottom sheet). Added in Milestone 4 (issue #86);
+      pending a live emulator pass.
+- [ ] `Scroll Down` or `Scroll Up` followed by `wait_for_idle` settles after movement.
+- [ ] Keyboard dismissal followed by `wait_for_idle` settles after IME changes.
 - [x] `Back` and `Home` work.
 - [ ] `dismiss_keyboard` hides the soft keyboard when it is visible.
 - [ ] `dismiss_keyboard` is a no-op when the keyboard is not visible and does

@@ -27,6 +27,16 @@ class AgentEventTest {
         assertEquals("assistant_message", assistantJson.getString("type"))
         assertEquals("Done.", assistantJson.getJSONObject("payload").getString("text"))
         assertEquals("Local router", assistantJson.getJSONObject("payload").getString("detail"))
+
+        val withChoices = AgentEvent.AssistantMessage(
+            text = "Which item should I tap?",
+            detail = "ambiguous",
+            choices = listOf("Save", "Cancel")
+        )
+        val choicesJson = withChoices.toJson().getJSONObject("payload").getJSONArray("choices")
+        assertEquals(2, choicesJson.length())
+        assertEquals("Save", choicesJson.getString(0))
+        assertEquals("Cancel", choicesJson.getString(1))
     }
 
     @Test
@@ -123,5 +133,15 @@ class AgentEventTest {
         assertEquals("password=hunter2", raw)
         assertFalse("hunter2" in event.toJson().toString())
         assertTrue("hunter2" in event.toJson(redactSensitive = false).toString())
+    }
+
+    @Test
+    fun runCancelledEventSerializesCorrectly() {
+        val event = AgentEvent.RunCancelled(reason = "Cancelled by user")
+        val json = event.toJson()
+
+        assertEquals("run_cancelled", json.getString("type"))
+        assertEquals("Cancelled by user", json.getJSONObject("payload").getString("reason"))
+        assertEquals(AgentEventType.RUN_CANCELLED, event.type)
     }
 }

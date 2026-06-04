@@ -22,16 +22,40 @@ class ToolVerifier {
             )
             "open_app" -> verifyOpenApp(args, after)
             "tap" -> verifyChangedOrFocused(before, after, "tap")
+            "long_press" -> verifyChangedOrFocused(before, after, "long_press")
             "type_text" -> verifyTypeText(args, after)
             "scroll" -> verifyScroll(result, before, after)
+            "swipe" -> verifySwipe(result, before, after)
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
             "wait_for_ui" -> verifyWaitForUi(args, after)
+            "wait_for_idle" -> ToolVerificationResult.Passed(
+                reason = "screen context stayed stable for requested idle window",
+                data = mapOf(
+                    "stable_ms" to (result.data["stable_ms"] ?: ""),
+                    "required_stable_ms" to (result.data["required_stable_ms"] ?: ""),
+                )
+            )
+            "wait_for_app" -> ToolVerificationResult.Passed(
+                reason = "foreground app matched requested target",
+                data = mapOf(
+                    "matched_by" to result.data.getOrDefault("matched_by", ""),
+                    "package_name" to result.data.getOrDefault("package_name", ""),
+                    "app_label" to result.data.getOrDefault("app_label", ""),
+                ).redactedValues()
+            )
             "get_foreground_app" -> ToolVerificationResult.Passed(
                 reason = "foreground app inspection is read-only",
                 data = mapOf(
                     "accessibility_connected" to (result.data["accessibility_connected"] ?: "false"),
                     "package_name" to (result.data["package_name"] ?: ""),
+                )
+            )
+            "find_element" -> ToolVerificationResult.Passed(
+                reason = "find_element is a read-only lookup",
+                data = mapOf(
+                    "count" to (result.data["count"] ?: "0"),
+                    "match_mode" to (result.data["match_mode"] ?: ""),
                 )
             )
             "clear_text" -> verifyClearText(after)
@@ -141,6 +165,26 @@ class ToolVerifier {
         } else {
             ToolVerificationResult.Failed(
                 reason = "scroll reported success but screen content did not change",
+                data = mapOf("screen_changed" to "false")
+            )
+        }
+    }
+
+    private fun verifySwipe(
+        result: ToolResult,
+        before: ScreenContext,
+        after: ScreenContext,
+    ): ToolVerificationResult {
+        val resultChanged = result.data["screen_changed"]?.toBooleanStrictOrNull()
+        val changed = resultChanged ?: !sameSnapshot(before, after)
+        return if (changed) {
+            ToolVerificationResult.Passed(
+                reason = "swipe changed visible screen content",
+                data = mapOf("screen_changed" to "true")
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "swipe reported success but screen content did not change",
                 data = mapOf("screen_changed" to "false")
             )
         }

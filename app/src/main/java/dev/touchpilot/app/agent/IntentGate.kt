@@ -1,6 +1,7 @@
 package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.tools.SettingsPanelIntent
 
 /**
  * Classifies a user task before the local reasoning core decides what to do
@@ -46,7 +47,8 @@ sealed class IntentDecision {
      */
     data class ClarificationNeeded(
         override val reason: String,
-        val clarification: String
+        val clarification: String,
+        val candidateLabels: List<String> = emptyList()
     ) : IntentDecision()
 
     /**
@@ -137,12 +139,27 @@ class IntentGate : IntentClassifier {
                 reason = "home phrase"
             )
         }
+        SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
+            return IntentDecision.ExactCommand(
+                tool = "open_settings_panel",
+                args = mapOf(SettingsPanelIntent.PanelArg to panel),
+                reason = "settings panel phrase"
+            )
+        }
         OpenAppPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
             ?.let { target ->
                 return IntentDecision.ExactCommand(
                     tool = "open_app",
                     args = mapOf("target" to target),
                     reason = "open or launch phrase"
+                )
+            }
+        LongPressPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+            ?.let { text ->
+                return IntentDecision.ExactCommand(
+                    tool = "long_press",
+                    args = mapOf("text" to text),
+                    reason = "long press phrase"
                 )
             }
         TapPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
@@ -220,6 +237,7 @@ class IntentGate : IntentClassifier {
         )
 
         val OpenAppPattern: Regex = Regex("(?:open|launch)\\s+([\\w .-]+)")
+        val LongPressPattern: Regex = Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
         val TapPattern: Regex = Regex("(?:tap|press)\\s+([\\w .-]+)")
     }
 }
