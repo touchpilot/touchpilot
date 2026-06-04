@@ -21,7 +21,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.annotation.DrawableRes
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentProviderMode
@@ -40,6 +39,8 @@ import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
+import dev.touchpilot.app.navigation.AppSection
+import dev.touchpilot.app.navigation.NavigationController
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -62,7 +63,6 @@ import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.chat.ChatEvent
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
-import dev.touchpilot.app.ui.settings.SettingsPanel
 import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import dev.touchpilot.app.ui.withMargins
@@ -82,17 +82,14 @@ class MainActivity : Activity() {
     private lateinit var chatTaskInput: EditText
     private lateinit var statusView: TextView
     private lateinit var executionLogList: LinearLayout
+    private val navigationController = NavigationController()
     private var bottomNav: TabLayout? = null
 
-    private var activeSection = Section.CHAT
-    private var activeSettingsPanel: SettingsPanel? = null
-    private var pendingSettingsAnimationDirection = 0
     private var selectedSkillId: String? = null
     private var expandedSkillReferenceId: String? = null
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
-    private var activeRunDetailId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,7 +123,7 @@ class MainActivity : Activity() {
             conversation = conversation,
             currentProviderMode = ::currentProviderMode,
             runOnUiThread = { block -> runOnUiThread(block) },
-            showChat = { showSection(Section.CHAT) },
+            showChat = { showSection(AppSection.CHAT) },
             refreshExecutionLog = ::refreshExecutionLog,
             refreshStatus = ::refreshStatus,
             refreshStepTimeline = ::refreshStepTimeline,
@@ -140,7 +137,7 @@ class MainActivity : Activity() {
         }
 
         setContentView(buildRoot())
-        showSection(Section.CHAT)
+        showSection(AppSection.CHAT)
         refreshStatus()
     }
 
@@ -148,7 +145,7 @@ class MainActivity : Activity() {
         super.onResume()
         refreshStatus()
         if (::contentRoot.isInitialized) {
-            showSection(activeSection)
+            showSection(navigationController.activeSection)
         }
     }
 
@@ -236,19 +233,19 @@ class MainActivity : Activity() {
             setSelectedTabIndicatorColor(Color.TRANSPARENT)
             setTabTextColors(Theme.NavText, Theme.Accent)
 
-            Section.values().forEach { section ->
+            AppSection.values().forEach { section ->
                 addTab(
                     newTab()
                         .setCustomView(bottomNavLabel(section))
                         .setTag(section),
-                    section == activeSection
+                    section == navigationController.activeSection
                 )
             }
 
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab) {
-                    (tab.tag as? Section)?.let { section ->
-                        if (section != activeSection) {
+                    (tab.tag as? AppSection)?.let { section ->
+                        if (section != navigationController.activeSection) {
                             showSection(section)
                         }
                     }
@@ -260,7 +257,7 @@ class MainActivity : Activity() {
         }.withMargins()
     }
 
-    private fun bottomNavLabel(section: Section): View {
+    private fun bottomNavLabel(section: AppSection): View {
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -291,28 +288,25 @@ class MainActivity : Activity() {
         return column
     }
 
-    private fun showSection(section: Section) {
-        if (section != Section.CHAT && section != Section.LOGS) {
-            activeRunDetailId = null
-        }
-        activeSection = section
+    private fun showSection(section: AppSection) {
+        navigationController.showSection(section)
         updateBottomNav()
-        chatInputBar.visibility = if (section == Section.CHAT) View.VISIBLE else View.GONE
+        chatInputBar.visibility = if (section == AppSection.CHAT) View.VISIBLE else View.GONE
         contentRoot.removeAllViews()
         when (section) {
-            Section.CHAT -> renderChatScreen()
-            Section.TOOLS -> renderToolsScreen()
-            Section.LOGS -> renderLogsScreen()
-            Section.SETTINGS -> renderSettingsScreen()
+            AppSection.CHAT -> renderChatScreen()
+            AppSection.TOOLS -> renderToolsScreen()
+            AppSection.LOGS -> renderLogsScreen()
+            AppSection.SETTINGS -> renderSettingsScreen()
         }
         animatePendingSettingsTransition(section)
     }
 
-    private fun animatePendingSettingsTransition(section: Section) {
-        if (section != Section.SETTINGS || pendingSettingsAnimationDirection == 0) return
+    private fun animatePendingSettingsTransition(section: AppSection) {
+        if (section != AppSection.SETTINGS) return
 
-        val direction = pendingSettingsAnimationDirection
-        pendingSettingsAnimationDirection = 0
+        val direction = navigationController.consumeSettingsAnimationDirection()
+        if (direction == 0) return
         val travel = (contentRoot.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).toFloat()
         contentRoot.translationX = travel * direction
         contentRoot.alpha = 0.96f
@@ -326,11 +320,12 @@ class MainActivity : Activity() {
 
     private fun updateBottomNav() {
         val nav = bottomNav ?: return
-        val index = Section.values().indexOf(activeSection)
+        val activeSection = navigationController.activeSection
+        val index = AppSection.values().indexOf(activeSection)
         if (index >= 0 && nav.selectedTabPosition != index) {
             nav.getTabAt(index)?.select()
         }
-        Section.values().forEachIndexed { tabIndex, section ->
+        AppSection.values().forEachIndexed { tabIndex, section ->
             val container = nav.getTabAt(tabIndex)?.customView as? LinearLayout
             val selected = section == activeSection
             val tint = if (selected) Theme.OnAccent else Theme.NavText
@@ -366,14 +361,14 @@ class MainActivity : Activity() {
             submitChatMessage = ::submitChatMessage,
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
-            refreshChatScreen = { showSection(Section.CHAT) },
+            refreshChatScreen = { showSection(AppSection.CHAT) },
             buildApprovalMessage = { buildApprovalMessage(it.request) },
             formatToolCallBody = ::formatToolCallBody,
         )
     }
 
     private fun renderChatScreen() {
-        if (activeRunDetailId != null) {
+        if (navigationController.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
         }
@@ -414,7 +409,7 @@ class MainActivity : Activity() {
             else -> id
         }
         preferences.edit().putString("active_skill", selectedSkillId).apply()
-        showSection(Section.SETTINGS)
+        showSection(AppSection.SETTINGS)
     }
 
     private fun renderToolsScreen() {
@@ -425,7 +420,7 @@ class MainActivity : Activity() {
             statusPill = ::statusPill,
             openAccessibilitySettings = ::openAccessibilitySettings,
             toolsResult = sectionResults::forTools,
-            refreshToolsScreen = { showSection(Section.TOOLS) },
+            refreshToolsScreen = { showSection(AppSection.TOOLS) },
             hideKeyboard = ::hideKeyboard,
             bindKeyboardScrollSpacer = ::bindKeyboardScrollSpacer,
             getFocusSelectorIndex = { focusSelectorIndex },
@@ -449,7 +444,7 @@ class MainActivity : Activity() {
                 }
 
                 override fun refreshToolsScreen() {
-                    showSection(Section.TOOLS)
+                    showSection(AppSection.TOOLS)
                 }
             }
         )
@@ -484,7 +479,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderLogsScreen() {
-        if (activeRunDetailId != null) {
+        if (navigationController.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
         }
@@ -499,9 +494,9 @@ class MainActivity : Activity() {
             preferences = preferences,
             skills = skills,
             localModelRuntime = localModelRuntime,
-            activeSettingsPanel = { activeSettingsPanel },
-            setActiveSettingsPanel = { activeSettingsPanel = it },
-            setPendingAnimationDirection = { pendingSettingsAnimationDirection = it },
+            activeSettingsPanel = { navigationController.activeSettingsPanel },
+            openSettingsPanel = navigationController::openSettingsPanel,
+            closeSettingsPanel = navigationController::closeSettingsPanel,
             selectedSkillId = { selectedSkillId },
             expandedSkillReferenceId = { expandedSkillReferenceId },
             commitSelectedSkill = ::commitSelectedSkill,
@@ -510,7 +505,7 @@ class MainActivity : Activity() {
             hideKeyboard = ::hideKeyboard,
             recordMcpResult = sectionResults::recordMcpResult,
             mcpResult = sectionResults::forMcp,
-            refreshSettingsScreen = { showSection(Section.SETTINGS) }
+            refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
         ).render()
     }
 
@@ -529,7 +524,7 @@ class MainActivity : Activity() {
             latestResult = sectionResults::forLogs,
             exportDebugTrace = ::exportDebugTrace,
             recordLogsResult = sectionResults::recordLogsResult,
-            refreshLogsScreen = { showSection(Section.LOGS) }
+            refreshLogsScreen = { showSection(AppSection.LOGS) }
         )
     }
 
@@ -643,13 +638,13 @@ class MainActivity : Activity() {
     }
 
     private fun openRunDetail(runId: String) {
-        activeRunDetailId = runId
-        showSection(activeSection)
+        navigationController.openRunDetail(runId)
+        showSection(navigationController.activeSection)
     }
 
     private fun closeRunDetail() {
-        activeRunDetailId = null
-        showSection(activeSection)
+        navigationController.closeRunDetail()
+        showSection(navigationController.activeSection)
     }
 
     private fun findAgentRun(runId: String): AgentRunRecord? {
@@ -689,7 +684,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderAgentRunDetailScreen() {
-        val runId = activeRunDetailId
+        val runId = navigationController.activeRunDetailId
         contentRoot.addView(sectionTitle("Run details"))
         contentRoot.addView(
             secondaryButton("Go Back") {
@@ -739,7 +734,7 @@ class MainActivity : Activity() {
             primaryButton("Export Run Trace") {
                 val file = exportRunTrace(record)
                 sectionResults.recordLogsResult("Run trace exported: ${file.absolutePath}")
-                showSection(activeSection)
+                showSection(navigationController.activeSection)
             }.apply { id = R.id.export_run_trace_button }
         )
 
@@ -845,13 +840,6 @@ class MainActivity : Activity() {
 
     private fun exportDebugTrace(): File {
         return debugTraceExporter.exportDebugTrace()
-    }
-
-    private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
-        CHAT("Chat", R.drawable.ic_chat),
-        TOOLS("Tools", R.drawable.ic_tools),
-        LOGS("Logs", R.drawable.ic_logs),
-        SETTINGS("Settings", R.drawable.ic_settings)
     }
 
     private companion object {
