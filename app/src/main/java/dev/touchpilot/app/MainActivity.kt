@@ -31,6 +31,11 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentEventListener
+import dev.touchpilot.app.logging.AgentRunTraceExporter
+import dev.touchpilot.app.logging.DebugTraceExporter
+import dev.touchpilot.app.navigation.NavigationController
+import dev.touchpilot.app.navigation.Section
+import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
@@ -70,8 +75,6 @@ import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.tools.ToolResult
 import org.json.JSONObject
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -91,16 +94,13 @@ class MainActivity : Activity() {
     private lateinit var executionLogView: TextView
     private var bottomNav: TabLayout? = null
 
-    private var activeSection = Section.CHAT
-    private var activeSettingsPanel: SettingsPanel? = null
-    private var pendingSettingsAnimationDirection = 0
+    private val nav = NavigationController()
     private var selectedSkillId: String? = null
     private var expandedSkillReferenceId: String? = null
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
     private val agentRunHistory = mutableListOf<AgentRunRecord>()
-    private var activeRunDetailId: String? = null
     private var pendingClarification: PendingClarification? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,7 +141,7 @@ class MainActivity : Activity() {
         super.onResume()
         refreshStatus()
         if (::contentRoot.isInitialized) {
-            showSection(activeSection)
+            showSection(nav.activeSection)
         }
     }
 
@@ -234,14 +234,14 @@ class MainActivity : Activity() {
                     newTab()
                         .setCustomView(bottomNavLabel(section))
                         .setTag(section),
-                    section == activeSection
+                    section == nav.activeSection
                 )
             }
 
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab) {
                     (tab.tag as? Section)?.let { section ->
-                        if (section != activeSection) {
+                        if (section != nav.activeSection) {
                             showSection(section)
                         }
                     }
@@ -285,10 +285,7 @@ class MainActivity : Activity() {
     }
 
     private fun showSection(section: Section) {
-        if (section != Section.CHAT && section != Section.LOGS) {
-            activeRunDetailId = null
-        }
-        activeSection = section
+        nav.navigateTo(section)
         updateBottomNav()
         chatInputBar.visibility = if (section == Section.CHAT) View.VISIBLE else View.GONE
         contentRoot.removeAllViews()
@@ -302,10 +299,9 @@ class MainActivity : Activity() {
     }
 
     private fun animatePendingSettingsTransition(section: Section) {
-        if (section != Section.SETTINGS || pendingSettingsAnimationDirection == 0) return
-
-        val direction = pendingSettingsAnimationDirection
-        pendingSettingsAnimationDirection = 0
+        if (section != Section.SETTINGS) return
+        val direction = nav.consumePendingAnimationDirection()
+        if (direction == 0) return
         val travel = (contentRoot.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).toFloat()
         contentRoot.translationX = travel * direction
         contentRoot.alpha = 0.96f
@@ -318,14 +314,14 @@ class MainActivity : Activity() {
     }
 
     private fun updateBottomNav() {
-        val nav = bottomNav ?: return
-        val index = Section.values().indexOf(activeSection)
-        if (index >= 0 && nav.selectedTabPosition != index) {
-            nav.getTabAt(index)?.select()
+        val tabLayout = bottomNav ?: return
+        val index = Section.values().indexOf(nav.activeSection)
+        if (index >= 0 && tabLayout.selectedTabPosition != index) {
+            tabLayout.getTabAt(index)?.select()
         }
         Section.values().forEachIndexed { tabIndex, section ->
-            val container = nav.getTabAt(tabIndex)?.customView as? LinearLayout
-            val selected = section == activeSection
+            val container = tabLayout.getTabAt(tabIndex)?.customView as? LinearLayout
+            val selected = section == nav.activeSection
             val tint = if (selected) Theme.OnAccent else Theme.NavText
             (container?.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(tint)
             (container?.getChildAt(1) as? TextView)?.setTextColor(tint)
@@ -434,7 +430,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderChatScreen() {
-        if (activeRunDetailId != null) {
+        if (nav.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
         }
@@ -1461,7 +1457,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderLogsScreen() {
-        if (activeRunDetailId != null) {
+        if (nav.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
         }
@@ -1488,7 +1484,7 @@ class MainActivity : Activity() {
 
     private fun renderSettingsScreen() {
         contentRoot.addView(sectionTitle("Settings"))
-        val panel = activeSettingsPanel
+        val panel = nav.activeSettingsPanel
         if (panel == null) {
             contentRoot.addView(settingsIntro("Choose a settings area to configure TouchPilot."))
             contentRoot.addView(settingsPanelSwitcher())
@@ -1497,12 +1493,11 @@ class MainActivity : Activity() {
 
         contentRoot.addView(settingsIntro(panel.intro))
         contentRoot.addView(settingsGoBackButton())
-        when (activeSettingsPanel) {
+        when (panel) {
             SettingsPanel.SKILLS -> renderSkillsPanel()
             SettingsPanel.MCP -> renderMcpPanel()
             SettingsPanel.CLOUD -> renderCloudPanel()
             SettingsPanel.RUNTIME -> renderRuntimePanel()
-            null -> Unit
         }
     }
 
@@ -1517,8 +1512,7 @@ class MainActivity : Activity() {
 
     private fun settingsGoBackButton(): View {
         return secondaryButton("Go Back") {
-            activeSettingsPanel = null
-            pendingSettingsAnimationDirection = -1
+            nav.closeSettingsPanel()
             showSection(Section.SETTINGS)
         }.apply {
             minHeight = 46
@@ -1943,7 +1937,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
         }
         SettingsPanel.values().forEach { panel ->
-            val isActive = panel == activeSettingsPanel
+            val isActive = panel == nav.activeSettingsPanel
             val row = MaterialCardView(this).apply {
                 setCardBackgroundColor(if (isActive) Theme.Accent else Theme.Card)
                 strokeColor = if (isActive) Theme.Accent else Theme.StrokeDark
@@ -1953,9 +1947,8 @@ class MainActivity : Activity() {
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
-                    if (activeSettingsPanel != panel) {
-                        activeSettingsPanel = panel
-                        pendingSettingsAnimationDirection = 1
+                    if (nav.activeSettingsPanel != panel) {
+                        nav.openSettingsPanel(panel)
                         showSection(Section.SETTINGS)
                     }
                 }
@@ -2455,13 +2448,13 @@ class MainActivity : Activity() {
     }
 
     private fun openRunDetail(runId: String) {
-        activeRunDetailId = runId
-        showSection(activeSection)
+        nav.openRunDetail(runId)
+        showSection(nav.activeSection)
     }
 
     private fun closeRunDetail() {
-        activeRunDetailId = null
-        showSection(activeSection)
+        nav.closeRunDetail()
+        showSection(nav.activeSection)
     }
 
     private fun findAgentRun(runId: String): AgentRunRecord? {
@@ -2501,7 +2494,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderAgentRunDetailScreen() {
-        val runId = activeRunDetailId
+        val runId = nav.activeRunDetailId
         contentRoot.addView(sectionTitle("Run details"))
         contentRoot.addView(
             secondaryButton("Go Back") {
@@ -2551,7 +2544,7 @@ class MainActivity : Activity() {
             primaryButton("Export Run Trace") {
                 val file = exportRunTrace(record)
                 sectionResults.recordLogsResult("Run trace exported: ${file.absolutePath}")
-                showSection(activeSection)
+                showSection(nav.activeSection)
             }.apply { id = R.id.export_run_trace_button }
         )
 
@@ -2651,38 +2644,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun exportRunTrace(record: AgentRunRecord): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-run-${record.id}-$timestamp.txt")
-        file.writeText(AgentRunDetailFormatter.exportRedactedTrace(record))
-        return file
-    }
+    private fun exportRunTrace(record: AgentRunRecord): File =
+        AgentRunTraceExporter.export(this, record)
 
-    private fun exportDebugTrace(): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-trace-$timestamp.txt")
-        file.writeText(
-            buildString {
-                appendLine("TouchPilot debug trace")
-                appendLine("timestamp=$timestamp")
-                appendLine()
-                appendLine("Accessibility connected=${AccessibilityBridge.isConnected()}")
-                appendLine()
-                appendLine("Tool executions")
-                appendLine(ToolExecutionLog.renderChronological())
-                appendLine()
-                appendLine("Current screen")
-                appendLine(SensitiveTextRedactor.redact(toolExecutor.observeScreen()))
-            }
-        )
-        return file
-    }
+    private fun exportDebugTrace(): File =
+        DebugTraceExporter.export(this, toolExecutor)
 
     private data class PendingClarification(
         val originalTask: String,
@@ -2732,32 +2698,6 @@ class MainActivity : Activity() {
 
     private enum class ApprovalState { PENDING, APPROVED, REJECTED }
     private enum class ClarificationState { PENDING, ANSWERED }
-
-    private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
-        CHAT("Chat", R.drawable.ic_chat),
-        TOOLS("Tools", R.drawable.ic_tools),
-        LOGS("Logs", R.drawable.ic_logs),
-        SETTINGS("Settings", R.drawable.ic_settings)
-    }
-
-    private enum class SettingsPanel(val label: String, val intro: String) {
-        SKILLS(
-            "Skills",
-            "Skills bundle the tools and prompts TouchPilot uses for a kind of task."
-        ),
-        MCP(
-            "MCP",
-            "Connect TouchPilot to an external MCP HTTP JSON-RPC server to call its tools."
-        ),
-        CLOUD(
-            "Cloud API",
-            "Optional cloud agent endpoint. Used only when explicitly selected as the runtime."
-        ),
-        RUNTIME(
-            "Runtime",
-            "Choose how TouchPilot reasons about your requests on this device."
-        )
-    }
 
     private companion object {
         const val ApprovalTimeoutMs = 5 * 60 * 1000L
