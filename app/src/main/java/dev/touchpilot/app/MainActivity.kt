@@ -31,6 +31,8 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentEventListener
+import dev.touchpilot.app.logging.AgentRunTraceExporter
+import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
@@ -70,8 +72,6 @@ import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.tools.ToolResult
 import org.json.JSONObject
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -2651,38 +2651,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun exportRunTrace(record: AgentRunRecord): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-run-${record.id}-$timestamp.txt")
-        file.writeText(AgentRunDetailFormatter.exportRedactedTrace(record))
-        return file
-    }
+    private fun exportRunTrace(record: AgentRunRecord): File =
+        AgentRunTraceExporter.export(this, record)
 
-    private fun exportDebugTrace(): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-trace-$timestamp.txt")
-        file.writeText(
-            buildString {
-                appendLine("TouchPilot debug trace")
-                appendLine("timestamp=$timestamp")
-                appendLine()
-                appendLine("Accessibility connected=${AccessibilityBridge.isConnected()}")
-                appendLine()
-                appendLine("Tool executions")
-                appendLine(ToolExecutionLog.renderChronological())
-                appendLine()
-                appendLine("Current screen")
-                appendLine(SensitiveTextRedactor.redact(toolExecutor.observeScreen()))
-            }
-        )
-        return file
-    }
+    private fun exportDebugTrace(): File =
+        DebugTraceExporter.export(this, toolExecutor)
 
     private data class PendingClarification(
         val originalTask: String,
