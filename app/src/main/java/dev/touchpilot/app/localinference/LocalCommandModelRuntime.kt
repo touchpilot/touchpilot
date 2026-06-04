@@ -51,7 +51,7 @@ class LiteRtCommandModelRuntime(
                 runtime = loadedManifest.runtime,
                 modelAsset = loadedManifest.modelAsset,
                 version = loadedManifest.version,
-                message = "LiteRT model asset is missing; deterministic local router will be used."
+                message = "LiteRT model asset is missing; the run will stop with a final answer."
             )
         }
 
@@ -70,7 +70,7 @@ class LiteRtCommandModelRuntime(
                 runtime = loadedManifest.runtime,
                 modelAsset = loadedManifest.modelAsset,
                 version = loadedManifest.version,
-                message = "LiteRT model asset could not be loaded; deterministic local router will be used."
+                message = "LiteRT model asset could not be loaded; the run will stop with a final answer."
             )
         }
     }

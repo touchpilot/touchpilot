@@ -53,9 +53,9 @@ The Android app should keep all core runtime modes local:
 
 - Local router: default offline deterministic routing for simple commands such
   as observe, back, home, scroll, open app, and tap text.
-- Local model: LiteRT command-routing runtime. If the model cannot be loaded,
-  it falls back to the deterministic local router and reports that fallback in
-  the runtime UI.
+- Local model: LiteRT command-routing runtime. If the model cannot be loaded
+  or returns invalid output, the run stops with a final answer. No fallback to
+  the deterministic router occurs.
 - Future local LLM/VLM: broader local reasoning, planning, and visual fallback
   behind the same tool and policy contract.
 
@@ -72,8 +72,8 @@ Local inference work should keep one stable contract: command providers emit a
 structured JSON command or a final answer, and Android tool execution remains
 behind validation, skill allowlists, approval policy, and local logs.
 
-- Deterministic local router: current default and fallback when the LiteRT model
-  cannot be loaded.
+- Deterministic local router: current default. Not used as a fallback when the
+  LiteRT model cannot be loaded — those runs stop with a final answer instead.
 - Small local routing model: current LiteRT path for command route logits and
   future target for richer classification and structured argument extraction.
 - Local LLM runtime: future broader reasoning path for multi-step workflows.
