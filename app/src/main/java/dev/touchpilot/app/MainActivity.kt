@@ -26,8 +26,6 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentEventListener
-import dev.touchpilot.app.logging.AgentRunTraceExporter
-import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
@@ -845,17 +843,10 @@ class MainActivity : Activity() {
     }
 
     private fun exportRunTrace(record: AgentRunRecord): File =
-        AgentRunTraceExporter.export(this, record)
+        debugTraceExporter.exportRunTrace(record)
 
     private fun exportDebugTrace(): File =
-        DebugTraceExporter.export(this, toolExecutor)
-    private fun exportRunTrace(record: AgentRunRecord): File {
-        return debugTraceExporter.exportRunTrace(record)
-    }
-
-    private fun exportDebugTrace(): File {
-        return debugTraceExporter.exportDebugTrace()
-    }
+        debugTraceExporter.exportDebugTrace()
 
     private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
         CHAT("Chat", R.drawable.ic_chat),

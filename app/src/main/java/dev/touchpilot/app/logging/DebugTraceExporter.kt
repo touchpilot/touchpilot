@@ -1,9 +1,6 @@
 package dev.touchpilot.app.logging
 
 import android.content.Context
-import dev.touchpilot.app.androidcontrol.AccessibilityBridge
-import dev.touchpilot.app.security.SensitiveTextRedactor
-import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -13,11 +10,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-object DebugTraceExporter {
-    fun export(context: Context, toolExecutor: AndroidToolExecutor): File {
-        val directory = File(context.getExternalFilesDir(null), "debug-traces").apply { mkdirs() }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-trace-$timestamp.txt")
 class DebugTraceExporter(
     private val context: Context,
     private val accessibilityConnected: () -> Boolean,
@@ -42,13 +34,6 @@ class DebugTraceExporter(
                 appendLine("TouchPilot debug trace")
                 appendLine("timestamp=$timestamp")
                 appendLine()
-                appendLine("Accessibility connected=${AccessibilityBridge.isConnected()}")
-                appendLine()
-                appendLine("Tool executions")
-                appendLine(ToolExecutionLog.renderChronological())
-                appendLine()
-                appendLine("Current screen")
-                appendLine(SensitiveTextRedactor.redact(toolExecutor.observeScreen()))
                 appendLine("Accessibility connected=${accessibilityConnected()}")
                 appendLine()
                 appendLine("Tool executions")
@@ -61,9 +46,6 @@ class DebugTraceExporter(
         return file
     }
 
-    private fun traceDirectory(): File {
-        return File(context.getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-    }
+    private fun traceDirectory(): File =
+        File(context.getExternalFilesDir(null), "debug-traces").apply { mkdirs() }
 }
