@@ -38,6 +38,8 @@ import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
+import dev.touchpilot.app.logging.AgentRunTraceExporter
+import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -65,15 +67,13 @@ import dev.touchpilot.app.ui.settings.SettingsPanel
 import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import dev.touchpilot.app.ui.withMargins
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
     private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
+    private lateinit var debugTraceExporter: DebugTraceExporter
+    private lateinit var agentRunTraceExporter: AgentRunTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var agentRunController: AgentRunController
@@ -102,6 +102,8 @@ class MainActivity : Activity() {
         skills = SkillStore(this).loadSkills()
         ToolExecutionLog.configure(this)
         toolExecutor = AndroidToolExecutor(this)
+        debugTraceExporter = DebugTraceExporter(this)
+        agentRunTraceExporter = AgentRunTraceExporter(this)
         localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
 
@@ -528,7 +530,7 @@ class MainActivity : Activity() {
             activity = this,
             contentRoot = contentRoot,
             latestResult = sectionResults::forLogs,
-            exportDebugTrace = ::exportDebugTrace,
+            exportDebugTrace = { debugTraceExporter.export(toolExecutor.observeScreen()) },
             recordLogsResult = sectionResults::recordLogsResult,
             refreshLogsScreen = { showSection(Section.LOGS) }
         )
@@ -738,7 +740,7 @@ class MainActivity : Activity() {
         )
         contentRoot.addView(
             primaryButton("Export Run Trace") {
-                val file = exportRunTrace(record)
+                val file = agentRunTraceExporter.export(record)
                 sectionResults.recordLogsResult("Run trace exported: ${file.absolutePath}")
                 showSection(activeSection)
             }.apply { id = R.id.export_run_trace_button }
@@ -838,39 +840,6 @@ class MainActivity : Activity() {
             AgentRunStepStatus.PENDING -> Color.rgb(255, 196, 86)
             AgentRunStepStatus.INFO -> Theme.StrokeDark
         }
-    }
-
-    private fun exportRunTrace(record: AgentRunRecord): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-run-${record.id}-$timestamp.txt")
-        file.writeText(AgentRunDetailFormatter.exportRedactedTrace(record))
-        return file
-    }
-
-    private fun exportDebugTrace(): File {
-        val directory = File(getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(directory, "touchpilot-trace-$timestamp.txt")
-        file.writeText(
-            buildString {
-                appendLine("TouchPilot debug trace")
-                appendLine("timestamp=$timestamp")
-                appendLine()
-                appendLine("Accessibility connected=${AccessibilityBridge.isConnected()}")
-                appendLine()
-                appendLine("Tool executions")
-                appendLine(ToolExecutionLog.renderChronological())
-                appendLine()
-                appendLine("Current screen")
-                appendLine(SensitiveTextRedactor.redact(toolExecutor.observeScreen()))
-            }
-        )
-        return file
     }
 
     private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
