@@ -79,10 +79,24 @@ class ScreenContextSummarizer(
         context: ScreenContext,
         visibleClickables: List<ScreenNode>
     ): List<SuggestedAction> {
-        val suggestions = mutableListOf<SuggestedAction>()
+        val firstInput = context.inputFields.firstOrNull { it.isSafeToSurface || it.text.raw.isBlank() }
+            ?.takeUnless { it.sensitive || it.text.isSensitive }
+        val hasScroll = context.scrollableNodes.isNotEmpty()
 
-        visibleClickables.take(maxSuggestions - SafeNavigationSlots).forEach { node ->
-            suggestions += SuggestedAction(
+        // Reserve the always-safe navigation pair in the cap first, then a slot
+        // each for the distinct type_text / scroll capabilities, and give the
+        // remainder to visible taps. Counting type_text and scroll against the
+        // dynamic budget up front (instead of appending them after a tap-only
+        // budget and truncating the whole list at the end) is what guarantees
+        // the back/home pair is never dropped — honoring the invariant above.
+        val dynamicBudget = (maxSuggestions - SafeNavigationSlots).coerceAtLeast(0)
+        val reservedForDistinct = (if (firstInput != null) 1 else 0) + (if (hasScroll) 1 else 0)
+        val tapBudget = (dynamicBudget - reservedForDistinct).coerceAtLeast(0)
+
+        val dynamic = mutableListOf<SuggestedAction>()
+
+        visibleClickables.take(tapBudget).forEach { node ->
+            dynamic += SuggestedAction(
                 tool = "tap",
                 args = mapOf("text" to node.text.raw),
                 label = "Tap ${node.text.displaySafe}",
@@ -90,11 +104,9 @@ class ScreenContextSummarizer(
             )
         }
 
-        val firstInput = context.inputFields.firstOrNull { it.isSafeToSurface || it.text.raw.isBlank() }
-            ?.takeUnless { it.sensitive || it.text.isSensitive }
         if (firstInput != null) {
             val descriptor = firstInput.text.displaySafe.ifBlank { "input field" }
-            suggestions += SuggestedAction(
+            dynamic += SuggestedAction(
                 tool = "type_text",
                 args = emptyMap(),
                 label = "Type into the $descriptor",
@@ -102,8 +114,8 @@ class ScreenContextSummarizer(
             )
         }
 
-        if (context.scrollableNodes.isNotEmpty()) {
-            suggestions += SuggestedAction(
+        if (hasScroll) {
+            dynamic += SuggestedAction(
                 tool = "scroll",
                 args = mapOf("direction" to "forward"),
                 label = "Scroll down",
@@ -113,21 +125,24 @@ class ScreenContextSummarizer(
 
         // Safe navigation slots are always included while content exists, so
         // the user always has a documented way to back out without re-reading
-        // the visible UI.
-        suggestions += SuggestedAction(
-            tool = "press_back",
-            args = emptyMap(),
-            label = "Go back",
-            reason = "always-safe navigation"
-        )
-        suggestions += SuggestedAction(
-            tool = "press_home",
-            args = emptyMap(),
-            label = "Go home",
-            reason = "always-safe navigation"
+        // the visible UI. Appended after the budgeted dynamic suggestions so the
+        // final list can never truncate them.
+        val navigation = listOf(
+            SuggestedAction(
+                tool = "press_back",
+                args = emptyMap(),
+                label = "Go back",
+                reason = "always-safe navigation"
+            ),
+            SuggestedAction(
+                tool = "press_home",
+                args = emptyMap(),
+                label = "Go home",
+                reason = "always-safe navigation"
+            )
         )
 
-        return suggestions.take(maxSuggestions)
+        return dynamic.take(dynamicBudget) + navigation
     }
 
     private fun joinHumanReadable(items: List<String>): String {

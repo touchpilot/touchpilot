@@ -216,6 +216,38 @@ class ScreenContextSummarizerTest {
         assertTrue(summary.suggestedActions.any { it.tool == "press_home" })
     }
 
+    @Test
+    fun navigationPairSurvivesWhenTapsInputAndScrollFillTheCap() {
+        val nodes = buildList {
+            (1..4).forEach { add(clickable("0.$it", "Action $it")) }
+            add(
+                ScreenNode(
+                    nodeId = "0.input",
+                    role = NodeRole.INPUT,
+                    text = ScreenText.of("Search"),
+                    isInputField = true
+                )
+            )
+            add(
+                ScreenNode(
+                    nodeId = "0.scroll",
+                    role = NodeRole.SCROLLABLE,
+                    scrollable = true
+                )
+            )
+        }
+        val summary = summarizer.summarize(ScreenContext(appLabel = "Mixed", nodes = nodes))
+
+        // The documented invariant: back/home are always retained, even when
+        // taps + type_text + scroll would otherwise fill the suggestion cap.
+        assertTrue(summary.suggestedActions.any { it.tool == "press_back" })
+        assertTrue(summary.suggestedActions.any { it.tool == "press_home" })
+        assertTrue(summary.suggestedActions.size <= 6)
+        // The distinct capabilities still surface alongside navigation.
+        assertTrue(summary.suggestedActions.any { it.tool == "type_text" })
+        assertTrue(summary.suggestedActions.any { it.tool == "scroll" })
+    }
+
     private fun clickable(id: String, label: String): ScreenNode {
         return ScreenNode(
             nodeId = id,
