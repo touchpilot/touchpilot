@@ -43,15 +43,17 @@ jobs:
 
       - name: Ensure labels exist
         env:
-          GH_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create "type: bug" --color d73a4a --description "Broken or unexpected behavior." --force
           gh label create "type: feature" --color a2eeef --description "New capability or product behavior." --force
+          gh label create "type: enhancement" --color a2eeef --description "Improvement to existing behavior." --force
           gh label create "type: docs" --color 0075ca --description "Documentation-only or documentation-focused work." --force
           gh label create "type: refactor" --color cfd3d7 --description "Internal code change without intended behavior change." --force
           gh label create "type: test" --color bfe5bf --description "Test coverage, fixtures, or validation work." --force
           gh label create "type: chore" --color ededed --description "Maintenance, dependencies, or repository upkeep." --force
+          gh label create "type: other" --color ededed --description "Work that does not match another type label." --force
           gh label create "area: android-control" --color 5319e7 --description "AccessibilityService, Android actions, UI observation, or tool execution." --force
           gh label create "area: agent" --color 5319e7 --description "Agent loop, prompts, provider routing, or command parsing." --force
           gh label create "area: local-inference" --color 5319e7 --description "Local router, LiteRT, ExecuTorch, llama.cpp, or model runtime work." --force
@@ -67,20 +69,33 @@ jobs:
           gh label create "status: ready" --color 0e8a16 --description "Ready for implementation." --force
           gh label create "status: in-progress" --color 1d76db --description "Actively being worked on." --force
 
-      - name: Add triage status
+      - name: Apply one PR label
         env:
-          GH_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          gh api \
-            --method POST \
-            "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" \
-            --field labels[]="status: needs-triage"
+          title="$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json title --jq '.title' | tr '[:upper:]' '[:lower:]')"
+          files="$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json files --jq '.files[].path')"
 
-      - name: Apply labels from changed files
-        uses: actions/labeler@v5
-        with:
-          repo-token: ${{ secrets.GH_LABELER_TOKEN || github.token }}
-          configuration-path: .github/labeler.yml
-          pr-number: ${{ steps.pr.outputs.number }}
+          label="type: other"
+
+          if echo "$title" | grep -Eq '(^|[^a-z])(fix|bug|bugfix)([^a-z]|$)'; then
+            label="type: bug"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(feat|feature)([^a-z]|$)'; then
+            label="type: feature"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(enhance|enhancement|improve|improvement)([^a-z]|$)'; then
+            label="type: enhancement"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(refactor)([^a-z]|$)'; then
+            label="type: refactor"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(docs|doc)([^a-z]|$)' || echo "$files" | grep -Eq '(^docs/|^examples/|\.md$)'; then
+            label="type: docs"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(test|tests)([^a-z]|$)' || echo "$files" | grep -Eq 'Test\.(kt|java|cpp)$'; then
+            label="type: test"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(chore|ci|build)([^a-z]|$)' || echo "$files" | grep -Eq '^\.github/|^gradle/|^gradlew'; then
+            label="type: chore"
+          fi
+
+          gh issue edit "$PR_NUMBER" --repo "$GH_REPO" \
+            --remove-label "type: bug,type: feature,type: enhancement,type: docs,type: refactor,type: test,type: chore,type: other,status: needs-triage" || true
+          gh issue edit "$PR_NUMBER" --repo "$GH_REPO" --add-label "$label"
