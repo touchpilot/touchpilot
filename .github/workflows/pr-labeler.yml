@@ -96,7 +96,13 @@ jobs:
             label="type: chore"
           fi
 
-          for existing in "type: bug" "type: feature" "type: enhancement" "type: docs" "type: refactor" "type: test" "type: chore" "type: other" "status: needs-triage"; do
+          managed_labels=(
+            "type: bug" "type: feature" "type: enhancement" "type: docs" "type: refactor" "type: test" "type: chore" "type: other"
+            "area: android-control" "area: agent" "area: local-inference" "area: skills" "area: mcp" "area: security" "area: ui" "area: ci" "area: docs"
+            "status: needs-triage" "status: needs-design" "status: blocked" "status: ready" "status: in-progress"
+          )
+
+          for existing in "${managed_labels[@]}"; do
             encoded="${existing// /%20}"
             gh api --method DELETE "repos/${GH_REPO}/issues/${PR_NUMBER}/labels/${encoded}" --silent || true
           done
