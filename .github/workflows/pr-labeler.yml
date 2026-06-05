@@ -96,6 +96,12 @@ jobs:
             label="type: chore"
           fi
 
-          gh issue edit "$PR_NUMBER" --repo "$GH_REPO" \
-            --remove-label "type: bug,type: feature,type: enhancement,type: docs,type: refactor,type: test,type: chore,type: other,status: needs-triage" || true
-          gh issue edit "$PR_NUMBER" --repo "$GH_REPO" --add-label "$label"
+          for existing in "type: bug" "type: feature" "type: enhancement" "type: docs" "type: refactor" "type: test" "type: chore" "type: other" "status: needs-triage"; do
+            encoded="${existing// /%20}"
+            gh api --method DELETE "repos/${GH_REPO}/issues/${PR_NUMBER}/labels/${encoded}" --silent || true
+          done
+
+          gh api \
+            --method POST \
+            "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" \
+            --field labels[]="$label"
