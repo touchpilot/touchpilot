@@ -106,7 +106,7 @@ class OfflineMilestone2Test {
         val ctx = assertNotNull(capture.context)
         val cmd = assertNotNull(ctx.exactCommand)
         assertEquals("open_app", cmd.tool)
-        assertEquals("settings", cmd.args["target"])
+        assertEquals("Settings", cmd.args["target"])
         assertEquals(
             AgentProviderMode.LOCAL_ROUTER, ctx.providerMode,
             "ExactCommand path must force LOCAL_ROUTER per LocalReasoningCore.kt:90"
@@ -128,7 +128,7 @@ class OfflineMilestone2Test {
         )
         val approval = result.events.filterIsInstance<AgentEvent.ApprovalRequired>().single()
         assertEquals("open_app", approval.tool)
-        assertEquals("settings", approval.args["target"])
+        assertEquals("Settings", approval.args["target"])
         assertEquals("approval_required", approval.toJson().getString("type"))
     }
 

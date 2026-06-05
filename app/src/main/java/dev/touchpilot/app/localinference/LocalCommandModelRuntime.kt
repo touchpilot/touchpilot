@@ -172,7 +172,7 @@ class LiteRtCommandModelRuntime(
     }
 
     private fun extract(pattern: Regex, task: String): String? {
-        return pattern.find(task.trim().lowercase())
+        return pattern.find(task.trim())
             ?.groupValues
             ?.getOrNull(1)
             ?.trim()
@@ -210,8 +210,8 @@ class LiteRtCommandModelRuntime(
         const val RouteIndexOpenApp = 4
         const val RouteIndexTapText = 5
         val RouteLabels = listOf("back", "home", "scroll_up", "scroll_down", "open_app", "tap_text")
-        val OpenPattern = Regex("(?:open|launch)\\s+([\\w .-]+)")
-        val TapPattern = Regex("(?:tap|press)\\s+([\\w .-]+)")
+        val OpenPattern = Regex("(?:open|launch)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
+        val TapPattern = Regex("(?:tap|press)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
     }
 }
 

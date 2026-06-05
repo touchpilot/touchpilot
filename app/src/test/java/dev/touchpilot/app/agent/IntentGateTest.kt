@@ -40,7 +40,7 @@ class IntentGateTest {
     fun classifiesOpenSettingsAsExactOpenApp() {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("Open Settings"))
         assertEquals("open_app", command.tool)
-        assertEquals("settings", command.args["target"])
+        assertEquals("Settings", command.args["target"])
     }
 
     @Test
@@ -61,14 +61,14 @@ class IntentGateTest {
     fun classifiesTapTextAsExactTap() {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("tap OK"))
         assertEquals("tap", command.tool)
-        assertEquals("ok", command.args["text"])
+        assertEquals("OK", command.args["text"])
     }
 
     @Test
     fun classifiesLongPressTextAsExactLongPress() {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("long-press App info"))
         assertEquals("long_press", command.tool)
-        assertEquals("app info", command.args["text"])
+        assertEquals("App info", command.args["text"])
     }
 
     @Test

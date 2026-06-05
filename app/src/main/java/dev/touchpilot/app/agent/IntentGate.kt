@@ -78,7 +78,8 @@ class IntentGate : IntentClassifier {
     fun classify(task: String): IntentDecision = classify(task, emptyList())
 
     override fun classify(task: String, skills: List<Skill>): IntentDecision {
-        val normalized = task.trim().lowercase()
+        val original = task.trim()
+        val normalized = original.lowercase()
         if (normalized.isBlank()) {
             return IntentDecision.ClarificationNeeded(
                 reason = "empty task",
@@ -88,7 +89,7 @@ class IntentGate : IntentClassifier {
 
         detectUnsafe(normalized)?.let { return it }
         detectScreenInquiry(normalized)?.let { return it }
-        detectExactCommand(normalized)?.let { return it }
+        detectExactCommand(normalized, original)?.let { return it }
         detectKnownSkill(normalized, skills)?.let { return it }
         detectAmbiguousReference(normalized)?.let { return it }
 
@@ -110,7 +111,7 @@ class IntentGate : IntentClassifier {
         )
     }
 
-    private fun detectExactCommand(normalized: String): IntentDecision.ExactCommand? {
+    private fun detectExactCommand(normalized: String, original: String): IntentDecision.ExactCommand? {
         if ("scroll up" in normalized) {
             return IntentDecision.ExactCommand(
                 tool = "scroll",
@@ -146,7 +147,7 @@ class IntentGate : IntentClassifier {
                 reason = "settings panel phrase"
             )
         }
-        OpenAppPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        OpenAppPattern.find(original)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
             ?.let { target ->
                 return IntentDecision.ExactCommand(
                     tool = "open_app",
@@ -154,7 +155,7 @@ class IntentGate : IntentClassifier {
                     reason = "open or launch phrase"
                 )
             }
-        LongPressPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        LongPressPattern.find(original)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
             ?.let { text ->
                 return IntentDecision.ExactCommand(
                     tool = "long_press",
@@ -162,7 +163,7 @@ class IntentGate : IntentClassifier {
                     reason = "long press phrase"
                 )
             }
-        TapPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        TapPattern.find(original)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
             ?.let { text ->
                 return IntentDecision.ExactCommand(
                     tool = "tap",
@@ -236,8 +237,8 @@ class IntentGate : IntentClassifier {
             "that thing"
         )
 
-        val OpenAppPattern: Regex = Regex("(?:open|launch)\\s+([\\w .-]+)")
-        val LongPressPattern: Regex = Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
-        val TapPattern: Regex = Regex("(?:tap|press)\\s+([\\w .-]+)")
+        val OpenAppPattern: Regex = Regex("(?:open|launch)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
+        val LongPressPattern: Regex = Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
+        val TapPattern: Regex = Regex("(?:tap|press)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
     }
 }

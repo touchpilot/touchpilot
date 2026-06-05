@@ -182,6 +182,20 @@ class LocalReasoningCoreTest {
     }
 
     @Test
+    fun localRouterPreservesVisibleLabelCase() {
+        val provider = buildCommandProvider(
+            task = "open Pixel Camera",
+            context = defaultContext,
+            localModelRuntime = NeverCalledRuntime
+        )
+
+        assertIs<LocalRouterCommandProvider>(provider)
+        val first = AgentCommandParser.parse(provider.complete("", ""))
+        assertEquals("open_app", first.tool)
+        assertEquals("Pixel Camera", first.args["target"])
+    }
+
+    @Test
     fun unsafeIntentShortCircuitsBeforeInvocation() {
         var invoked = false
         val collected = mutableListOf<AgentEvent>()

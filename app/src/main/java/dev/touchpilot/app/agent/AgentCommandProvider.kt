@@ -79,8 +79,8 @@ class LocalRouterCommandProvider(
             return LocalRoute("open_settings_panel", mapOf(SettingsPanelIntent.PanelArg to panel))
         }
 
-        Regex("(?:open|launch)\\s+([\\w .-]+)")
-            .find(normalized)
+        Regex("(?:open|launch)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
+            .find(task.trim())
             ?.groupValues
             ?.getOrNull(1)
             ?.trim()
@@ -89,8 +89,8 @@ class LocalRouterCommandProvider(
                 return LocalRoute("open_app", mapOf("target" to target))
             }
 
-        Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
-            .find(normalized)
+        Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
+            .find(task.trim())
             ?.groupValues
             ?.getOrNull(1)
             ?.trim()
@@ -99,8 +99,8 @@ class LocalRouterCommandProvider(
                 return LocalRoute("long_press", mapOf("text" to text))
             }
 
-        Regex("(?:tap|press)\\s+([\\w .-]+)")
-            .find(normalized)
+        Regex("(?:tap|press)\\s+([\\w .-]+)", RegexOption.IGNORE_CASE)
+            .find(task.trim())
             ?.groupValues
             ?.getOrNull(1)
             ?.trim()
