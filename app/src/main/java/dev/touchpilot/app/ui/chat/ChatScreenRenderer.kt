@@ -19,9 +19,6 @@ import dev.touchpilot.app.agent.AgentRunCompletionSummary
 import dev.touchpilot.app.agent.AgentRunState
 import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.AgentStepStatus
-import dev.touchpilot.app.agent.ToolCallCardModel
-import dev.touchpilot.app.agent.ToolCallPolicyStatus
-import dev.touchpilot.app.agent.ToolCallResultStatus
 import dev.touchpilot.app.agent.timelineChipAccent
 import dev.touchpilot.app.agent.timelineChipLabel
 import dev.touchpilot.app.agent.timelineDetail
@@ -108,7 +105,7 @@ class ChatScreenRenderer(
             )
             is ChatEvent.StepTimeline -> stepTimelineCard(event)
             is ChatEvent.CompletionSummary -> completionSummaryCard(event.summary, event.runId)
-            is ChatEvent.ToolCall -> toolCallCard(event.card)
+            is ChatEvent.ToolCall -> ToolCallCardRenderer(activity).render(event.card)
             is ChatEvent.ApprovalPrompt -> approvalCard(event)
             is ChatEvent.ClarificationPrompt -> clarificationCard(event)
         }
@@ -350,69 +347,6 @@ class ChatScreenRenderer(
 
         card.addView(content)
         return card.withMargins(top = 8, bottom = 8)
-    }
-
-    private fun toolCallCard(cardModel: ToolCallCardModel): View {
-        val blocked = cardModel.policyStatus == ToolCallPolicyStatus.BLOCKED ||
-            cardModel.resultStatus == ToolCallResultStatus.BLOCKED
-        val failed = cardModel.resultStatus == ToolCallResultStatus.FAILED
-        val needsApproval = cardModel.policyStatus == ToolCallPolicyStatus.APPROVAL_REQUIRED
-        val stroke = when {
-            blocked || failed -> Theme.Danger
-            needsApproval -> Theme.Warning
-            cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED -> Theme.Accent
-            else -> Theme.StrokeDark
-        }
-
-        val card = MaterialCardView(activity).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = stroke
-            strokeWidth = if (blocked || failed || needsApproval) 2 else 1
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
-        }
-        val header = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        header.addView(
-            TextView(activity).apply {
-                text = cardModel.tool
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        header.addView(
-            activity.statusChip(cardModel.resultStatus.label, accent = cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED)
-        )
-        content.addView(header)
-
-        content.addView(
-            TextView(activity).apply {
-                text = "Policy: ${cardModel.policyStatus.label}"
-                textSize = 11.5f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(stroke)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-
-        content.addView(
-            TextView(activity).apply {
-                text = ChatToolTextFormatter.toolCallBody(cardModel)
-                textSize = 12.5f
-                setTextColor(Theme.BodyText)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-        card.addView(content)
-        return card.withMargins(top = 6, right = 24, bottom = 6)
     }
 
     private fun completionSummaryCard(summary: AgentRunCompletionSummary, runId: String): View {
