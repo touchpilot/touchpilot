@@ -13,7 +13,12 @@ object AgentCommandParser {
         val args = buildMap {
             if (argsJson != null) {
                 for (key in argsJson.keys()) {
-                    put(key, argsJson.opt(key)?.toString().orEmpty())
+                    // A JSON null arrives as JSONObject.NULL (a non-null
+                    // sentinel), so `?.toString()` does NOT short-circuit —
+                    // it yields the literal "null". Treat it as empty/absent,
+                    // matching optString()'s handling for `tool`/`final` above.
+                    val value = if (argsJson.isNull(key)) "" else argsJson.opt(key)?.toString().orEmpty()
+                    put(key, value)
                 }
             }
         }
