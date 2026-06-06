@@ -28,7 +28,6 @@ import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
-import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
@@ -39,8 +38,6 @@ import dev.touchpilot.app.navigation.AppSection
 import dev.touchpilot.app.navigation.NavigationController
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
 import dev.touchpilot.app.runtime.ToolExecutionController
-import dev.touchpilot.app.security.SensitiveTextRedactor
-import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.runtime.AgentRunController
 import dev.touchpilot.app.tools.AndroidToolExecutor
@@ -353,8 +350,6 @@ class MainActivity : Activity() {
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
             refreshChatScreen = { showSection(AppSection.CHAT) },
-            buildApprovalMessage = { buildApprovalMessage(it.request) },
-            formatToolCallBody = ::formatToolCallBody,
         )
     }
 
@@ -561,59 +556,6 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun buildApprovalMessage(request: ToolApprovalRequest): String {
-        val redactedArgs = SensitiveTextRedactor.redact(request.args)
-        val argsText = if (redactedArgs.isEmpty()) {
-            "none"
-        } else {
-            redactedArgs.entries.joinToString(separator = "\n") { entry ->
-                "${entry.key}: ${entry.value.take(MaxApprovalArgLength)}"
-            }
-        }
-
-        return """
-            Risk: ${request.tool.risk}
-            Tool: ${request.tool.name}
-            Description: ${request.tool.description}
-            Why approval is needed: ${request.policy.reason}
-            Data affected: ${request.policy.dataAffected}
-            If approved: ${request.policy.ifApproved}
-
-            Arguments:
-            $argsText
-        """.trimIndent()
-    }
-
-    private fun formatToolCallBody(cardModel: ToolCallCardModel): String {
-        return buildString {
-            appendLine("Arguments:")
-            append(formatToolArgs(cardModel.args))
-            if (cardModel.message.isNotBlank()) {
-                appendLine()
-                appendLine()
-                append("Result: ")
-                append(cardModel.message)
-            }
-            if (!cardModel.verificationStatus.isNullOrBlank()) {
-                appendLine()
-                appendLine()
-                append("Verification: ")
-                append(cardModel.verificationStatus)
-                if (!cardModel.verificationReason.isNullOrBlank()) {
-                    append(" - ")
-                    append(cardModel.verificationReason)
-                }
-            }
-        }
-    }
-
-    private fun formatToolArgs(args: Map<String, String>): String {
-        if (args.isEmpty()) return "none"
-        return args.entries.joinToString(separator = "\n") { entry ->
-            "${entry.key}: ${entry.value.take(MaxToolCardFieldLength)}"
-        }
-    }
-
     private fun openRunDetail(runId: String) {
         navigationController.openRunDetail(runId)
         showSection(navigationController.activeSection)
@@ -647,11 +589,6 @@ class MainActivity : Activity() {
 
     private fun exportDebugTrace(): File {
         return debugTraceExporter.exportDebugTrace()
-    }
-
-    private companion object {
-        const val MaxApprovalArgLength = 500
-        const val MaxToolCardFieldLength = 700
     }
 
 }

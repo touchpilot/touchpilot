@@ -55,8 +55,6 @@ class ChatScreenRenderer(
     private val cancelAgentRun: () -> Unit,
     private val openRunDetail: (String) -> Unit,
     private val refreshChatScreen: () -> Unit,
-    private val buildApprovalMessage: (ChatEvent.ApprovalPrompt) -> String,
-    private val formatToolCallBody: (ToolCallCardModel) -> String,
 ) {
     fun buildChatInputBar(): LinearLayout {
         val bar = LinearLayout(activity).apply {
@@ -502,7 +500,7 @@ class ChatScreenRenderer(
 
         content.addView(
             TextView(activity).apply {
-                text = formatToolCallBody(cardModel)
+                text = ChatToolTextFormatter.toolCallBody(cardModel)
                 textSize = 12.5f
                 setTextColor(Theme.BodyText)
                 setPadding(0, 8, 0, 0)
@@ -645,7 +643,7 @@ class ChatScreenRenderer(
         )
         content.addView(
             TextView(activity).apply {
-                text = buildApprovalMessage(event)
+                text = ChatToolTextFormatter.approvalMessage(event.request)
                 textSize = 12.5f
                 setTextColor(Theme.BodyText)
                 setPadding(0, 8, 0, 0)
