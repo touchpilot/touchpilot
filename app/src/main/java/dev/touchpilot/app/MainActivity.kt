@@ -557,20 +557,6 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun localModelStatusCard(): View {
-        val status = localModelRuntime.status()
-        return timelineCard(
-            "Local model",
-            """
-            Runtime: ${status.runtime}
-            Status: ${if (status.available) "available" else "fallback active"}
-            Model asset: ${status.modelAsset}
-            Version: ${status.version}
-            ${status.message}
-            """.trimIndent()
-        )
-    }
-
     private fun hideKeyboard(anchor: View) {
         val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         manager.hideSoftInputFromWindow(anchor.windowToken, 0)
@@ -649,38 +635,6 @@ class MainActivity : Activity() {
 
     private fun findAgentRun(runId: String): AgentRunRecord? {
         return agentRunController.findRun(runId)
-    }
-
-    private fun renderRecentAgentRuns() {
-        contentRoot.addView(
-            TextView(this).apply {
-                text = "Recent agent runs"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                setPadding(0, 12, 0, 4)
-            }
-        )
-        if (agentRunController.runHistory.isEmpty()) {
-            contentRoot.addView(
-                timelineCard(
-                    title = "No agent runs yet",
-                    body = "Run a task from Chat to inspect structured run details here."
-                )
-            )
-            return
-        }
-
-        agentRunController.runHistory.asReversed().forEach { record ->
-            contentRoot.addView(
-                timelineCard(
-                    title = record.task,
-                    body = AgentRunDetailFormatter.compactSummary(record),
-                    actionHint = "Tap for run details",
-                    onClick = { openRunDetail(record.id) }
-                )
-            )
-        }
     }
 
     private fun renderAgentRunDetailScreen() {
@@ -845,7 +799,6 @@ class MainActivity : Activity() {
     private companion object {
         const val MaxApprovalArgLength = 500
         const val MaxToolCardFieldLength = 700
-        val ProviderModeLabels = listOf("Local router", "Local model")
     }
 
 }
