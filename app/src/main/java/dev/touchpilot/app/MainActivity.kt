@@ -48,6 +48,7 @@ import dev.touchpilot.app.ui.rounded
 import dev.touchpilot.app.ui.shortLine
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.chat.ChatEvent
+import dev.touchpilot.app.ui.chat.ChatInputBarRenderer
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
@@ -163,7 +164,11 @@ class MainActivity : Activity() {
                 )
             )
 
-            chatInputBar = chatScreenRenderer().buildChatInputBar()
+            chatInputBar = ChatInputBarRenderer(
+                activity = this@MainActivity,
+                setChatTaskInput = { chatTaskInput = it },
+                submitChatMessage = ::submitChatMessage
+            ).render()
             addView(chatInputBar)
 
             addView(buildBottomNav())
@@ -345,8 +350,6 @@ class MainActivity : Activity() {
             agentRunState = { agentRunController.runState },
             runtimeLabel = { currentProviderMode().label() },
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
-            setChatTaskInput = { chatTaskInput = it },
-            submitChatMessage = ::submitChatMessage,
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
             refreshChatScreen = { showSection(AppSection.CHAT) },
