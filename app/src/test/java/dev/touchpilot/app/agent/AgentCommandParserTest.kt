@@ -121,6 +121,16 @@ class AgentCommandParserTest {
     }
 
     @Test
+    fun parsesActionWhenUnmatchedOpeningBracePrecedesValidCommand() {
+        val command = AgentCommandParser.parse(
+            """Thinking { unfinished note. Action: {"tool":"open_app","args":{"target":"Settings"}}"""
+        )
+
+        assertEquals("open_app", command.tool)
+        assertEquals("Settings", command.args["target"])
+    }
+
+    @Test
     fun prefersObjectWithToolOverTrailingValidJsonWithoutToolOrFinal() {
         val command = AgentCommandParser.parse(
             """{"tool":"open_app","args":{"target":"Settings"}} status: {"ok":true}"""

@@ -48,7 +48,10 @@ object AgentCommandParser {
         while (i < text.length) {
             if (text[i] == '{') {
                 val end = findMatchingCloseBrace(text, i)
-                if (end < 0) break
+                if (end < 0) {
+                    i++
+                    continue
+                }
                 val candidate = text.substring(i, end + 1)
                 runCatching { JSONObject(candidate) }
                     .getOrNull()
