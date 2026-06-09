@@ -283,7 +283,7 @@ local skill files
 
 Deliverables:
 
-- Define stable `SKILL.md` metadata.
+- Define stable `SKILL.md` metadata; see [Skills](SKILLS.md).
 - Add skill examples, allowed tools, risk level, and success criteria.
 - Add local skill matching from user requests.
 - Add skill enable/disable UI.
