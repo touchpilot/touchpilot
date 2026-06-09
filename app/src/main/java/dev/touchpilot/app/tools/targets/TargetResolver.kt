@@ -10,7 +10,7 @@ import dev.touchpilot.app.screen.ScreenNode
  * [ScreenContext].
  *
  * This is intentionally deterministic and local. It does not execute tools,
- * call Accessibility APIs, or ask a model. Later Milestone 4 tools can use the
+ * call Accessibility APIs, or ask a model. Android control tools use the
  * result to either execute the single best target or stop with a clear
  * ambiguity/not-found message.
  */

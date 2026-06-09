@@ -43,10 +43,10 @@ and safety-focused rather than a clone of any reference project.
 | --- | --- | --- |
 | Milestone 1 | Complete | Local-first Android agent foundation. |
 | Milestone 2 | Complete | Hybrid local AI core. |
-| Milestone 3 | Next | Screen context and local understanding. |
-| Milestone 4 | Planned | Reliable Android control. |
-| Milestone 5 | Planned | Local multi-step agent loop. |
-| Milestone 6 | Planned | Skills system v2. |
+| Milestone 3 | Complete | Screen context and local understanding. |
+| Milestone 4 | Complete | Reliable Android control. |
+| Milestone 5 | Complete | Local multi-step agent loop. |
+| Milestone 6 | Next | Skills system v2. |
 | Milestone 7 | Planned | Safety and policy v2. |
 | Milestone 8 | Planned | Local model quality. |
 | Milestone 9 | Planned | Product UI v2. |
@@ -57,8 +57,8 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 14 | Planned | Advanced local AI. |
 | Milestone 15 | Planned | 1.0 release. |
 
-The active roadmap now starts at Milestone 3. Milestones 1 and 2 are retained
-as completed baselines so future work has a clear starting point.
+The active roadmap now starts at Milestone 6. Milestones 1 through 5 are
+retained as completed baselines so future work has a clear starting point.
 
 ## Completed Baseline: Milestone 1
 
@@ -148,6 +148,10 @@ for ambiguous requests, and expose all work as local agent events.
 
 Goal: let TouchPilot understand the current Android screen locally.
 
+Status: complete. Milestone 3 established normalized screen context,
+sensitive-text redaction, screen summaries, suggested actions, and offline
+screen-understanding validation.
+
 ```text
 Android screen
       │
@@ -185,6 +189,11 @@ cloud inference.
 
 Goal: make Android action execution reliable enough for real tasks.
 
+Status: complete. Milestone 4 delivered selector-based target resolution,
+hardened core Android tools, bounded wait/retry behavior, explicit tool
+verification, and live validation coverage. See
+[Milestone 4 Reliable Android Control Validation](OFFLINE_VALIDATION_M4.md).
+
 ```text
 agent tool request
       │
@@ -218,6 +227,10 @@ home, and wait across common Android screens.
 ## Milestone 5: Local Agent Loop
 
 Goal: support short multi-step tasks through a local observe-decide-act loop.
+
+Status: complete. Milestone 5 established the bounded local agent loop,
+step-visible event stream, result feedback, stop conditions, and clarification
+handling.
 
 ```text
 user goal
