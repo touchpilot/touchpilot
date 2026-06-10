@@ -29,6 +29,76 @@ class SensitiveTextRedactorTest {
     }
 
     @Test
+    fun redactsHyphenSeparatedApiKey() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf("api-key" to "sk-test", "target" to "Settings")
+        )
+
+        assertEquals("[REDACTED]", redacted["api-key"])
+        assertEquals("Settings", redacted["target"])
+    }
+
+    @Test
+    fun redactsApiKeyWithoutSeparator() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf("apikey" to "sk-test")
+        )
+
+        assertEquals("[REDACTED]", redacted["apikey"])
+    }
+
+    @Test
+    fun redactsHttpStyleApiKeyHeaderKey() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf("X-API-Key" to "sk-test")
+        )
+
+        assertEquals("[REDACTED]", redacted["X-API-Key"])
+    }
+
+    @Test
+    fun redactsUppercaseApiKeyVariants() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf(
+                "API_KEY" to "v1",
+                "API-KEY" to "v2",
+                "APIKEY" to "v3"
+            )
+        )
+
+        assertEquals("[REDACTED]", redacted["API_KEY"])
+        assertEquals("[REDACTED]", redacted["API-KEY"])
+        assertEquals("[REDACTED]", redacted["APIKEY"])
+    }
+
+    @Test
+    fun redactsPasscodeKey() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf("passcode" to "1234")
+        )
+
+        assertEquals("[REDACTED]", redacted["passcode"])
+    }
+
+    @Test
+    fun redactsUppercasePasscodeKey() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf("Passcode" to "1234")
+        )
+
+        assertEquals("[REDACTED]", redacted["Passcode"])
+    }
+
+    @Test
+    fun doesNotRedactBenignKeyWithUnrelatedHyphen() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf("user-language" to "en-US")
+        )
+
+        assertEquals("en-US", redacted["user-language"])
+    }
+
+    @Test
     fun preservesAuthorizationBearerHeaderStructure() {
         val redacted = SensitiveTextRedactor.redact("Authorization: Bearer abc123xyz")
 
