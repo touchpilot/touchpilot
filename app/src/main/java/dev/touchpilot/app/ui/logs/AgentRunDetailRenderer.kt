@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.google.android.material.card.MaterialCardView
 import dev.touchpilot.app.R
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
@@ -18,7 +19,6 @@ import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.secondaryButton
-import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
@@ -31,12 +31,9 @@ class AgentRunDetailRenderer(
     private val runId: String?,
     private val findAgentRun: (String) -> AgentRunRecord?,
     private val closeRunDetail: () -> Unit,
-    private val exportRunTrace: (AgentRunRecord) -> File,
-    private val recordLogsResult: (String) -> Unit,
-    private val refreshCurrentSection: () -> Unit
+    private val exportRunTrace: (AgentRunRecord) -> File
 ) {
     fun render() {
-        contentRoot.addView(activity.sectionTitle("Run details"))
         contentRoot.addView(
             activity.secondaryButton("Go Back") {
                 closeRunDetail()
@@ -84,8 +81,11 @@ class AgentRunDetailRenderer(
         contentRoot.addView(
             activity.primaryButton("Export Run Trace") {
                 val file = exportRunTrace(record)
-                recordLogsResult("Run trace exported: ${file.absolutePath}")
-                refreshCurrentSection()
+                Toast.makeText(
+                    activity,
+                    "Run trace exported: ${file.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }.apply { id = R.id.export_run_trace_button }
         )
 

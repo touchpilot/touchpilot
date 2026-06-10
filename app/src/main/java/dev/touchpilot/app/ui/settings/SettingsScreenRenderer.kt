@@ -24,7 +24,6 @@ import dev.touchpilot.app.ui.label
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rowButtonParams
 import dev.touchpilot.app.ui.secondaryButton
-import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
@@ -51,7 +50,6 @@ class SettingsScreenRenderer(
     private val refreshSettingsScreen: () -> Unit
 ) {
     fun render() {
-        contentRoot.addView(activity.sectionTitle("Settings"))
         val panel = activeSettingsPanel()
         if (panel == null) {
             contentRoot.addView(settingsIntro("Choose a settings area to configure TouchPilot."))

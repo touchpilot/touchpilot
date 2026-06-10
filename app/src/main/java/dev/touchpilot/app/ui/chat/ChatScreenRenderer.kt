@@ -24,7 +24,6 @@ import dev.touchpilot.app.agent.timelineDetail
 import dev.touchpilot.app.agent.timelineLabel
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.rounded
-import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.withMargins
@@ -34,7 +33,6 @@ class ChatScreenRenderer(
     private val scrollView: ScrollView,
     private val contentRoot: LinearLayout,
     private val conversation: List<ChatEvent>,
-    private val statusPill: () -> View,
     private val agentRunState: () -> AgentRunState,
     private val runtimeLabel: () -> String,
     private val skillTitle: () -> String,
@@ -43,8 +41,6 @@ class ChatScreenRenderer(
     private val refreshChatScreen: () -> Unit,
 ) {
     fun render() {
-        contentRoot.addView(activity.sectionTitle("Chat"))
-        contentRoot.addView(statusPill())
         contentRoot.addView(runStatePill())
         contentRoot.addView(chatContextStrip())
 

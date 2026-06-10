@@ -23,7 +23,8 @@ data class AppShellViews(
     val scrollView: ScrollView,
     val contentRoot: LinearLayout,
     val chatInputBar: LinearLayout,
-    val statusView: TextView
+    val statusView: TextView,
+    val pageTitleView: TextView
 )
 
 class AppShellRenderer(
@@ -34,12 +35,18 @@ class AppShellRenderer(
     private val submitChatMessage: () -> Unit
 ) {
     private var bottomNav: TabLayout? = null
+    private var pageTitleView: TextView? = null
+
+    fun updatePageTitle(title: String) {
+        pageTitleView?.text = title
+    }
 
     fun render(): AppShellViews {
         lateinit var scrollView: ScrollView
         lateinit var contentRoot: LinearLayout
         lateinit var chatInputBar: LinearLayout
         lateinit var statusView: TextView
+        lateinit var headerPageTitle: TextView
 
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -47,6 +54,8 @@ class AppShellRenderer(
 
             val header = buildHeader()
             statusView = header.statusView
+            headerPageTitle = header.pageTitleView
+            pageTitleView = headerPageTitle
             addView(header.view)
 
             scrollView = ScrollView(activity).apply {
@@ -83,7 +92,8 @@ class AppShellRenderer(
             scrollView = scrollView,
             contentRoot = contentRoot,
             chatInputBar = chatInputBar,
-            statusView = statusView
+            statusView = statusView,
+            pageTitleView = headerPageTitle
         )
     }
 
@@ -110,6 +120,7 @@ class AppShellRenderer(
 
     private fun buildHeader(): HeaderViews {
         val statusView: TextView
+        val pageTitleView: TextView
         val view = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(28, 64, 28, 12)
@@ -120,7 +131,11 @@ class AppShellRenderer(
                 gravity = Gravity.CENTER_VERTICAL
             }
 
-            row.addView(
+            val brandRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            brandRow.addView(
                 TextView(activity).apply {
                     id = R.id.touchpilot_title
                     text = "Touch"
@@ -129,12 +144,34 @@ class AppShellRenderer(
                     setTextColor(Color.WHITE)
                 }
             )
-            row.addView(
+            brandRow.addView(
                 TextView(activity).apply {
                     text = "Pilot"
                     textSize = 24f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Theme.Accent)
+                }
+            )
+            row.addView(
+                brandRow,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            pageTitleView = TextView(activity).apply {
+                id = R.id.touchpilot_page_title
+                textSize = 20f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.rgb(150, 164, 178))
+                gravity = Gravity.END
+                setSingleLine(true)
+            }
+            row.addView(
+                pageTitleView,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    gravity = Gravity.END or Gravity.CENTER_VERTICAL
                 }
             )
 
@@ -148,7 +185,7 @@ class AppShellRenderer(
             }
             addView(statusView)
         }
-        return HeaderViews(view, statusView)
+        return HeaderViews(view, statusView, pageTitleView)
     }
 
     private fun buildBottomNav(): View {
@@ -218,6 +255,7 @@ class AppShellRenderer(
 
     private data class HeaderViews(
         val view: View,
-        val statusView: TextView
+        val statusView: TextView,
+        val pageTitleView: TextView
     )
 }

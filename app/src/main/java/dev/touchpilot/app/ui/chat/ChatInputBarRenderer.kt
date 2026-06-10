@@ -3,18 +3,19 @@ package dev.touchpilot.app.ui.chat
 import android.app.Activity
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
-import androidx.core.content.ContextCompat
-import com.google.android.material.button.MaterialButton
 import dev.touchpilot.app.R
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.rounded
 
 class ChatInputBarRenderer(
@@ -23,12 +24,15 @@ class ChatInputBarRenderer(
     private val submitChatMessage: () -> Unit
 ) {
     fun render(): LinearLayout {
+        val sendSize = activity.dp(36)
+        val iconSize = activity.dp(16)
+
         val bar = LinearLayout(activity).apply {
             id = R.id.chat_input_bar
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
             setBackgroundColor(Theme.SurfaceRaised)
-            setPadding(20, 12, 20, 10)
+            setPadding(16, 10, 16, 8)
         }
         bar.addView(
             View(activity).apply {
@@ -40,11 +44,14 @@ class ChatInputBarRenderer(
             }
         )
 
-        val inputRow = LinearLayout(activity).apply {
+        val inputContainer = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-            setPadding(0, 12, 0, 0)
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(Theme.Card, 24, Theme.StrokeDark)
+            setPadding(activity.dp(4), activity.dp(4), activity.dp(4), activity.dp(4))
+            minimumHeight = activity.dp(48)
         }
+
         val taskInput = EditText(activity).apply {
             id = R.id.agent_task_input
             hint = "Message TouchPilot..."
@@ -55,9 +62,8 @@ class ChatInputBarRenderer(
             setTextColor(Color.WHITE)
             setHintTextColor(Theme.MutedText)
             setLineSpacing(4f, 1f)
-            background = rounded(Theme.Card, 24, Theme.StrokeDark)
-            setPadding(22, 14, 22, 14)
-            minHeight = 56
+            background = null
+            setPadding(activity.dp(14), activity.dp(8), activity.dp(6), activity.dp(8))
             imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -71,43 +77,50 @@ class ChatInputBarRenderer(
             }
         }
         setChatTaskInput(taskInput)
-        inputRow.addView(
+        inputContainer.addView(
             taskInput,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
-            }
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        inputRow.addView(
-            MaterialButton(activity).apply {
-                id = R.id.run_agent_button
-                text = "Send"
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
-                isAllCaps = false
-                minHeight = 56
-                minWidth = 0
-                insetTop = 0
-                insetBottom = 0
-                gravity = Gravity.CENTER
-                setTextColor(Theme.OnAccent)
-                backgroundTintList = ColorStateList.valueOf(Theme.Accent)
-                cornerRadius = 28
-                setPadding(28, 0, 32, 0)
-                icon = ContextCompat.getDrawable(activity, R.drawable.ic_send)
-                iconTint = ColorStateList.valueOf(Theme.OnAccent)
-                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = 10
-                iconSize = 40
-                setOnClickListener { submitChatMessage() }
-            },
+
+        val sendButton = FrameLayout(activity).apply {
+            id = R.id.run_agent_button
+            background = rounded(Theme.Accent, sendSize / 2, Theme.Accent)
+            foreground = selectableItemBackgroundBorderless()
+            contentDescription = "Send"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { submitChatMessage() }
+            addView(
+                ImageView(activity).apply {
+                    setImageResource(R.drawable.ic_send)
+                    imageTintList = ColorStateList.valueOf(Theme.OnAccent)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                },
+                FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER)
+            )
+        }
+        inputContainer.addView(sendButton, LinearLayout.LayoutParams(sendSize, sendSize))
+
+        bar.addView(
+            inputContainer,
             LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                56
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                leftMargin = 10
+                topMargin = activity.dp(10)
             }
         )
-        bar.addView(inputRow)
         return bar
+    }
+
+    private fun selectableItemBackgroundBorderless(): Drawable? {
+        val attrs = intArrayOf(android.R.attr.selectableItemBackgroundBorderless)
+        val typedArray = activity.obtainStyledAttributes(attrs)
+        return try {
+            typedArray.getDrawable(0)
+        } finally {
+            typedArray.recycle()
+        }
     }
 }

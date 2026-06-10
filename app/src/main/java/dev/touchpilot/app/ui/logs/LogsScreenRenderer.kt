@@ -27,7 +27,6 @@ import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rounded
-import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.withMargins
 import org.json.JSONArray
@@ -37,21 +36,19 @@ import java.io.File
 class LogsScreenRenderer(
     private val activity: Activity,
     private val contentRoot: LinearLayout,
-    private val latestResult: () -> String,
-    private val exportDebugTrace: () -> File,
-    private val recordLogsResult: (String) -> Unit,
-    private val refreshLogsScreen: () -> Unit
+    private val exportDebugTrace: () -> File
 ) {
     fun render(): LinearLayout {
-        contentRoot.addView(activity.sectionTitle("Logs"))
         contentRoot.addView(
             activity.primaryButton("Export Debug Trace") {
                 val file = exportDebugTrace()
-                recordLogsResult("Debug trace exported: ${file.absolutePath}")
-                refreshLogsScreen()
+                Toast.makeText(
+                    activity,
+                    "Debug trace exported: ${file.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }.apply { id = R.id.export_debug_trace_button }
         )
-        contentRoot.addView(activity.timelineCard("Latest result", latestResult()))
         return LinearLayout(activity).apply {
             id = R.id.execution_log_list
             orientation = LinearLayout.VERTICAL

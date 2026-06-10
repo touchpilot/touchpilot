@@ -14,16 +14,12 @@ import dev.touchpilot.app.ui.formLabel
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rowButtonParams
 import dev.touchpilot.app.ui.secondaryButton
-import dev.touchpilot.app.ui.sectionTitle
-import dev.touchpilot.app.ui.timelineCard
 
 class ToolsScreenRenderer(
     private val activity: Activity,
     private val contentRoot: LinearLayout,
     private val toolExecutionController: ToolExecutionController,
-    private val statusPill: () -> View,
     private val openAccessibilitySettings: () -> Unit,
-    private val toolsResult: () -> String,
     private val refreshToolsScreen: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
     private val bindKeyboardScrollSpacer: (View) -> Unit,
@@ -33,8 +29,6 @@ class ToolsScreenRenderer(
     private val setLastFocusInputArgs: (Map<String, String>?) -> Unit
 ) {
     fun render() {
-        contentRoot.addView(activity.sectionTitle("Android Tools"))
-        contentRoot.addView(statusPill())
         contentRoot.addView(
             activity.secondaryButton("Open Accessibility Settings") {
                 openAccessibilitySettings()
@@ -306,8 +300,6 @@ class ToolsScreenRenderer(
                 toolExecutionController.executeAsyncAndRender("wait_for_idle", emptyMap())
             }.apply { id = R.id.wait_for_idle_button }
         )
-
-        contentRoot.addView(activity.timelineCard("Latest result", toolsResult()))
 
         val keyboardScrollSpacer = View(activity).apply {
             layoutParams = LinearLayout.LayoutParams(
