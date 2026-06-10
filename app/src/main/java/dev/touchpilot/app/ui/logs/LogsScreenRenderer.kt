@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.view.Gravity
 import android.view.View
@@ -22,6 +23,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import dev.touchpilot.app.R
 import dev.touchpilot.app.logging.DeveloperLogEntry
+import dev.touchpilot.app.logging.LogDetailSection
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.dp
@@ -142,18 +144,35 @@ class LogsScreenRenderer(
         dialog = AlertDialog.Builder(activity)
             .setView(detailView)
             .create()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            decorView.setPadding(
+                activity.dp(16),
+                activity.dp(24),
+                activity.dp(16),
+                activity.dp(24)
+            )
+        }
         dialog.show()
     }
 
     private fun developerLogDetailView(entry: DeveloperLogEntry, onClose: () -> Unit): View {
+        val statusColor = logStatusColor(entry.status)
+        val card = MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = statusColor
+            strokeWidth = 2
+            radius = 16f
+            cardElevation = 0f
+        }
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(6), activity.dp(8), activity.dp(6), 0)
+            setPadding(activity.dp(18), activity.dp(16), activity.dp(18), activity.dp(16))
         }
         val header = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(10))
+            setPadding(0, 0, 0, activity.dp(12))
         }
         header.addView(
             LinearLayout(activity).apply {
@@ -165,16 +184,16 @@ class LogsScreenRenderer(
                         typeface = Typeface.DEFAULT_BOLD
                         setTextColor(Color.WHITE)
                         letterSpacing = 0.03f
-                        maxLines = 1
+                        maxLines = 2
                     }
                 )
                 addView(
                     TextView(activity).apply {
                         text = DeveloperLogEntry.formatTimestamp(entry.timestampMillis)
                         textSize = 11f
-                        setTextColor(Color.rgb(88, 101, 112))
+                        setTextColor(Theme.MutedText)
                         maxLines = 1
-                        setPadding(0, 3, 0, 0)
+                        setPadding(0, activity.dp(4), 0, 0)
                     }
                 )
             },
@@ -186,30 +205,72 @@ class LogsScreenRenderer(
 
         content.addView(logMetaChipRow(entry))
 
-        val logTextView = TextView(activity).apply {
-            text = formattedLogText(entry.detailText())
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            setTextColor(Color.parseColor("#E8EAF6"))
-            setTextIsSelectable(true)
-            setLineSpacing(4f, 1f)
-            background = rounded(Color.parseColor("#161B22"), 12, Theme.StrokeDark)
-            setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(14))
-            isVerticalScrollBarEnabled = true
-            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        val sections = entry.detailSections()
+        val scrollContent = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            if (sections.isEmpty()) {
+                addView(logDetailSectionView(LogDetailSection("Message", "No log content recorded.")))
+            } else {
+                sections.forEachIndexed { index, section ->
+                    if (index > 0) {
+                        addView(
+                            View(activity).apply {
+                                layoutParams = LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    activity.dp(10)
+                                )
+                            }
+                        )
+                    }
+                    addView(logDetailSectionView(section))
+                }
+            }
         }
         content.addView(
             ScrollView(activity).apply {
-                addView(logTextView)
+                addView(scrollContent)
+                isVerticalScrollBarEnabled = true
+                overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     activity.dp(320)
                 ).apply {
-                    setMargins(0, activity.dp(12), 0, 0)
+                    topMargin = activity.dp(14)
                 }
             }
         )
-        return content
+        card.addView(content)
+        return card
+    }
+
+    private fun logDetailSectionView(section: LogDetailSection): View {
+        val sectionContainer = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(Theme.SurfaceRaised, 12, Theme.StrokeDark)
+            setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
+        }
+        sectionContainer.addView(
+            TextView(activity).apply {
+                text = section.title
+                textSize = 10.5f
+                typeface = Typeface.DEFAULT_BOLD
+                isAllCaps = true
+                letterSpacing = 0.06f
+                setTextColor(Theme.MutedText)
+            }
+        )
+        sectionContainer.addView(
+            TextView(activity).apply {
+                text = formattedLogText(section.body)
+                textSize = 12f
+                typeface = Typeface.MONOSPACE
+                setTextColor(Theme.BodyText)
+                setTextIsSelectable(true)
+                setLineSpacing(4f, 1f)
+                setPadding(0, activity.dp(8), 0, 0)
+            }
+        )
+        return sectionContainer
     }
 
     private fun logMetaChipRow(entry: DeveloperLogEntry): View {
@@ -221,16 +282,26 @@ class LogsScreenRenderer(
             addView(logMetaChip(entry.source.ifBlank { "unknown" }, Theme.Warning))
             addView(spacer(activity.dp(6)))
             addView(logMetaChip(entry.status.ifBlank { "log" }, logStatusColor(entry.status)))
+            if (entry.actor.isNotBlank()) {
+                addView(spacer(activity.dp(6)))
+                addView(logMetaChip(entry.actor, Theme.SurfaceRaised))
+            }
         }
     }
 
     private fun logMetaChip(text: String, bg: Int): TextView {
+        val stroke = if (bg == Theme.SurfaceRaised) Theme.StrokeDark else bg
+        val textColor = when (bg) {
+            Theme.Accent, Theme.Warning -> Theme.OnAccent
+            Theme.SurfaceRaised -> Theme.MutedText
+            else -> Color.WHITE
+        }
         return TextView(activity).apply {
             this.text = text.uppercase()
             textSize = 10f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(if (bg == Theme.Accent || bg == Theme.Warning) Theme.OnAccent else Color.WHITE)
-            background = rounded(bg, 8, bg)
+            setTextColor(textColor)
+            background = rounded(bg, 8, stroke)
             setPadding(activity.dp(10), activity.dp(4), activity.dp(10), activity.dp(4))
         }
     }

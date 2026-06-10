@@ -5,6 +5,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+data class LogDetailSection(
+    val title: String,
+    val body: String
+)
+
 data class DeveloperLogEntry(
     val id: Long = 0L,
     val timestampMillis: Long = System.currentTimeMillis(),
@@ -38,11 +43,29 @@ data class DeveloperLogEntry(
         return pieces.joinToString(separator = " / ")
     }
 
+    fun detailSections(): List<LogDetailSection> {
+        val message = result.ifBlank { errorDetails.ifBlank { payloadSummary } }
+        val sections = mutableListOf<LogDetailSection>()
+        if (message.isNotBlank()) {
+            sections += LogDetailSection("Message", message)
+        }
+        if (payloadSummary.isNotBlank() && payloadSummary != message) {
+            sections += LogDetailSection("Payload", payloadSummary)
+        }
+        if (errorDetails.isNotBlank() && errorDetails != message) {
+            sections += LogDetailSection("Error details", errorDetails)
+        }
+        if (details.isNotBlank()) {
+            sections += LogDetailSection("Log details", details)
+        }
+        return sections
+    }
+
     fun detailText(): String {
-        return buildString {
-            val logText = fullLogText()
-            if (logText.isNotBlank()) {
-                appendLine(logText)
+        return detailSections().joinToString(separator = "\n\n") { section ->
+            buildString {
+                appendLine(section.title)
+                append(section.body)
             }
         }.trim()
     }
