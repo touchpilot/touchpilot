@@ -43,7 +43,7 @@ jobs:
 
       - name: Ensure labels exist
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create "type: bug" --color d73a4a --description "Broken or unexpected behavior." --force
@@ -71,7 +71,7 @@ jobs:
 
       - name: Apply PR labels
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
