@@ -27,6 +27,7 @@ import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.memory.SkillRegistry
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.navigation.AppSection
 import dev.touchpilot.app.navigation.NavigationController
@@ -57,6 +58,7 @@ class MainActivity : Activity() {
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var agentRunController: AgentRunController
+    private lateinit var skillRegistry: SkillRegistry
     private lateinit var contentRoot: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var chatInputBar: LinearLayout
@@ -86,6 +88,12 @@ class MainActivity : Activity() {
         )
         localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
+        skillRegistry = SkillRegistry(
+            installedSkills = skills,
+            disabledSkillIds = loadDisabledSkillIds(),
+            activeSkillId = selectedSkillId
+        )
+        persistSkillRegistry()
 
         reasoningCore = DefaultLocalReasoningCore(
             invocation = defaultAgentRunInvocation(
@@ -96,7 +104,7 @@ class MainActivity : Activity() {
                 localModelRuntime = localModelRuntime
             ),
             sessionContext = { currentReasoningContext() },
-            availableSkills = { skills },
+            availableSkills = { skillRegistry.enabledSkills },
             screenContextProvider = { AccessibilityBridge.observeScreenContext() }
         )
         agentRunController = AgentRunController(
@@ -239,13 +247,24 @@ class MainActivity : Activity() {
     }
 
     private fun commitSelectedSkill(id: String?) {
-        selectedSkillId = id
+        skillRegistry = skillRegistry.select(id)
+        selectedSkillId = skillRegistry.activeSkillId
         expandedSkillReferenceId = when {
-            id == null -> null
-            expandedSkillReferenceId == id -> null
-            else -> id
+            selectedSkillId == null -> null
+            expandedSkillReferenceId == selectedSkillId -> null
+            else -> selectedSkillId
         }
-        preferences.edit().putString("active_skill", selectedSkillId).apply()
+        persistSkillRegistry()
+        showSection(AppSection.SETTINGS)
+    }
+
+    private fun setSkillEnabled(id: String, enabled: Boolean) {
+        skillRegistry = skillRegistry.setEnabled(id, enabled)
+        selectedSkillId = skillRegistry.activeSkillId
+        if (!skillRegistry.isEnabled(id) && expandedSkillReferenceId == id) {
+            expandedSkillReferenceId = null
+        }
+        persistSkillRegistry()
         showSection(AppSection.SETTINGS)
     }
 
@@ -336,7 +355,9 @@ class MainActivity : Activity() {
             closeSettingsPanel = navigationController::closeSettingsPanel,
             selectedSkillId = { selectedSkillId },
             expandedSkillReferenceId = { expandedSkillReferenceId },
+            isSkillEnabled = skillRegistry::isEnabled,
             commitSelectedSkill = ::commitSelectedSkill,
+            setSkillEnabled = ::setSkillEnabled,
             currentProviderMode = ::currentProviderMode,
             openAccessibilitySettings = ::openAccessibilitySettings,
             hideKeyboard = ::hideKeyboard,
@@ -384,7 +405,20 @@ class MainActivity : Activity() {
     }
 
     private fun selectedSkill(): Skill? {
-        return skills.firstOrNull { it.id == selectedSkillId }
+        return skillRegistry.activeSkill
+    }
+
+    private fun loadDisabledSkillIds(): Set<String> {
+        return preferences.getStringSet("disabled_skills", emptySet()).orEmpty()
+            .filter { id -> skills.any { skill -> skill.id == id } }
+            .toSet()
+    }
+
+    private fun persistSkillRegistry() {
+        preferences.edit()
+            .putString("active_skill", skillRegistry.activeSkillId)
+            .putStringSet("disabled_skills", skillRegistry.disabledSkillIds)
+            .apply()
     }
 
     private fun statusPill(): View {

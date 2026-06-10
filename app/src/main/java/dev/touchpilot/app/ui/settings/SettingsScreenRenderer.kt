@@ -42,7 +42,9 @@ class SettingsScreenRenderer(
     private val closeSettingsPanel: () -> Unit,
     private val selectedSkillId: () -> String?,
     private val expandedSkillReferenceId: () -> String?,
+    private val isSkillEnabled: (String) -> Boolean,
     private val commitSelectedSkill: (String?) -> Unit,
+    private val setSkillEnabled: (String, Boolean) -> Unit,
     private val currentProviderMode: () -> AgentProviderMode,
     private val openAccessibilitySettings: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
@@ -71,12 +73,13 @@ class SettingsScreenRenderer(
 
     private fun renderSkillsPanel() {
         val active = selectedSkill()
+        val enabledCount = skills.count { isSkillEnabled(it.id) }
         contentRoot.addView(
             activity.summaryCard(
                 title = "Active skill",
                 value = active?.title ?: "No skill selected",
-                chipText = if (active != null) "${active.allowedTools.size} tools" else "none",
-                chipAccent = active != null
+                chipText = "$enabledCount/${skills.size} enabled",
+                chipAccent = active != null || enabledCount > 0
             )
         )
 
@@ -95,6 +98,7 @@ class SettingsScreenRenderer(
             ) { commitSelectedSkill(null) }
         )
         skills.forEach { skill ->
+            val enabled = isSkillEnabled(skill.id)
             val description = skill.markdown.lineSequence()
                 .map { it.trim() }
                 .firstOrNull { it.isNotBlank() && !it.startsWith("#") && !it.startsWith("-") }
@@ -102,12 +106,21 @@ class SettingsScreenRenderer(
             contentRoot.addView(
                 skillSelectRow(
                     title = skill.title,
-                    subtitle = description.ifBlank { "No description provided" },
-                    badge = "${skill.allowedTools.size} tools",
-                    selected = selectedSkillId() == skill.id
-                ) { commitSelectedSkill(skill.id) }
+                    subtitle = if (enabled) {
+                        description.ifBlank { "No description provided" }
+                    } else {
+                        "Disabled — excluded from selection, matching, and execution."
+                    },
+                    badge = if (enabled) "${skill.allowedTools.size} tools" else "disabled",
+                    selected = enabled && selectedSkillId() == skill.id,
+                    enabled = enabled,
+                    trailingAction = if (enabled) "Disable" else "Enable",
+                    onTrailingAction = { setSkillEnabled(skill.id, !enabled) }
+                ) {
+                    if (enabled) commitSelectedSkill(skill.id)
+                }
             )
-            if (expandedSkillReferenceId() == skill.id) {
+            if (enabled && expandedSkillReferenceId() == skill.id) {
                 contentRoot.addView(
                     activity.timelineCard(
                         "Skill reference",
@@ -388,17 +401,22 @@ class SettingsScreenRenderer(
         subtitle: String,
         badge: String?,
         selected: Boolean,
+        enabled: Boolean = true,
+        trailingAction: String? = null,
+        onTrailingAction: (() -> Unit)? = null,
         onClick: () -> Unit
     ): View {
         val card = MaterialCardView(activity).apply {
-            setCardBackgroundColor(Theme.Card)
+            setCardBackgroundColor(if (enabled) Theme.Card else Theme.SurfaceRaised)
             strokeColor = if (selected) Theme.Accent else Theme.StrokeDark
             strokeWidth = if (selected) 2 else 1
             radius = 8f
             cardElevation = 0f
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { onClick() }
+            isClickable = enabled
+            isFocusable = enabled
+            if (enabled) {
+                setOnClickListener { onClick() }
+            }
         }
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -413,7 +431,13 @@ class SettingsScreenRenderer(
                 text = title
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(if (selected) Theme.Accent else Color.WHITE)
+                setTextColor(
+                    when {
+                        selected -> Theme.Accent
+                        enabled -> Color.WHITE
+                        else -> Theme.MutedText
+                    }
+                )
             }
         )
         column.addView(
@@ -428,12 +452,22 @@ class SettingsScreenRenderer(
         if (badge != null) {
             row.addView(activity.statusChip(badge, accent = selected))
         }
+        if (trailingAction != null && onTrailingAction != null) {
+            row.addView(
+                activity.secondaryButton(trailingAction) {
+                    onTrailingAction()
+                }.apply {
+                    minWidth = 96
+                    contentDescription = "$trailingAction $title skill"
+                }.withMargins(left = 8)
+            )
+        }
         card.addView(row)
         return card.withMargins(top = 6, bottom = 6)
     }
 
     private fun selectedSkill(): Skill? {
-        return skills.firstOrNull { it.id == selectedSkillId() }
+        return skills.firstOrNull { it.id == selectedSkillId() && isSkillEnabled(it.id) }
     }
 
     private fun shortHost(url: String): String {
