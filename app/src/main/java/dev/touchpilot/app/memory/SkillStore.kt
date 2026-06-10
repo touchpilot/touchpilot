@@ -23,7 +23,9 @@ class SkillStore(context: Context) {
             id = id,
             title = parseTitle(markdown).ifBlank { id },
             markdown = markdown.trim(),
-            allowedTools = parseAllowedTools(markdown)
+            allowedTools = parseAllowedTools(markdown),
+            aliases = parseMetadataList(markdown, "aliases", "Aliases"),
+            examples = parseMetadataList(markdown, "examples", "Examples")
         )
     }
 
@@ -61,7 +63,81 @@ class SkillStore(context: Context) {
         return tools
     }
 
+    private fun parseMetadataList(markdown: String, key: String, heading: String): List<String> {
+        return (parseFrontMatterList(markdown, key) + parseMarkdownListSection(markdown, heading))
+            .map { value -> value.cleanListValue() }
+            .filter { value -> value.isNotBlank() }
+            .distinct()
+    }
+
+    private fun parseFrontMatterList(markdown: String, key: String): List<String> {
+        val lines = markdown.lineSequence().toList()
+        if (lines.firstOrNull()?.trim() != "---") return emptyList()
+        val frontMatter = lines.drop(1).takeWhile { line -> line.trim() != "---" }
+        val values = mutableListOf<String>()
+        var collecting = false
+
+        frontMatter.forEach { line ->
+            val trimmed = line.trim()
+            if (collecting && trimmed.startsWith("-")) {
+                values += trimmed.removePrefix("-")
+                return@forEach
+            }
+            if (collecting && FrontMatterKeyPattern.matches(trimmed)) {
+                collecting = false
+            }
+
+            val prefix = "$key:"
+            if (trimmed.equals(prefix, ignoreCase = true)) {
+                collecting = true
+            } else if (trimmed.startsWith(prefix, ignoreCase = true)) {
+                values += trimmed.substringAfter(":")
+            }
+        }
+
+        return values
+    }
+
+    private fun parseMarkdownListSection(markdown: String, heading: String): List<String> {
+        val values = mutableListOf<String>()
+        var inSection = false
+
+        markdown.lineSequence().forEach { line ->
+            val trimmed = line.trim()
+            if (isSectionHeading(trimmed, heading)) {
+                inSection = true
+                return@forEach
+            }
+            if (!inSection) return@forEach
+
+            if (trimmed.startsWith("#") || (trimmed.endsWith(":") && !trimmed.startsWith("-"))) {
+                inSection = false
+                return@forEach
+            }
+            if (trimmed.startsWith("-")) {
+                values += trimmed.removePrefix("-")
+            }
+        }
+
+        return values
+    }
+
+    private fun isSectionHeading(line: String, heading: String): Boolean {
+        return line.equals("$heading:", ignoreCase = true) ||
+            line.equals("## $heading", ignoreCase = true) ||
+            line.equals("### $heading", ignoreCase = true)
+    }
+
+    private fun String.cleanListValue(): String {
+        return trim()
+            .trim('"', '\'')
+            .trim()
+            .removeSurrounding("`")
+            .trim()
+    }
+
     private companion object {
         const val SkillsRoot = "skills"
+        val FrontMatterKeyPattern = Regex("[A-Za-z_][A-Za-z0-9_]*:.*")
     }
 }
