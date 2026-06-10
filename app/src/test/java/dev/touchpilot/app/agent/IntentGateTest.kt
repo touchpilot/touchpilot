@@ -213,4 +213,61 @@ class IntentGateTest {
         // trip the press_home exact command. Screen inquiry runs first.
         assertIs<IntentDecision.ScreenInquiry>(gate.classify("summarize the home screen"))
     }
+
+    @Test
+    fun openAppWithTargetContainingBackIsOpenApp() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("open back button"))
+        assertEquals("open_app", command.tool)
+        assertEquals("back button", command.args["target"])
+    }
+
+    @Test
+    fun openAppWithTargetContainingHomeIsOpenApp() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("open home assistant"))
+        assertEquals("open_app", command.tool)
+        assertEquals("home assistant", command.args["target"])
+    }
+
+    @Test
+    fun tapTargetContainingHomeIsTap() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("tap home shortcut"))
+        assertEquals("tap", command.tool)
+        assertEquals("home shortcut", command.args["text"])
+    }
+
+    @Test
+    fun tapTargetContainingScrollIsTap() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("tap scroll bar"))
+        assertEquals("tap", command.tool)
+        assertEquals("scroll bar", command.args["text"])
+    }
+
+    @Test
+    fun tapTargetContainingBackIsTap() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("tap back arrow"))
+        assertEquals("tap", command.tool)
+        assertEquals("back arrow", command.args["text"])
+    }
+
+    @Test
+    fun pressBackPhraseRequiresWordBoundary() {
+        // "feedback" contains the substring "back" but is not a navigation
+        // intent. Without a word boundary the bare check would misroute it.
+        assertIs<IntentDecision.LocalModelNeeded>(gate.classify("give feedback"))
+        assertIs<IntentDecision.LocalModelNeeded>(gate.classify("comeback"))
+    }
+
+    @Test
+    fun pressHomePhraseRequiresWordBoundary() {
+        // "homemade" contains the substring "home" but is not a navigation
+        // intent. The bare check would misroute it to press_home.
+        assertIs<IntentDecision.LocalModelNeeded>(gate.classify("buy homemade pizza"))
+    }
+
+    @Test
+    fun scrollPhraseRequiresWordBoundary() {
+        // "scrollbar" contains the substring "scroll" but is not a navigation
+        // intent. The bare check would misroute it to the scroll tool.
+        assertIs<IntentDecision.LocalModelNeeded>(gate.classify("the scrollbar is broken"))
+    }
 }

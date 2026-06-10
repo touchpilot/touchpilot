@@ -26,8 +26,7 @@ class BoundedLocalAgentLoop(
         task: String,
         limits: AgentRunLimits = AgentRunLimits(),
         listener: AgentEventListener = AgentEventListener {},
-        onStepsUpdated: ((List<AgentStep>) -> Unit)? = null,
-        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
+        onStepsUpdated: ((List<AgentStep>) -> Unit)? = null
     ): AgentRunResult {
         val transcript = StringBuilder()
         val events = mutableListOf<AgentEvent>()

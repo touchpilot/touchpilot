@@ -43,15 +43,17 @@ jobs:
 
       - name: Ensure labels exist
         env:
-          GH_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create "type: bug" --color d73a4a --description "Broken or unexpected behavior." --force
           gh label create "type: feature" --color a2eeef --description "New capability or product behavior." --force
+          gh label create "type: enhancement" --color a2eeef --description "Improvement to existing behavior." --force
           gh label create "type: docs" --color 0075ca --description "Documentation-only or documentation-focused work." --force
           gh label create "type: refactor" --color cfd3d7 --description "Internal code change without intended behavior change." --force
           gh label create "type: test" --color bfe5bf --description "Test coverage, fixtures, or validation work." --force
           gh label create "type: chore" --color ededed --description "Maintenance, dependencies, or repository upkeep." --force
+          gh label create "type: other" --color ededed --description "Work that does not match another type label." --force
           gh label create "area: android-control" --color 5319e7 --description "AccessibilityService, Android actions, UI observation, or tool execution." --force
           gh label create "area: agent" --color 5319e7 --description "Agent loop, prompts, provider routing, or command parsing." --force
           gh label create "area: local-inference" --color 5319e7 --description "Local router, LiteRT, ExecuTorch, llama.cpp, or model runtime work." --force
@@ -67,20 +69,80 @@ jobs:
           gh label create "status: ready" --color 0e8a16 --description "Ready for implementation." --force
           gh label create "status: in-progress" --color 1d76db --description "Actively being worked on." --force
 
-      - name: Add triage status
+      - name: Apply PR labels
         env:
-          GH_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.GH_LABELER_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          gh api \
-            --method POST \
-            "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" \
-            --field labels[]="status: needs-triage"
+          title="$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json title --jq '.title' | tr '[:upper:]' '[:lower:]')"
+          files="$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json files --jq '.files[].path')"
+          current_labels="$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json labels --jq '.labels[].name')"
 
-      - name: Apply labels from changed files
-        uses: actions/labeler@v5
-        with:
-          repo-token: ${{ secrets.GH_LABELER_TOKEN || github.token }}
-          configuration-path: .github/labeler.yml
-          pr-number: ${{ steps.pr.outputs.number }}
+          type_label="type: other"
+
+          if echo "$title" | grep -Eq '(^|[^a-z])(fix|bug|bugfix)([^a-z]|$)'; then
+            type_label="type: bug"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(feat|feature)([^a-z]|$)'; then
+            type_label="type: feature"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(enhance|enhancement|improve|improvement)([^a-z]|$)'; then
+            type_label="type: enhancement"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(refactor)([^a-z]|$)'; then
+            type_label="type: refactor"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(docs|doc)([^a-z]|$)' || echo "$files" | grep -Eq '(^docs/|^examples/|\.md$)'; then
+            type_label="type: docs"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(test|tests)([^a-z]|$)' || echo "$files" | grep -Eq 'Test\.(kt|java|cpp)$'; then
+            type_label="type: test"
+          elif echo "$title" | grep -Eq '(^|[^a-z])(chore|ci|build)([^a-z]|$)' || echo "$files" | grep -Eq '^\.github/|^gradle/|^gradlew'; then
+            type_label="type: chore"
+          fi
+
+          labels_to_add=("$type_label")
+
+          if echo "$files" | grep -Eq '(^|/)androidcontrol/|(^|/)tools/'; then
+            labels_to_add+=("area: android-control")
+          fi
+          if echo "$files" | grep -Eq '(^|/)agent/'; then
+            labels_to_add+=("area: agent")
+          fi
+          if echo "$files" | grep -Eq '(^docs/LOCAL_INFERENCE\.md$|app/src/main/java/.*/agent/AgentCommandProvider\.kt$|app/src/main/java/.*/localinference/)'; then
+            labels_to_add+=("area: local-inference")
+          fi
+          if echo "$files" | grep -Eq '(^app/src/main/assets/skills/|app/src/main/java/.*/memory/Skill[^/]*$)'; then
+            labels_to_add+=("area: skills")
+          fi
+          if echo "$files" | grep -Eq '(^|/)mcp/|^docs/MCP\.md$|^examples/mcp-bridge\.md$'; then
+            labels_to_add+=("area: mcp")
+          fi
+          if echo "$files" | grep -Eq '(^|/)security/'; then
+            labels_to_add+=("area: security")
+          fi
+          if echo "$files" | grep -Eq '^app/src/main/java/dev/touchpilot/app/MainActivity\.kt$|^app/src/main/res/'; then
+            labels_to_add+=("area: ui")
+          fi
+          if echo "$files" | grep -Eq '^\.github/workflows/|^\.github/labeler\.yml$|^\.github/labels\.yml$'; then
+            labels_to_add+=("area: ci")
+          fi
+          if echo "$files" | grep -Eq '(^docs/|^examples/|\.md$)'; then
+            labels_to_add+=("area: docs")
+          fi
+          if ! echo "$current_labels" | grep -Eq '^status: '; then
+            labels_to_add+=("status: needs-triage")
+          fi
+
+          managed_recomputed_labels=(
+            "type: bug" "type: feature" "type: enhancement" "type: docs" "type: refactor" "type: test" "type: chore" "type: other"
+            "area: android-control" "area: agent" "area: local-inference" "area: skills" "area: mcp" "area: security" "area: ui" "area: ci" "area: docs"
+          )
+
+          for existing in "${managed_recomputed_labels[@]}"; do
+            encoded="${existing// /%20}"
+            gh api --method DELETE "repos/${GH_REPO}/issues/${PR_NUMBER}/labels/${encoded}" --silent 2>/dev/null || true
+          done
+
+          for label in "${labels_to_add[@]}"; do
+            gh api \
+              --method POST \
+              "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" \
+              --field labels[]="$label"
+          done

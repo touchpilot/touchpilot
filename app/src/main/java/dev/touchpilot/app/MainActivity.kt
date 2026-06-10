@@ -1,119 +1,76 @@
 package dev.touchpilot.app
 
 import android.app.Activity
-import android.app.AlertDialog
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Rect
-import android.graphics.Typeface
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
-import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.animation.DecelerateInterpolator
-import android.text.InputType
-import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
-import androidx.annotation.DrawableRes
-import androidx.core.content.ContextCompat
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
-import com.google.android.material.tabs.TabLayout
-import dev.touchpilot.app.agent.AgentEvent
-import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
-import dev.touchpilot.app.agent.AgentRunCompletionStatus
-import dev.touchpilot.app.agent.AgentRunCompletionSummary
-import dev.touchpilot.app.agent.AgentRunDetailFormatter
-import dev.touchpilot.app.agent.AgentRunDisplayStep
-import dev.touchpilot.app.agent.AgentRunIds
 import dev.touchpilot.app.agent.AgentRunRecord
-import dev.touchpilot.app.agent.AgentRunResult
-import dev.touchpilot.app.agent.AgentRunState
-import dev.touchpilot.app.agent.AgentRunStepStatus
-import dev.touchpilot.app.agent.AgentScreenRecord
 import dev.touchpilot.app.agent.AgentStep
-import dev.touchpilot.app.agent.AgentStepStatus
-import dev.touchpilot.app.agent.AgentStepStopReason
-import dev.touchpilot.app.agent.AgentStepTimelineBuilder
-import dev.touchpilot.app.agent.timelineChipAccent
-import dev.touchpilot.app.agent.timelineChipLabel
-import dev.touchpilot.app.agent.timelineDetail
-import dev.touchpilot.app.agent.timelineLabel
-import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
-import dev.touchpilot.app.agent.ToolCallCardModel
-import dev.touchpilot.app.agent.ToolCallPolicyStatus
-import dev.touchpilot.app.agent.ToolCallResultStatus
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
-import dev.touchpilot.app.localinference.LocalModelStatus
-import dev.touchpilot.app.logging.DeveloperLogEntry
-import dev.touchpilot.app.mcp.McpHttpClient
+import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
-import dev.touchpilot.app.security.SensitiveTextRedactor
-import dev.touchpilot.app.security.ToolApprovalRequest
+import dev.touchpilot.app.navigation.AppSection
+import dev.touchpilot.app.navigation.NavigationController
+import dev.touchpilot.app.runtime.ToolExecutionCallbacks
+import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.security.ToolApprovalProvider
-import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.runtime.AgentRunController
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
-import dev.touchpilot.app.tools.ToolResult
-import org.json.JSONArray
-import org.json.JSONObject
+import dev.touchpilot.app.ui.AppShellRenderer
+import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.label
+import dev.touchpilot.app.ui.shortLine
+import dev.touchpilot.app.ui.timelineCard
+import dev.touchpilot.app.ui.chat.ChatEvent
+import dev.touchpilot.app.ui.chat.ChatScreenRenderer
+import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
+import dev.touchpilot.app.ui.logs.LogsScreenRenderer
+import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
+import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
     private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
+    private lateinit var debugTraceExporter: DebugTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
+    private lateinit var agentRunController: AgentRunController
     private lateinit var contentRoot: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var chatInputBar: LinearLayout
     private lateinit var chatTaskInput: EditText
     private lateinit var statusView: TextView
     private lateinit var executionLogList: LinearLayout
-    private var bottomNav: TabLayout? = null
+    private lateinit var appShellRenderer: AppShellRenderer
+    private val navigationController = NavigationController()
 
-    private var activeSection = Section.CHAT
-    private var activeSettingsPanel: SettingsPanel? = null
-    private var pendingSettingsAnimationDirection = 0
     private var selectedSkillId: String? = null
     private var expandedSkillReferenceId: String? = null
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
-    private var agentRunState: AgentRunState = AgentRunState.IDLE
-    private var agentCancellationSignal: AtomicBoolean = AtomicBoolean(false)
-    private val agentRunHistory = mutableListOf<AgentRunRecord>()
-    private var activeRunDetailId: String? = null
-    private var pendingClarification: PendingClarification? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -122,6 +79,11 @@ class MainActivity : Activity() {
         skills = SkillStore(this).loadSkills()
         ToolExecutionLog.configure(this)
         toolExecutor = AndroidToolExecutor(this)
+        debugTraceExporter = DebugTraceExporter(
+            context = this,
+            accessibilityConnected = { AccessibilityBridge.isConnected() },
+            observeScreen = { toolExecutor.observeScreen() }
+        )
         localModelRuntime = LiteRtCommandModelRuntime(this)
         selectedSkillId = preferences.getString("active_skill", null)
 
@@ -129,13 +91,23 @@ class MainActivity : Activity() {
             invocation = defaultAgentRunInvocation(
                 toolExecutor = toolExecutor,
                 approvalProvider = ToolApprovalProvider { request ->
-                    approveAgentTool(request)
+                    agentRunController.approveTool(request)
                 },
                 localModelRuntime = localModelRuntime
             ),
             sessionContext = { currentReasoningContext() },
             availableSkills = { skills },
             screenContextProvider = { AccessibilityBridge.observeScreenContext() }
+        )
+        agentRunController = AgentRunController(
+            reasoningCore = reasoningCore,
+            conversation = conversation,
+            currentProviderMode = ::currentProviderMode,
+            runOnUiThread = { block -> runOnUiThread(block) },
+            showChat = { showSection(AppSection.CHAT) },
+            refreshExecutionLog = ::refreshExecutionLog,
+            refreshStatus = ::refreshStatus,
+            refreshStepTimeline = ::refreshStepTimeline,
         )
 
         if (conversation.isEmpty()) {
@@ -146,7 +118,7 @@ class MainActivity : Activity() {
         }
 
         setContentView(buildRoot())
-        showSection(Section.CHAT)
+        showSection(AppSection.CHAT)
         refreshStatus()
     }
 
@@ -154,171 +126,45 @@ class MainActivity : Activity() {
         super.onResume()
         refreshStatus()
         if (::contentRoot.isInitialized) {
-            showSection(activeSection)
+            showSection(navigationController.activeSection)
         }
     }
 
     private fun buildRoot(): View {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Theme.Background)
-
-            addView(buildHeader())
-
-            scrollView = ScrollView(this@MainActivity).apply {
-                id = R.id.chat_scroll_view
-                setFillViewport(false)
-                isScrollbarFadingEnabled = true
-                contentRoot = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(24, 18, 24, 20)
-                }
-                addView(contentRoot)
-            }
-            addView(
-                scrollView,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    0,
-                    1f
-                )
-            )
-
-            chatInputBar = buildChatInputBar()
-            addView(chatInputBar)
-
-            addView(buildBottomNav())
-        }
-    }
-
-    private fun buildHeader(): View {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(28, 64, 28, 12)
-            setBackgroundColor(Theme.Background)
-
-            val row = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-
-            row.addView(
-                TextView(this@MainActivity).apply {
-                    id = R.id.touchpilot_title
-                    text = "Touch"
-                    textSize = 24f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.WHITE)
-                }
-            )
-            row.addView(
-                TextView(this@MainActivity).apply {
-                    text = "Pilot"
-                    textSize = 24f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Theme.Accent)
-                }
-            )
-
-            addView(row)
-
-            statusView = TextView(this@MainActivity).apply {
-                id = R.id.touchpilot_status
-                textSize = 11.5f
-                setPadding(0, 6, 0, 0)
-                setTextColor(Color.rgb(150, 164, 178))
-            }
-            addView(statusView)
-        }
-    }
-
-    private fun buildBottomNav(): View {
-        return TabLayout(this).apply {
-            bottomNav = this
-            setBackgroundColor(Theme.Card)
-            setPadding(12, 8, 12, 18)
-            tabMode = TabLayout.MODE_FIXED
-            tabGravity = TabLayout.GRAVITY_FILL
-            setSelectedTabIndicatorColor(Color.TRANSPARENT)
-            setTabTextColors(Theme.NavText, Theme.Accent)
-
-            Section.values().forEach { section ->
-                addTab(
-                    newTab()
-                        .setCustomView(bottomNavLabel(section))
-                        .setTag(section),
-                    section == activeSection
-                )
-            }
-
-            addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab) {
-                    (tab.tag as? Section)?.let { section ->
-                        if (section != activeSection) {
-                            showSection(section)
-                        }
-                    }
-                }
-
-                override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-                override fun onTabReselected(tab: TabLayout.Tab) = Unit
-            })
-        }.withMargins()
-    }
-
-    private fun bottomNavLabel(section: Section): View {
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            minimumWidth = 0
-            minimumHeight = 56
-            setPadding(8, 6, 8, 6)
-        }
-        column.addView(
-            ImageView(this).apply {
-                setImageResource(section.iconRes)
-                imageTintList = ColorStateList.valueOf(Theme.NavText)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                contentDescription = section.label
-            },
-            LinearLayout.LayoutParams(40, 40)
+        appShellRenderer = AppShellRenderer(
+            activity = this,
+            activeSection = { navigationController.activeSection },
+            onSectionSelected = ::showSection,
+            setChatTaskInput = { chatTaskInput = it },
+            submitChatMessage = ::submitChatMessage
         )
-        column.addView(
-            TextView(this).apply {
-                text = section.label
-                gravity = Gravity.CENTER
-                setSingleLine(true)
-                textSize = 11f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Theme.NavText)
-                setPadding(0, 2, 0, 0)
-            }
-        )
-        return column
+        val shellViews = appShellRenderer.render()
+        scrollView = shellViews.scrollView
+        contentRoot = shellViews.contentRoot
+        chatInputBar = shellViews.chatInputBar
+        statusView = shellViews.statusView
+        return shellViews.root
     }
 
-    private fun showSection(section: Section) {
-        if (section != Section.CHAT && section != Section.LOGS) {
-            activeRunDetailId = null
-        }
-        activeSection = section
+    private fun showSection(section: AppSection) {
+        navigationController.showSection(section)
         updateBottomNav()
-        chatInputBar.visibility = if (section == Section.CHAT) View.VISIBLE else View.GONE
+        chatInputBar.visibility = if (section == AppSection.CHAT) View.VISIBLE else View.GONE
         contentRoot.removeAllViews()
         when (section) {
-            Section.CHAT -> renderChatScreen()
-            Section.TOOLS -> renderToolsScreen()
-            Section.LOGS -> renderLogsScreen()
-            Section.SETTINGS -> renderSettingsScreen()
+            AppSection.CHAT -> renderChatScreen()
+            AppSection.TOOLS -> renderToolsScreen()
+            AppSection.LOGS -> renderLogsScreen()
+            AppSection.SETTINGS -> renderSettingsScreen()
         }
         animatePendingSettingsTransition(section)
     }
 
-    private fun animatePendingSettingsTransition(section: Section) {
-        if (section != Section.SETTINGS || pendingSettingsAnimationDirection == 0) return
+    private fun animatePendingSettingsTransition(section: AppSection) {
+        if (section != AppSection.SETTINGS) return
 
-        val direction = pendingSettingsAnimationDirection
-        pendingSettingsAnimationDirection = 0
+        val direction = navigationController.consumeSettingsAnimationDirection()
+        if (direction == 0) return
         val travel = (contentRoot.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).toFloat()
         contentRoot.translationX = travel * direction
         contentRoot.alpha = 0.96f
@@ -331,111 +177,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateBottomNav() {
-        val nav = bottomNav ?: return
-        val index = Section.values().indexOf(activeSection)
-        if (index >= 0 && nav.selectedTabPosition != index) {
-            nav.getTabAt(index)?.select()
-        }
-        Section.values().forEachIndexed { tabIndex, section ->
-            val container = nav.getTabAt(tabIndex)?.customView as? LinearLayout
-            val selected = section == activeSection
-            val tint = if (selected) Theme.OnAccent else Theme.NavText
-            (container?.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(tint)
-            (container?.getChildAt(1) as? TextView)?.setTextColor(tint)
-            container?.background = rounded(
-                fill = if (selected) Theme.Accent else Color.TRANSPARENT,
-                radius = 10,
-                stroke = if (selected) Theme.Accent else Color.TRANSPARENT
-            )
-        }
-    }
-
-    private fun buildChatInputBar(): LinearLayout {
-        val bar = LinearLayout(this).apply {
-            id = R.id.chat_input_bar
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-            setBackgroundColor(Theme.SurfaceRaised)
-            setPadding(20, 12, 20, 10)
-        }
-        bar.addView(
-            View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    1
-                )
-                setBackgroundColor(Theme.StrokeDark)
-            }
-        )
-
-        val inputRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-            setPadding(0, 12, 0, 0)
-        }
-        chatTaskInput = EditText(this).apply {
-            id = R.id.agent_task_input
-            hint = "Message TouchPilot..."
-            setSingleLine(false)
-            minLines = 1
-            maxLines = 5
-            textSize = 14.5f
-            setTextColor(Color.WHITE)
-            setHintTextColor(Theme.MutedText)
-            setLineSpacing(4f, 1f)
-            background = rounded(Theme.Card, 24, Theme.StrokeDark)
-            setPadding(22, 14, 22, 14)
-            minHeight = 56
-            imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == EditorInfo.IME_ACTION_SEND) {
-                    submitChatMessage()
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-        inputRow.addView(
-            chatTaskInput,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
-            }
-        )
-        inputRow.addView(
-            MaterialButton(this).apply {
-                id = R.id.run_agent_button
-                text = "Send"
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
-                isAllCaps = false
-                minHeight = 56
-                minWidth = 0
-                insetTop = 0
-                insetBottom = 0
-                gravity = Gravity.CENTER
-                setTextColor(Theme.OnAccent)
-                backgroundTintList = ColorStateList.valueOf(Theme.Accent)
-                cornerRadius = 28
-                setPadding(28, 0, 32, 0)
-                icon = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_send)
-                iconTint = ColorStateList.valueOf(Theme.OnAccent)
-                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = 10
-                iconSize = 40
-                setOnClickListener { submitChatMessage() }
-            },
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                56
-            ).apply {
-                leftMargin = 10
-            }
-        )
-        bar.addView(inputRow)
-        return bar
+        appShellRenderer.updateBottomNav()
     }
 
     private fun submitChatMessage() {
@@ -443,655 +185,38 @@ class MainActivity : Activity() {
         if (task.isEmpty()) return
         hideKeyboard(chatTaskInput)
         chatTaskInput.text.clear()
-        runAgentFromChat(task)
+        agentRunController.startFromChat(task)
+    }
+
+    private fun chatScreenRenderer(): ChatScreenRenderer {
+        return ChatScreenRenderer(
+            activity = this,
+            scrollView = scrollView,
+            contentRoot = contentRoot,
+            conversation = conversation,
+            statusPill = ::statusPill,
+            agentRunState = { agentRunController.runState },
+            runtimeLabel = { currentProviderMode().label() },
+            skillTitle = { selectedSkill()?.title ?: "No skill selected" },
+            cancelAgentRun = agentRunController::cancelRun,
+            openRunDetail = ::openRunDetail,
+            refreshChatScreen = { showSection(AppSection.CHAT) },
+        )
     }
 
     private fun renderChatScreen() {
-        if (activeRunDetailId != null) {
+        if (navigationController.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
         }
 
-        contentRoot.addView(sectionTitle("Chat"))
-        contentRoot.addView(statusPill())
-        contentRoot.addView(runStatePill())
-        contentRoot.addView(chatContextStrip())
-
-        conversation.forEach { event ->
-            contentRoot.addView(renderChatEvent(event))
-        }
-
-        contentRoot.addView(
-            View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    24
-                )
-            }
-        )
-        scrollChatToBottom()
+        chatScreenRenderer().render()
     }
 
     private fun scrollChatToBottom() {
         scrollView.post {
             scrollView.fullScroll(View.FOCUS_DOWN)
         }
-    }
-
-    private fun renderChatEvent(event: ChatEvent): View {
-        return when (event) {
-            is ChatEvent.User -> userBubble(event.text)
-            is ChatEvent.Agent -> agentBubble(event.text, event.detail)
-            is ChatEvent.Working -> workingBubble(event.text, event.detail)
-            is ChatEvent.Timeline -> timelineCard(
-                title = event.title,
-                body = event.body,
-                actionHint = event.runId?.let { "Tap for run details" },
-                onClick = event.runId?.let { runId -> { openRunDetail(runId) } }
-            )
-            is ChatEvent.StepTimeline -> stepTimelineCard(event)
-            is ChatEvent.CompletionSummary -> completionSummaryCard(event.summary, event.runId)
-            is ChatEvent.ToolCall -> toolCallCard(event.card)
-            is ChatEvent.ApprovalPrompt -> approvalCard(event)
-            is ChatEvent.ClarificationPrompt -> clarificationCard(event)
-        }
-    }
-
-    private fun toolCallCard(cardModel: ToolCallCardModel): View {
-        val blocked = cardModel.policyStatus == ToolCallPolicyStatus.BLOCKED ||
-            cardModel.resultStatus == ToolCallResultStatus.BLOCKED
-        val failed = cardModel.resultStatus == ToolCallResultStatus.FAILED
-        val needsApproval = cardModel.policyStatus == ToolCallPolicyStatus.APPROVAL_REQUIRED
-        val stroke = when {
-            blocked || failed -> Theme.Danger
-            needsApproval -> Theme.Warning
-            cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED -> Theme.Accent
-            else -> Theme.StrokeDark
-        }
-
-        val card = MaterialCardView(this).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = stroke
-            strokeWidth = if (blocked || failed || needsApproval) 2 else 1
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
-        }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        header.addView(
-            TextView(this).apply {
-                text = cardModel.tool
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        header.addView(
-            statusChip(cardModel.resultStatus.label, accent = cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED)
-        )
-        content.addView(header)
-
-        content.addView(
-            TextView(this).apply {
-                text = "Policy: ${cardModel.policyStatus.label}"
-                textSize = 11.5f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(stroke)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-
-        content.addView(
-            TextView(this).apply {
-                text = formatToolCallBody(cardModel)
-                textSize = 12.5f
-                setTextColor(Theme.BodyText)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-        card.addView(content)
-        return card.withMargins(top = 6, right = 24, bottom = 6)
-    }
-
-    private fun completionSummaryCard(summary: AgentRunCompletionSummary, runId: String): View {
-        val stroke = completionSummaryStroke(summary.status)
-        val card = MaterialCardView(this).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = stroke
-            strokeWidth = 2
-            radius = 8f
-            cardElevation = 0f
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { openRunDetail(runId) }
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
-        }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        header.addView(
-            TextView(this).apply {
-                text = "Task summary"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            }
-        )
-        header.addView(
-            statusChip(
-                summary.status.label,
-                accent = summary.status == AgentRunCompletionStatus.COMPLETED,
-            )
-        )
-        content.addView(header)
-        content.addView(completionSummaryRow("Stop reason", summary.stopReason))
-        content.addView(
-            completionSummaryRow(
-                "Steps",
-                "${summary.stepCount} step${if (summary.stepCount == 1) "" else "s"}",
-            )
-        )
-        content.addView(
-            completionSummaryRow(
-                "Last verification",
-                summary.lastVerificationOutcome ?: "None recorded",
-            )
-        )
-        summary.nextAction?.let { nextAction ->
-            content.addView(completionSummaryRow("Next", nextAction))
-        }
-        content.addView(
-            TextView(this).apply {
-                text = "Tap for full run details"
-                textSize = 11.5f
-                setTextColor(Theme.Accent)
-                setPadding(0, 10, 0, 0)
-            }
-        )
-        card.addView(content)
-        return card.withMargins(top = 6, right = 24, bottom = 6)
-    }
-
-    private fun completionSummaryRow(label: String, value: String): View {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 8, 0, 0)
-            addView(
-                TextView(this@MainActivity).apply {
-                    text = label
-                    textSize = 11f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Theme.MutedText)
-                }
-            )
-            addView(
-                TextView(this@MainActivity).apply {
-                    text = value
-                    textSize = 12.5f
-                    setTextColor(Theme.BodyText)
-                    setLineSpacing(2f, 1f)
-                    setPadding(0, 2, 0, 0)
-                }
-            )
-        }
-    }
-
-    private fun completionSummaryStroke(status: AgentRunCompletionStatus): Int {
-        return when (status) {
-            AgentRunCompletionStatus.COMPLETED -> Theme.Accent
-            AgentRunCompletionStatus.BLOCKED,
-            AgentRunCompletionStatus.FAILED -> Theme.Danger
-            AgentRunCompletionStatus.STOPPED,
-            AgentRunCompletionStatus.NEEDS_CLARIFICATION,
-            AgentRunCompletionStatus.CANCELLED -> Theme.Warning
-        }
-    }
-
-    private fun approvalCard(event: ChatEvent.ApprovalPrompt): View {
-        val request = event.request
-        val tool = request.tool
-        val card = MaterialCardView(this).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = when (event.state) {
-                ApprovalState.PENDING -> Theme.Accent
-                ApprovalState.APPROVED -> Theme.Accent
-                ApprovalState.REJECTED -> Theme.StrokeDark
-            }
-            strokeWidth = 2
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20, 18, 20, 18)
-        }
-
-        val statusLabel = when (event.state) {
-            ApprovalState.PENDING -> "Approval requested"
-            ApprovalState.APPROVED -> "Approved"
-            ApprovalState.REJECTED -> "Rejected"
-        }
-        content.addView(
-            TextView(this).apply {
-                text = "$statusLabel - ${tool.name}"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }
-        )
-        content.addView(
-            TextView(this).apply {
-                text = buildApprovalMessage(request)
-                textSize = 12.5f
-                setTextColor(Theme.BodyText)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-
-        if (event.state == ApprovalState.PENDING) {
-            val buttonRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, 14, 0, 0)
-            }
-            buttonRow.addView(
-                primaryButton("Approve", iconRes = R.drawable.ic_check) {
-                    resolveApproval(event, true)
-                }.apply { id = R.id.approval_approve_button },
-                rowButtonParams()
-            )
-            buttonRow.addView(
-                secondaryButton("Reject", iconRes = R.drawable.ic_close) {
-                    resolveApproval(event, false)
-                }.apply { id = R.id.approval_reject_button },
-                rowButtonParams()
-            )
-            content.addView(buttonRow)
-        }
-
-        card.addView(content)
-        return card.withMargins(top = 8, bottom = 8)
-    }
-
-    private fun resolveApproval(event: ChatEvent.ApprovalPrompt, approved: Boolean) {
-        if (event.state != ApprovalState.PENDING) return
-        event.state = if (approved) ApprovalState.APPROVED else ApprovalState.REJECTED
-        event.onDecision(approved)
-        showSection(Section.CHAT)
-    }
-
-    private fun clarificationCard(event: ChatEvent.ClarificationPrompt): View {
-        val card = MaterialCardView(this).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = when (event.state) {
-                ClarificationState.PENDING -> Theme.Accent
-                ClarificationState.ANSWERED -> Theme.StrokeDark
-            }
-            strokeWidth = 2
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20, 18, 20, 18)
-        }
-
-        val statusLabel = when (event.state) {
-            ClarificationState.PENDING -> "Clarification needed"
-            ClarificationState.ANSWERED -> "Answered"
-        }
-        content.addView(
-            TextView(this).apply {
-                text = statusLabel
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }
-        )
-        content.addView(
-            TextView(this).apply {
-                text = event.question
-                textSize = 14f
-                setTextColor(Color.WHITE)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-        if (event.detail.isNotBlank()) {
-            content.addView(
-                TextView(this).apply {
-                    text = SensitiveTextRedactor.redact(event.detail)
-                    textSize = 12.5f
-                    setTextColor(Theme.BodyText)
-                    setPadding(0, 6, 0, 0)
-                }
-            )
-        }
-
-        if (event.state == ClarificationState.PENDING && event.choices.isNotEmpty()) {
-            event.choices.forEach { choice ->
-                val label = SensitiveTextRedactor.redact(choice)
-                content.addView(
-                    secondaryButton(label) {
-                        resolveClarification(event, label)
-                    }.apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT
-                        ).apply {
-                            topMargin = 10
-                        }
-                    }
-                )
-            }
-        } else if (event.state == ClarificationState.ANSWERED) {
-            content.addView(
-                TextView(this).apply {
-                    text = "You: ${event.selectedAnswer.orEmpty()}"
-                    textSize = 12.5f
-                    setTextColor(Theme.Accent)
-                    setPadding(0, 10, 0, 0)
-                }
-            )
-        } else if (event.state == ClarificationState.PENDING) {
-            content.addView(
-                TextView(this).apply {
-                    text = "Reply in the chat box below."
-                    textSize = 12.5f
-                    setTextColor(Theme.MutedText)
-                    setPadding(0, 10, 0, 0)
-                }
-            )
-        }
-
-        card.addView(content)
-        return card.withMargins(top = 8, bottom = 8)
-    }
-
-    private fun resolveClarification(event: ChatEvent.ClarificationPrompt, answer: String) {
-        if (event.state != ClarificationState.PENDING) return
-        event.state = ClarificationState.ANSWERED
-        event.selectedAnswer = answer
-        event.onAnswer(answer)
-        showSection(Section.CHAT)
-    }
-
-    private fun runAgentFromChat(task: String) {
-        val pending = pendingClarification
-        val originalTask = pending?.originalTask
-        val agentTask = if (pending != null) {
-            pendingClarification = null
-            "${pending.originalTask}\n\nUser clarification: $task"
-        } else {
-            task
-        }
-
-        conversation += ChatEvent.User(task)
-        ToolExecutionLog.recordChat(
-            name = if (pending != null) "clarification_reply" else "user_message",
-            actor = "User",
-            message = task
-        )
-
-        val conversationalResponse = ConversationalGate.respond(agentTask)
-        if (conversationalResponse != null) {
-            conversation += ChatEvent.Agent(conversationalResponse.message, "")
-            ToolExecutionLog.recordChat(
-                name = "assistant_message",
-                actor = "TouchPilot",
-                message = conversationalResponse.message
-            )
-            showSection(Section.CHAT)
-            return
-        }
-
-        val workingIndex = conversation.size
-        agentCancellationSignal.set(false)
-        setAgentRunState(AgentRunState.RUNNING)
-        conversation += ChatEvent.Working("Working on it.", "Runtime: ${currentProviderMode().label()}")
-        val stepTimeline = ChatEvent.StepTimeline()
-        conversation += stepTimeline
-        showSection(Section.CHAT)
-
-        val runId = AgentRunIds.next()
-        val startedAtMillis = System.currentTimeMillis()
-        val taskForRecord = originalTask ?: task
-        ToolExecutionLog.recordAction(
-            name = "agent_run_started",
-            result = taskForRecord,
-            status = "running",
-            source = currentProviderMode().toLogSource()
-        )
-        val initialScreenRecord = AgentScreenRecord.capture(
-            sequenceNumber = 0,
-            phase = "initial",
-            timestampMillis = startedAtMillis,
-            context = AccessibilityBridge.observeScreenContext()
-        )
-
-        Thread {
-            val timelineBuilder = AgentStepTimelineBuilder()
-            val runOutcome = runCatching {
-                reasoningCore.run(
-                    task = agentTask,
-                    timeline = timelineBuilder,
-                    listener = AgentEventListener {
-                        runOnUiThread {
-                            refreshStepTimeline(stepTimeline, timelineBuilder.snapshot)
-                        }
-                    },
-                    cancellationSignal = agentCancellationSignal
-                )
-            }
-            val completedAtMillis = System.currentTimeMillis()
-            val screenRecords = listOf(
-                initialScreenRecord,
-                AgentScreenRecord.capture(
-                    sequenceNumber = 1,
-                    phase = "final",
-                    timestampMillis = completedAtMillis,
-                    context = AccessibilityBridge.observeScreenContext()
-                )
-            )
-            val record = if (runOutcome.isSuccess) {
-                AgentRunRecord(
-                    id = runId,
-                    task = taskForRecord,
-                    startedAtMillis = startedAtMillis,
-                    completedAtMillis = completedAtMillis,
-                    result = runOutcome.getOrThrow(),
-                    screenRecords = screenRecords
-                )
-            } else {
-                AgentRunRecord(
-                    id = runId,
-                    task = taskForRecord,
-                    startedAtMillis = startedAtMillis,
-                    completedAtMillis = completedAtMillis,
-                    result = null,
-                    errorMessage = runOutcome.exceptionOrNull()?.message ?: "Unknown agent error",
-                    screenRecords = screenRecords
-                )
-            }
-
-            runOnUiThread {
-                val steps = if (runOutcome.isFailure) {
-                    timelineBuilder.snapshot + timelineBuilder.failureStop(
-                        "Agent failed: ${runOutcome.exceptionOrNull()?.message.orEmpty()}"
-                    )
-                } else {
-                    timelineBuilder.snapshot
-                }
-                // Set agent run state based on outcome
-                if (agentCancellationSignal.get()) {
-                    setAgentRunState(AgentRunState.CANCELLED)
-                } else if (runOutcome.isFailure ||
-                           (record.result?.events?.any { it is AgentEvent.ToolFailed || it is AgentEvent.PolicyBlocked } == true)) {
-                    setAgentRunState(AgentRunState.FAILED)
-                    conversation.forEach { event ->
-                        if (event is ChatEvent.ApprovalPrompt && event.state == ApprovalState.PENDING) {
-                            event.state = ApprovalState.REJECTED
-                        }
-                    }
-                } else {
-                    setAgentRunState(AgentRunState.COMPLETED)
-                }
-                refreshStepTimeline(stepTimeline, steps, complete = true)
-                finishAgentChatRun(
-                    record = record,
-                    runOutcome = runOutcome,
-                    workingIndex = workingIndex,
-                    resumeOriginalTask = originalTask,
-                    timelineSteps = steps,
-                )
-            }
-        }.start()
-    }
-
-    private fun finishAgentChatRun(
-        record: AgentRunRecord,
-        runOutcome: Result<AgentRunResult>,
-        workingIndex: Int,
-        resumeOriginalTask: String?,
-        timelineSteps: List<AgentStep> = emptyList(),
-    ) {
-        removeWorkingIndicator(workingIndex)
-        agentRunHistory += record
-        ToolExecutionLog.recordAction(
-            name = "agent_run_finished",
-            result = record.errorMessage ?: AgentRunDetailFormatter.compactSummary(record),
-            status = if (runOutcome.isSuccess) "complete" else "fail",
-            source = currentProviderMode().toLogSource(),
-            details = "run_id=${record.id}"
-        )
-        refreshExecutionLog()
-        refreshStatus()
-
-        val result = runOutcome.getOrNull()
-        when {
-            result?.stopReason == AgentStepStopReason.CLARIFICATION_NEEDED -> {
-                val structured = result.events.filterIsInstance<AgentEvent.Clarification>().lastOrNull()
-                val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().lastOrNull()
-                val prompt = when {
-                    structured != null -> ClarificationChatPrompt(
-                        question = structured.question,
-                        detail = structured.detail,
-                        choices = structured.candidates.map {
-                            SensitiveTextRedactor.redact(it.displayLabel)
-                        },
-                    )
-                    assistant != null -> ClarificationChatPrompt(
-                        question = assistant.text,
-                        detail = assistant.detail,
-                        choices = assistant.choices,
-                    )
-                    else -> null
-                }
-                if (prompt != null) {
-                    val originalTask = resumeOriginalTask ?: record.task
-                    pendingClarification = PendingClarification(originalTask = originalTask)
-                    ToolExecutionLog.recordChat(
-                        name = "clarification_prompt",
-                        actor = "TouchPilot",
-                        message = "${prompt.question}\n${prompt.detail}"
-                    )
-                    conversation += ChatEvent.ClarificationPrompt(
-                        question = prompt.question,
-                        detail = prompt.detail,
-                        choices = prompt.choices,
-                        onAnswer = { answer -> runAgentFromChat(answer) }
-                    )
-                } else {
-                    conversation += ChatEvent.Agent(
-                        "TouchPilot needs clarification before continuing.",
-                        result.stopMessage
-                    )
-                    ToolExecutionLog.recordChat(
-                        name = "assistant_message",
-                        actor = "TouchPilot",
-                        message = result.stopMessage
-                    )
-                }
-            }
-            result?.stopReason == AgentStepStopReason.COMPLETED &&
-                isInformationalAssistantRun(result) -> {
-                val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().last()
-                conversation += ChatEvent.Agent(assistant.text, assistant.detail)
-                ToolExecutionLog.recordChat(
-                    name = "assistant_message",
-                    actor = "TouchPilot",
-                    message = "${assistant.text}\n${assistant.detail}"
-                )
-            }
-            runOutcome.isSuccess -> {
-                record.result?.events
-                    ?.let(ToolCallCardModel::fromEvents)
-                    ?.forEach { card ->
-                        conversation += ChatEvent.ToolCall(card)
-                    }
-                conversation += ChatEvent.CompletionSummary(
-                    summary = AgentRunDetailFormatter.buildCompletionSummary(record, timelineSteps),
-                    runId = record.id,
-                )
-                conversation += ChatEvent.Timeline(
-                    title = "Action timeline",
-                    body = AgentRunDetailFormatter.compactSummary(record),
-                    runId = record.id
-                )
-                val finalAnswer = result?.finalAnswer
-                val doneDetail = when {
-                    finalAnswer != null -> finalAnswer
-                    timelineSteps.isEmpty() -> "No steps recorded."
-                    else -> "Tap the timeline card to inspect tool calls, verification, and stop reason."
-                }
-                conversation += ChatEvent.Agent("Done.", doneDetail)
-                ToolExecutionLog.recordChat(
-                    name = "assistant_message",
-                    actor = "TouchPilot",
-                    message = doneDetail,
-                    status = "complete"
-                )
-            }
-            else -> {
-                conversation += ChatEvent.Agent(
-                    "Run failed.",
-                    record.errorMessage ?: "Unknown agent error"
-                )
-                ToolExecutionLog.recordChat(
-                    name = "assistant_message",
-                    actor = "TouchPilot",
-                    message = record.errorMessage ?: "Unknown agent error",
-                    status = "fail"
-                )
-            }
-        }
-        showSection(Section.CHAT)
-    }
-
-    private fun removeWorkingIndicator(workingIndex: Int) {
-        if (workingIndex in conversation.indices &&
-            conversation[workingIndex] is ChatEvent.Working
-        ) {
-            conversation.removeAt(workingIndex)
-        }
-    }
-
-    private fun isInformationalAssistantRun(result: AgentRunResult): Boolean {
-        val hasAssistant = result.events.any { it is AgentEvent.AssistantMessage }
-        val invokedTools = result.events.any {
-            it is AgentEvent.ToolRequested || it is AgentEvent.ToolRunning
-        }
-        return hasAssistant && !invokedTools
     }
 
     private fun refreshStepTimeline(
@@ -1101,8 +226,220 @@ class MainActivity : Activity() {
     ) {
         event.steps = steps
         event.isComplete = complete || event.isComplete
-        bindStepTimeline(event)
+        chatScreenRenderer().bindStepTimeline(event)
         scrollChatToBottom()
+    }
+
+    private fun currentReasoningContext(): LocalReasoningContext {
+        val providerMode = currentProviderMode()
+        return LocalReasoningContext(
+            skill = selectedSkill(),
+            providerMode = providerMode
+        )
+    }
+
+    private fun commitSelectedSkill(id: String?) {
+        selectedSkillId = id
+        expandedSkillReferenceId = when {
+            id == null -> null
+            expandedSkillReferenceId == id -> null
+            else -> id
+        }
+        preferences.edit().putString("active_skill", selectedSkillId).apply()
+        showSection(AppSection.SETTINGS)
+    }
+
+    private fun renderToolsScreen() {
+        ToolsScreenRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            toolExecutionController = toolExecutionController(),
+            statusPill = ::statusPill,
+            openAccessibilitySettings = ::openAccessibilitySettings,
+            toolsResult = sectionResults::forTools,
+            refreshToolsScreen = { showSection(AppSection.TOOLS) },
+            hideKeyboard = ::hideKeyboard,
+            bindKeyboardScrollSpacer = ::bindKeyboardScrollSpacer,
+            getFocusSelectorIndex = { focusSelectorIndex },
+            setFocusSelectorIndex = { focusSelectorIndex = it },
+            getLastFocusInputArgs = { lastFocusInputArgs },
+            setLastFocusInputArgs = { lastFocusInputArgs = it }
+        ).render()
+    }
+
+    private fun toolExecutionController(): ToolExecutionController {
+        return ToolExecutionController(
+            activity = this,
+            toolExecutor = toolExecutor,
+            callbacks = object : ToolExecutionCallbacks {
+                override fun recordToolsResult(message: String) {
+                    sectionResults.recordToolsResult(message)
+                }
+
+                override fun refreshDeveloperLogs() {
+                    refreshExecutionLog()
+                }
+
+                override fun refreshToolsScreen() {
+                    showSection(AppSection.TOOLS)
+                }
+            }
+        )
+    }
+
+    private fun bindKeyboardScrollSpacer(spacer: View) {
+        val rootView = window.decorView
+        val expandedHeight = (320 * resources.displayMetrics.density).toInt()
+        val visibleRect = Rect()
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            rootView.getWindowVisibleDisplayFrame(visibleRect)
+            val screenHeight = rootView.height
+            if (screenHeight <= 0) return@OnGlobalLayoutListener
+            val occluded = screenHeight - visibleRect.bottom
+            // Anything above ~15% of screen height is conservatively treated
+            // as the soft keyboard rather than a tall status/nav bar.
+            val keyboardVisible = occluded > screenHeight * 0.15
+            val target = if (keyboardVisible) expandedHeight else 0
+            val params = spacer.layoutParams as? LinearLayout.LayoutParams ?: return@OnGlobalLayoutListener
+            if (params.height != target) {
+                params.height = target
+                spacer.layoutParams = params
+            }
+        }
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        spacer.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) {
+                rootView.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+            }
+        })
+    }
+
+    private fun renderLogsScreen() {
+        if (navigationController.activeRunDetailId != null) {
+            renderAgentRunDetailScreen()
+            return
+        }
+
+        executionLogList = logsScreenRenderer().render()
+    }
+
+    private fun renderSettingsScreen() {
+        SettingsScreenRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            preferences = preferences,
+            skills = skills,
+            localModelRuntime = localModelRuntime,
+            activeSettingsPanel = { navigationController.activeSettingsPanel },
+            openSettingsPanel = navigationController::openSettingsPanel,
+            closeSettingsPanel = navigationController::closeSettingsPanel,
+            selectedSkillId = { selectedSkillId },
+            expandedSkillReferenceId = { expandedSkillReferenceId },
+            commitSelectedSkill = ::commitSelectedSkill,
+            currentProviderMode = ::currentProviderMode,
+            openAccessibilitySettings = ::openAccessibilitySettings,
+            hideKeyboard = ::hideKeyboard,
+            recordMcpResult = sectionResults::recordMcpResult,
+            mcpResult = sectionResults::forMcp,
+            refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
+        ).render()
+    }
+
+    private val sectionResults = SectionResultStore()
+
+    private fun refreshExecutionLog() {
+        if (::executionLogList.isInitialized) {
+            logsScreenRenderer().renderLogRows(executionLogList)
+        }
+    }
+
+    private fun logsScreenRenderer(): LogsScreenRenderer {
+        return LogsScreenRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            latestResult = sectionResults::forLogs,
+            exportDebugTrace = ::exportDebugTrace,
+            recordLogsResult = sectionResults::recordLogsResult,
+            refreshLogsScreen = { showSection(AppSection.LOGS) }
+        )
+    }
+
+    private fun refreshStatus() {
+        if (::statusView.isInitialized) {
+            statusView.text = if (AccessibilityBridge.isConnected()) {
+                "Accessibility service: connected"
+            } else {
+                "Accessibility service: not connected"
+            }
+            statusView.setTextColor(if (AccessibilityBridge.isConnected()) Theme.Accent else Theme.MutedText)
+        }
+    }
+
+    private fun currentProviderMode(): AgentProviderMode {
+        return when (preferences.getString("agent_provider_mode", AgentProviderMode.LOCAL_ROUTER.name)) {
+            AgentProviderMode.LOCAL_MODEL.name -> AgentProviderMode.LOCAL_MODEL
+            else -> AgentProviderMode.LOCAL_ROUTER
+        }
+    }
+
+    private fun selectedSkill(): Skill? {
+        return skills.firstOrNull { it.id == selectedSkillId }
+    }
+
+    private fun statusPill(): View {
+        return timelineCard(
+            "Runtime",
+            "${currentProviderMode().label()}\n${localModelRuntime.status().shortLine()}\n${if (AccessibilityBridge.isConnected()) "Accessibility connected" else "Accessibility not connected"}"
+        )
+    }
+
+    private fun hideKeyboard(anchor: View) {
+        val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        manager.hideSoftInputFromWindow(anchor.windowToken, 0)
+    }
+
+    private fun openAccessibilitySettings() {
+        startActivity(
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+    }
+
+    private fun openRunDetail(runId: String) {
+        navigationController.openRunDetail(runId)
+        showSection(navigationController.activeSection)
+    }
+
+    private fun closeRunDetail() {
+        navigationController.closeRunDetail()
+        showSection(navigationController.activeSection)
+    }
+
+    private fun findAgentRun(runId: String): AgentRunRecord? {
+        return agentRunController.findRun(runId)
+    }
+
+    private fun renderAgentRunDetailScreen() {
+        AgentRunDetailRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            runId = navigationController.activeRunDetailId,
+            findAgentRun = ::findAgentRun,
+            closeRunDetail = ::closeRunDetail,
+            exportRunTrace = ::exportRunTrace,
+            recordLogsResult = sectionResults::recordLogsResult,
+            refreshCurrentSection = { showSection(navigationController.activeSection) }
+        ).render()
+    }
+
+    private fun exportRunTrace(record: AgentRunRecord): File {
+        return debugTraceExporter.exportRunTrace(record)
+    }
+
+    private fun exportDebugTrace(): File {
+        return debugTraceExporter.exportDebugTrace()
     }
 
     private fun currentReasoningContext(): LocalReasoningContext {

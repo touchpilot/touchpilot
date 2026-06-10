@@ -21,6 +21,7 @@ object ScreenSignalsExtractor {
     private val CLASS_NAME = Regex("^(\\S+)")
     private val TEXT_ATTR = Regex("\\btext=\"([^\"]*)\"")
     private val DESC_ATTR = Regex("\\bdesc=\"([^\"]*)\"")
+    private val QUOTED_ATTR_VALUE = Regex("\"[^\"]*\"")
 
     private val INPUT_CLASS_HINTS = listOf(
         "EditText",
@@ -49,7 +50,12 @@ object ScreenSignalsExtractor {
             val hasDesc = DESC_ATTR.find(body)?.groupValues?.get(1)?.isNotBlank() == true
             if (hasText || hasDesc) visibleText += 1
 
-            if (" clickable" in " $body") clickable += 1
+            // Count only the bare `clickable` flag token. The word can also
+            // appear inside a quoted attribute value (e.g. text="Not clickable
+            // yet"), so strip quoted values before scanning — mirroring the
+            // anchored/class-scoped matching used for the other signals above.
+            val flags = body.replace(QUOTED_ATTR_VALUE, "\"\"")
+            if (" clickable" in " $flags") clickable += 1
 
             val className = CLASS_NAME.find(body)?.groupValues?.get(1).orEmpty()
             if (INPUT_CLASS_HINTS.any { className.contains(it, ignoreCase = true) }) {

@@ -29,6 +29,22 @@ class ScreenSignalsExtractorTest {
     }
 
     @Test
+    fun wordClickableInsideLabelDoesNotCountAsClickableNode() {
+        val dump = """
+            TouchPilot screen snapshot
+            - TextView node_id="0" text="Not clickable yet"
+            - LinearLayout node_id="1" clickable
+        """.trimIndent()
+
+        val signals = ScreenSignalsExtractor.fromObserveDump(dump)
+
+        assertEquals(2, signals.totalNodeCount)
+        // Only node 1 carries the bare `clickable` flag; the word inside node 0's
+        // text value must not count. Before the fix this was 2.
+        assertEquals(1, signals.clickableNodeCount)
+    }
+
+    @Test
     fun emptyDumpYieldsEmptySignals() {
         val signals = ScreenSignalsExtractor.fromObserveDump("TouchPilot screen snapshot")
         assertEquals(ObservedScreenSignals.EMPTY.copy(packageName = null), signals)

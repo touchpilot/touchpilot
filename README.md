@@ -82,16 +82,20 @@ sdk.dir=/path/to/Android/Sdk
 ## Repository Layout
 
 ```text
-app/              Android app source
-agent/            Agent runtime, provider clients, planner loop
-tools/            Tool specs and tool router
-androidcontrol/   Accessibility and Android action execution
-memory/           Local session, logs, and skill storage
-security/         Approvals, policy, risk levels, secrets handling
-skills/           Markdown skills for task-specific behavior
-docs/             Architecture, security, and tool documentation
-examples/         Provider and MCP integration examples
+app/        Android app source, runtime code, assets, and tests
+docs/       Architecture, roadmap, validation, and tool documentation
+examples/   MCP/provider examples and integration notes
+.github/    CI, issue templates, labels, and PR automation
+gradle/     Gradle wrapper files
 ```
+
+TouchPilot is currently a single Android application module. Internal runtime
+areas such as `agent`, `tools`, `androidcontrol`, `memory`, and `security` live
+as packages under `app/src/main/java/dev/touchpilot/app/`. Packaged Markdown
+skills live under `app/src/main/assets/skills/`.
+
+See [Code Structure](docs/CODE_STRUCTURE.md) for the current package layout and
+future module-split direction.
 
 ## Community
 https://discord.gg/TvXwsNbx

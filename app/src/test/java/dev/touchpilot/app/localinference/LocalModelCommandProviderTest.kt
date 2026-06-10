@@ -1,34 +1,34 @@
 package dev.touchpilot.app.localinference
 
-import dev.touchpilot.app.agent.LocalRouterCommandProvider
+import dev.touchpilot.app.agent.AgentCommandParser
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 class LocalModelCommandProviderTest {
     @Test
-    fun usesValidModelCommandBeforeFallback() {
+    fun usesModelCommandOnEveryStep() {
         val provider = LocalModelCommandProvider(
             runtime = FakeRuntime("""{"tool":"observe_screen","args":{}}"""),
-            fallback = LocalRouterCommandProvider("go back", null),
             task = "go home",
             skill = null
         )
 
         assertEquals("""{"tool":"observe_screen","args":{}}""", provider.complete("", ""))
+        assertEquals("""{"tool":"observe_screen","args":{}}""", provider.complete("", ""))
     }
 
     @Test
-    fun fallsBackWhenRuntimeUnavailable() {
+    fun returnsCannotRouteFinalAnswerWhenRuntimeUnavailable() {
         val provider = LocalModelCommandProvider(
             runtime = FakeRuntime(null),
-            fallback = LocalRouterCommandProvider("go back", null),
             task = "go back",
             skill = null
         )
 
-        assertEquals("""{"tool":"observe_screen","args":{}}""", provider.complete("", ""))
-        assertTrue(provider.complete("", "").contains("press_back"))
+        val command = AgentCommandParser.parse(provider.complete("", ""))
+        assertNull(command.tool)
+        assertEquals("Local model could not route this task safely.", command.finalAnswer)
     }
 
     private class FakeRuntime(

@@ -155,7 +155,24 @@ class LocalReasoningCoreTest {
 
         assertIs<LocalRouterCommandProvider>(provider)
         val first = AgentCommandParser.parse(provider.complete("", ""))
-        assertEquals("observe_screen", first.tool)
+        assertNull(first.tool)
+        assertEquals(
+            "Local router completed its safe routing pass. Try a more specific request, a skill, or local model mode for ambiguous tasks.",
+            first.finalAnswer
+        )
+    }
+
+    @Test
+    fun localRouterRoutesDirectlyInOneStepWhenAllowed() {
+        val provider = buildCommandProvider(
+            task = "go home",
+            context = defaultContext,
+            localModelRuntime = NeverCalledRuntime
+        )
+
+        assertIs<LocalRouterCommandProvider>(provider)
+        val first = AgentCommandParser.parse(provider.complete("", ""))
+        assertEquals("press_home", first.tool)
         val second = AgentCommandParser.parse(provider.complete("", ""))
         assertNull(second.tool)
         assertEquals(
