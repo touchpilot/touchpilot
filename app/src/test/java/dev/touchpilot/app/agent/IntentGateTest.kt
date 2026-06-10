@@ -2,8 +2,10 @@ package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class IntentGateTest {
     private val gate = IntentGate()
@@ -132,6 +134,70 @@ class IntentGateTest {
     }
 
     @Test
+    fun classifiesKnownSkillByAliasMatch() {
+        val skill = Skill(
+            id = "settings",
+            title = "Settings Skill",
+            markdown = "Use Android Settings screens carefully.",
+            allowedTools = setOf("observe_screen", "open_settings_panel"),
+            aliases = listOf("wi-fi", "network settings")
+        )
+
+        val decision = gate.classify("Help me connect to wifi", skills = listOf(skill))
+        val matched = assertIs<IntentDecision.KnownSkill>(decision)
+        assertEquals("settings", matched.skillId)
+        assertContains(matched.reason, "alias")
+        assertTrue(matched.confidence >= 0.65)
+    }
+
+    @Test
+    fun classifiesKnownSkillByExamplePhraseMatch() {
+        val skill = Skill(
+            id = "settings",
+            title = "Settings Skill",
+            markdown = "Use Android Settings screens carefully.",
+            allowedTools = setOf("observe_screen", "open_settings_panel"),
+            examples = listOf("connect to Wi-Fi")
+        )
+
+        val decision = gate.classify("Can you help me connect to wifi?", skills = listOf(skill))
+        val matched = assertIs<IntentDecision.KnownSkill>(decision)
+        assertEquals("settings", matched.skillId)
+        assertContains(matched.reason, "example")
+    }
+
+    @Test
+    fun classifiesKnownSkillByExampleKeywordOverlap() {
+        val skill = Skill(
+            id = "messages",
+            title = "Messages Skill",
+            markdown = "Draft messages before asking the user to send.",
+            allowedTools = setOf("observe_screen", "type_text"),
+            examples = listOf("draft a text message")
+        )
+
+        val decision = gate.classify("Please draft a text", skills = listOf(skill))
+        val matched = assertIs<IntentDecision.KnownSkill>(decision)
+        assertEquals("messages", matched.skillId)
+        assertContains(matched.reason, "example keywords")
+    }
+
+    @Test
+    fun singleKeywordOverlapDoesNotSelectSkill() {
+        val skill = Skill(
+            id = "messages",
+            title = "Messages Skill",
+            markdown = "Draft messages before asking the user to send.",
+            allowedTools = setOf("observe_screen", "type_text"),
+            aliases = listOf("text message"),
+            examples = listOf("draft a text message")
+        )
+
+        val decision = gate.classify("Read text on screen", skills = listOf(skill))
+        assertIs<IntentDecision.LocalModelNeeded>(decision)
+    }
+
+    @Test
     fun exactCommandTakesPrecedenceOverSkill() {
         // "go back" is an exact command; a skill titled "back" should not steal
         // the route.
@@ -143,6 +209,36 @@ class IntentGateTest {
         )
         val decision = gate.classify("Go back", skills = listOf(skill))
         assertIs<IntentDecision.ExactCommand>(decision)
+    }
+
+    @Test
+    fun exactCommandTakesPrecedenceOverAliasAndExampleMatches() {
+        val skill = Skill(
+            id = "navigation",
+            title = "Navigation",
+            markdown = "",
+            allowedTools = emptySet(),
+            aliases = listOf("back", "scroll"),
+            examples = listOf("scroll down", "go home")
+        )
+
+        assertIs<IntentDecision.ExactCommand>(gate.classify("scroll down", skills = listOf(skill)))
+        assertIs<IntentDecision.ExactCommand>(gate.classify("go home", skills = listOf(skill)))
+    }
+
+    @Test
+    fun directToolPhraseTakesPrecedenceOverSkillMatch() {
+        val skill = Skill(
+            id = "buttons",
+            title = "Button Help",
+            markdown = "",
+            allowedTools = emptySet(),
+            aliases = listOf("ok button"),
+            examples = listOf("tap ok button")
+        )
+
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("tap OK", skills = listOf(skill)))
+        assertEquals("tap", command.tool)
     }
 
     @Test
