@@ -2,8 +2,9 @@ package dev.touchpilot.app.memory
 
 /**
  * Skill-level risk hint declared in Skills v2 front matter (see docs/SKILLS.md).
- * Risk may only ever increase caution in downstream policy/approval copy; it can
- * never lower the risk of an individual tool call.
+ * Advisory context only: it may make downstream prompt and approval copy more
+ * cautious, but it never lowers the risk of an individual tool call or bypasses
+ * the allowlist/policy enforcement boundaries.
  */
 enum class SkillRisk {
     LOW,

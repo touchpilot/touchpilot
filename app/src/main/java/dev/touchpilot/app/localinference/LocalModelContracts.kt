@@ -12,10 +12,11 @@ data class LocalModelRequest(
     val task: String,
     val context: String,
     val activeSkillId: String?,
-    val tools: List<LocalModelToolContract>
+    val tools: List<LocalModelToolContract>,
+    val skill: LocalModelSkillContext? = null
 ) {
     fun toJson(): JSONObject {
-        return JSONObject()
+        val json = JSONObject()
             .put("task", task)
             .put("context", context)
             .put("active_skill_id", activeSkillId)
@@ -32,6 +33,8 @@ data class LocalModelRequest(
                     }
                 )
             )
+        skill?.let { json.put("skill", it.toJson()) }
+        return json
     }
 
     companion object {
@@ -51,7 +54,49 @@ data class LocalModelRequest(
                 task = task,
                 context = context,
                 activeSkillId = skill?.id,
-                tools = tools
+                tools = tools,
+                skill = skill?.let { LocalModelSkillContext.from(it) }
+            )
+        }
+    }
+}
+
+/**
+ * Advisory skill context handed to the local model alongside the tool
+ * contracts. It describes what the active skill is for and what success looks
+ * like; it does not enforce anything. The allowlist, validation, approvals, and
+ * policy layers remain the mandatory enforcement boundaries.
+ */
+data class LocalModelSkillContext(
+    val id: String,
+    val title: String,
+    val description: String,
+    val risk: String,
+    val allowedTools: List<String>,
+    val examples: List<String>,
+    val successCriteria: List<String>
+) {
+    fun toJson(): JSONObject {
+        return JSONObject()
+            .put("id", id)
+            .put("title", title)
+            .put("description", description)
+            .put("risk", risk)
+            .put("allowed_tools", JSONArray(allowedTools))
+            .put("examples", JSONArray(examples))
+            .put("success_criteria", JSONArray(successCriteria))
+    }
+
+    companion object {
+        fun from(skill: Skill): LocalModelSkillContext {
+            return LocalModelSkillContext(
+                id = skill.id,
+                title = skill.title,
+                description = skill.description,
+                risk = skill.risk.name.lowercase(),
+                allowedTools = skill.allowedTools.toList(),
+                examples = skill.examples,
+                successCriteria = skill.successCriteria
             )
         }
     }

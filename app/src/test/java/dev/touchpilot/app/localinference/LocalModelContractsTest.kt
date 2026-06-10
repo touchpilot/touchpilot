@@ -1,8 +1,10 @@
 package dev.touchpilot.app.localinference
 
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.memory.SkillRisk
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -30,6 +32,41 @@ class LocalModelContractsTest {
         assertEquals(listOf("observe_screen", "tap"), tools)
         assertEquals("settings", json.getString("active_skill_id"))
         assertEquals(2, json.getJSONArray("tools").length())
+    }
+
+    @Test
+    fun requestIncludesRichSkillContext() {
+        val skill = Skill(
+            id = "settings",
+            title = "Settings",
+            markdown = "instructions",
+            allowedTools = setOf("observe_screen_context", "open_settings_panel"),
+            description = "Navigate Android Settings safely.",
+            risk = SkillRisk.MEDIUM,
+            examples = listOf("open Wi-Fi settings"),
+            successCriteria = listOf("The requested Settings screen is foreground.")
+        )
+
+        val json = LocalModelRequest.from("open Wi-Fi settings", "ctx", skill).toJson()
+        val skillJson = json.getJSONObject("skill")
+
+        assertEquals("settings", skillJson.getString("id"))
+        assertEquals("Settings", skillJson.getString("title"))
+        assertEquals("Navigate Android Settings safely.", skillJson.getString("description"))
+        assertEquals("medium", skillJson.getString("risk"))
+        assertEquals(2, skillJson.getJSONArray("allowed_tools").length())
+        assertEquals("open Wi-Fi settings", skillJson.getJSONArray("examples").getString(0))
+        assertEquals(
+            "The requested Settings screen is foreground.",
+            skillJson.getJSONArray("success_criteria").getString(0)
+        )
+    }
+
+    @Test
+    fun requestWithoutSkillOmitsSkillObject() {
+        val json = LocalModelRequest.from("do something", "ctx", skill = null).toJson()
+
+        assertFalse(json.has("skill"))
     }
 
     @Test
