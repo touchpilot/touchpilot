@@ -74,6 +74,13 @@ class LocalRouterCommandProvider(
         if (normalized.contains("scroll")) {
             return LocalRoute("scroll", mapOf("direction" to "forward"))
         }
+        Regex("\\bswipe\\s+(?:to\\s+)?(?:the\\s+)?(left|right|up|down)\\b")
+            .find(normalized)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let { direction ->
+                return LocalRoute("swipe", mapOf("direction" to direction))
+            }
 
         SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
             return LocalRoute("open_settings_panel", mapOf(SettingsPanelIntent.PanelArg to panel))

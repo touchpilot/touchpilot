@@ -156,6 +156,13 @@ class IntentGate : IntentClassifier {
                 reason = "scroll phrase"
             )
         }
+        SwipePattern.find(normalized)?.groupValues?.getOrNull(1)?.let { direction ->
+            return IntentDecision.ExactCommand(
+                tool = "swipe",
+                args = mapOf("direction" to direction),
+                reason = "swipe phrase"
+            )
+        }
         if (BackPattern.containsMatchIn(normalized)) {
             return IntentDecision.ExactCommand(
                 tool = "press_back",
@@ -244,6 +251,11 @@ class IntentGate : IntentClassifier {
         // accidental substring hits like "feedback", "homemade", or "scrollbar".
         val ScrollUpPattern: Regex = Regex("\\bscroll\\s+up\\b")
         val ScrollPattern: Regex = Regex("\\bscroll\\b")
+        // Captures the travel direction after "swipe" so the gesture routes to
+        // the swipe tool instead of falling through to the local model. Allows
+        // light filler ("swipe to the left") but keeps the direction adjacent
+        // so "swipe the back button" does not get misread as a direction.
+        val SwipePattern: Regex = Regex("\\bswipe\\s+(?:to\\s+)?(?:the\\s+)?(left|right|up|down)\\b")
         val BackPattern: Regex = Regex("\\bback\\b")
         val HomePattern: Regex = Regex("\\bhome\\b")
     }
