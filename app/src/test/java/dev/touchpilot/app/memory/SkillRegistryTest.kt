@@ -7,152 +7,71 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SkillRegistryTest {
-    private class FakeSkillPreferences(
-        private var disabled: Set<String> = emptySet(),
-        private var active: String? = null
-    ) : SkillPreferences {
-        override fun disabledSkillIds(): Set<String> = disabled
-        override fun setDisabledSkillIds(ids: Set<String>) { disabled = ids }
-        override fun activeSkillId(): String? = active
-        override fun setActiveSkillId(id: String?) { active = id }
-    }
-
-    private fun skill(
-        id: String,
-        title: String = id.replaceFirstChar { it.uppercase() },
-        aliases: List<String> = emptyList()
-    ) = Skill(
-        id = id,
-        title = title,
+    private val settings = Skill(
+        id = "settings",
+        title = "Settings",
         markdown = "",
-        allowedTools = setOf("observe_screen_context"),
-        aliases = aliases
+        allowedTools = setOf("open_app")
+    )
+    private val browser = Skill(
+        id = "browser",
+        title = "Browser",
+        markdown = "",
+        allowedTools = setOf("open_app", "type_text")
     )
 
-    private fun registry(
-        prefs: FakeSkillPreferences = FakeSkillPreferences()
-    ): Pair<SkillRegistry, FakeSkillPreferences> {
-        val skills = listOf(
-            skill("settings", "Settings", aliases = listOf("settings", "wi-fi settings")),
-            skill("browser", "Browser", aliases = listOf("web", "browser")),
-            skill("messages", "Messages", aliases = listOf("texts"))
+    @Test
+    fun allInstalledSkillsAreEnabledByDefault() {
+        val registry = SkillRegistry(installedSkills = listOf(settings, browser))
+
+        assertEquals(listOf(settings, browser), registry.enabledSkills)
+        assertTrue(registry.isEnabled("settings"))
+        assertTrue(registry.isEnabled("browser"))
+    }
+
+    @Test
+    fun disabledSkillsAreExcludedFromEnabledSkills() {
+        val registry = SkillRegistry(
+            installedSkills = listOf(settings, browser),
+            disabledSkillIds = setOf("browser")
         )
-        return SkillRegistry(skills, prefs) to prefs
-    }
 
-    @Test
-    fun enabledSkillsExcludesDisabled() {
-        val (reg, _) = registry(FakeSkillPreferences(disabled = setOf("browser")))
-
-        val ids = reg.enabledSkills().map { it.id }
-        assertEquals(listOf("settings", "messages"), ids)
-        assertEquals(3, reg.allSkills().size)
-        assertFalse(reg.isEnabled("browser"))
-        assertTrue(reg.isEnabled("settings"))
-    }
-
-    @Test
-    fun setEnabledPersistsAndIsReversible() {
-        val (reg, prefs) = registry()
-
-        reg.setEnabled("browser", false)
-        assertEquals(setOf("browser"), prefs.disabledSkillIds())
-        assertNull(reg.findById("browser"))
-
-        reg.setEnabled("browser", true)
-        assertTrue(prefs.disabledSkillIds().isEmpty())
-        assertEquals("browser", reg.findById("browser")?.id)
+        assertEquals(listOf(settings), registry.enabledSkills)
+        assertFalse(registry.isEnabled("browser"))
     }
 
     @Test
     fun disablingActiveSkillClearsActiveSelection() {
-        val (reg, prefs) = registry(FakeSkillPreferences(active = "settings"))
+        val registry = SkillRegistry(
+            installedSkills = listOf(settings, browser),
+            activeSkillId = "browser"
+        ).setEnabled("browser", enabled = false)
 
-        assertEquals("settings", reg.activeSkill()?.id)
-
-        reg.setEnabled("settings", false)
-
-        assertNull(prefs.activeSkillId())
-        assertNull(reg.activeSkill())
+        assertNull(registry.activeSkillId)
+        assertNull(registry.activeSkill)
+        assertFalse(registry.isEnabled("browser"))
     }
 
     @Test
-    fun lookupsReturnEnabledSkillsOnly() {
-        val (reg, _) = registry(FakeSkillPreferences(disabled = setOf("messages")))
+    fun selectingDisabledSkillFailsClosed() {
+        val registry = SkillRegistry(
+            installedSkills = listOf(settings, browser),
+            disabledSkillIds = setOf("browser"),
+            activeSkillId = "settings"
+        ).select("browser")
 
-        assertEquals("settings", reg.findById("settings")?.id)
-        assertEquals("settings", reg.findByTitle("Settings")?.id)
-        assertEquals("settings", reg.findByAlias("wi-fi settings")?.id)
-
-        // messages is disabled -> not found by any lookup key.
-        assertNull(reg.findById("messages"))
-        assertNull(reg.findByTitle("Messages"))
-        assertNull(reg.findByAlias("texts"))
+        assertNull(registry.activeSkillId)
+        assertNull(registry.activeSkill)
     }
 
     @Test
-    fun lookupsAreCaseInsensitiveAndTrimmed() {
-        val (reg, _) = registry()
+    fun enablingSkillMakesItSelectableAgain() {
+        val registry = SkillRegistry(
+            installedSkills = listOf(settings, browser),
+            disabledSkillIds = setOf("browser")
+        ).setEnabled("browser", enabled = true).select("browser")
 
-        // Skill ids are lower-case by contract, but lookup must tolerate
-        // mixed/upper case and surrounding whitespace, like title/alias lookup.
-        assertEquals("settings", reg.findById("  SETTINGS  ")?.id)
-        assertEquals("settings", reg.findById("Settings")?.id)
-        assertEquals("browser", reg.resolve("  BrOwSeR ")?.id)
-        assertEquals("settings", reg.findByTitle("  sEtTiNgS  ")?.id)
-        assertEquals("browser", reg.findByAlias("  WEB ")?.id)
-        assertNull(reg.findById("   "))
-        assertNull(reg.findByTitle("  "))
-        assertNull(reg.findByAlias(""))
-    }
-
-    @Test
-    fun setActiveSkillNormalizesCaseToCanonicalId() {
-        val (reg, prefs) = registry()
-
-        reg.setActiveSkill("SETTINGS")
-
-        assertEquals("settings", prefs.activeSkillId())
-        assertEquals("settings", reg.activeSkill()?.id)
-    }
-
-    @Test
-    fun resolvePrefersIdThenTitleThenAlias() {
-        val (reg, _) = registry()
-
-        assertEquals("settings", reg.resolve("settings")?.id) // id
-        assertEquals("browser", reg.resolve("Browser")?.id)   // title
-        assertEquals("messages", reg.resolve("texts")?.id)    // alias
-        assertNull(reg.resolve("nonexistent"))
-    }
-
-    @Test
-    fun activeSkillClearsStaleSelectionWhenRemovedOrDisabled() {
-        val (reg, prefs) = registry(FakeSkillPreferences(active = "ghost"))
-
-        // active points at a skill that does not exist -> cleared, returns null.
-        assertNull(reg.activeSkill())
-        assertNull(prefs.activeSkillId())
-    }
-
-    @Test
-    fun setActiveSkillRejectsDisabledOrUnknownAndFailsClosed() {
-        val (reg, prefs) = registry(FakeSkillPreferences(disabled = setOf("browser")))
-
-        reg.setActiveSkill("settings")
-        assertEquals("settings", prefs.activeSkillId())
-
-        // selecting a disabled skill fails closed to no scope.
-        reg.setActiveSkill("browser")
-        assertNull(prefs.activeSkillId())
-
-        // selecting an unknown skill fails closed.
-        reg.setActiveSkill("ghost")
-        assertNull(prefs.activeSkillId())
-
-        // null clears.
-        reg.setActiveSkill("settings")
-        reg.setActiveSkill(null)
-        assertNull(prefs.activeSkillId())
+        assertEquals("browser", registry.activeSkillId)
+        assertEquals(browser, registry.activeSkill)
     }
 }

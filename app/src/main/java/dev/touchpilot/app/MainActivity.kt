@@ -27,7 +27,6 @@ import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
-import dev.touchpilot.app.memory.SharedPreferencesSkillStore
 import dev.touchpilot.app.memory.SkillRegistry
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.navigation.AppSection
@@ -41,23 +40,25 @@ import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.AppShellRenderer
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.label
+import dev.touchpilot.app.ui.shortLine
+import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.chat.ChatEvent
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
 import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
-import dev.touchpilot.app.ui.settings.SkillDetailRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import java.io.File
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
-    private lateinit var skillRegistry: SkillRegistry
+    private lateinit var skills: List<Skill>
     private lateinit var toolExecutor: AndroidToolExecutor
     private lateinit var debugTraceExporter: DebugTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var agentRunController: AgentRunController
+    private lateinit var skillRegistry: SkillRegistry
     private lateinit var contentRoot: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var chatInputBar: LinearLayout
@@ -67,6 +68,8 @@ class MainActivity : Activity() {
     private lateinit var appShellRenderer: AppShellRenderer
     private val navigationController = NavigationController()
 
+    private var selectedSkillId: String? = null
+    private var expandedSkillReferenceId: String? = null
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
@@ -75,18 +78,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
+        skills = SkillStore(this).loadSkills()
         ToolExecutionLog.configure(this)
-        val skillLoad = SkillStore(this).load()
-        skillRegistry = SkillRegistry(skillLoad.skills, SharedPreferencesSkillStore(preferences))
-        skillLoad.invalid.forEach { invalid ->
-            ToolExecutionLog.record(
-                name = "skill_load_failed",
-                args = "skill=${invalid.id}",
-                ok = false,
-                message = invalid.errors.joinToString("; "),
-                source = "skills"
-            )
-        }
         toolExecutor = AndroidToolExecutor(this)
         debugTraceExporter = DebugTraceExporter(
             context = this,
@@ -94,6 +87,13 @@ class MainActivity : Activity() {
             observeScreen = { toolExecutor.observeScreen() }
         )
         localModelRuntime = LiteRtCommandModelRuntime(this)
+        selectedSkillId = preferences.getString("active_skill", null)
+        skillRegistry = SkillRegistry(
+            installedSkills = skills,
+            disabledSkillIds = loadDisabledSkillIds(),
+            activeSkillId = selectedSkillId
+        )
+        persistSkillRegistry()
 
         reasoningCore = DefaultLocalReasoningCore(
             invocation = defaultAgentRunInvocation(
@@ -104,7 +104,7 @@ class MainActivity : Activity() {
                 localModelRuntime = localModelRuntime
             ),
             sessionContext = { currentReasoningContext() },
-            availableSkills = { skillRegistry.enabledSkills() },
+            availableSkills = { skillRegistry.enabledSkills },
             screenContextProvider = { AccessibilityBridge.observeScreenContext() }
         )
         agentRunController = AgentRunController(
@@ -165,23 +165,7 @@ class MainActivity : Activity() {
             AppSection.LOGS -> renderLogsScreen()
             AppSection.SETTINGS -> renderSettingsScreen()
         }
-        appShellRenderer.updatePageTitle(pageTitleForCurrentScreen())
         animatePendingSettingsTransition(section)
-    }
-
-    private fun pageTitleForCurrentScreen(): String {
-        if (navigationController.activeRunDetailId != null) {
-            return "Run details"
-        }
-        if (navigationController.activeSkillDetailId != null) {
-            return "Skill details"
-        }
-        return when (navigationController.activeSection) {
-            AppSection.CHAT -> "Chat"
-            AppSection.TOOLS -> "Android Tools"
-            AppSection.LOGS -> "Logs"
-            AppSection.SETTINGS -> navigationController.activeSettingsPanel?.label ?: "Settings"
-        }
     }
 
     private fun animatePendingSettingsTransition(section: AppSection) {
@@ -218,6 +202,7 @@ class MainActivity : Activity() {
             scrollView = scrollView,
             contentRoot = contentRoot,
             conversation = conversation,
+            statusPill = ::statusPill,
             agentRunState = { agentRunController.runState },
             runtimeLabel = { currentProviderMode().label() },
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
@@ -262,7 +247,24 @@ class MainActivity : Activity() {
     }
 
     private fun commitSelectedSkill(id: String?) {
-        skillRegistry.setActiveSkill(id)
+        skillRegistry = skillRegistry.select(id)
+        selectedSkillId = skillRegistry.activeSkillId
+        expandedSkillReferenceId = when {
+            selectedSkillId == null -> null
+            expandedSkillReferenceId == selectedSkillId -> null
+            else -> selectedSkillId
+        }
+        persistSkillRegistry()
+        showSection(AppSection.SETTINGS)
+    }
+
+    private fun setSkillEnabled(id: String, enabled: Boolean) {
+        skillRegistry = skillRegistry.setEnabled(id, enabled)
+        selectedSkillId = skillRegistry.activeSkillId
+        if (!skillRegistry.isEnabled(id) && expandedSkillReferenceId == id) {
+            expandedSkillReferenceId = null
+        }
+        persistSkillRegistry()
         showSection(AppSection.SETTINGS)
     }
 
@@ -271,7 +273,9 @@ class MainActivity : Activity() {
             activity = this,
             contentRoot = contentRoot,
             toolExecutionController = toolExecutionController(),
+            statusPill = ::statusPill,
             openAccessibilitySettings = ::openAccessibilitySettings,
+            toolsResult = sectionResults::forTools,
             refreshToolsScreen = { showSection(AppSection.TOOLS) },
             hideKeyboard = ::hideKeyboard,
             bindKeyboardScrollSpacer = ::bindKeyboardScrollSpacer,
@@ -287,6 +291,10 @@ class MainActivity : Activity() {
             activity = this,
             toolExecutor = toolExecutor,
             callbacks = object : ToolExecutionCallbacks {
+                override fun recordToolsResult(message: String) {
+                    sectionResults.recordToolsResult(message)
+                }
+
                 override fun refreshDeveloperLogs() {
                     refreshExecutionLog()
                 }
@@ -336,60 +344,30 @@ class MainActivity : Activity() {
     }
 
     private fun renderSettingsScreen() {
-        if (navigationController.activeSkillDetailId != null) {
-            renderSkillDetailScreen()
-            return
-        }
-
         SettingsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
             preferences = preferences,
-            skills = skillRegistry.enabledSkills(),
+            skills = skills,
             localModelRuntime = localModelRuntime,
             activeSettingsPanel = { navigationController.activeSettingsPanel },
             openSettingsPanel = navigationController::openSettingsPanel,
             closeSettingsPanel = navigationController::closeSettingsPanel,
-            selectedSkillId = { skillRegistry.activeSkill()?.id },
+            selectedSkillId = { selectedSkillId },
+            expandedSkillReferenceId = { expandedSkillReferenceId },
+            isSkillEnabled = skillRegistry::isEnabled,
             commitSelectedSkill = ::commitSelectedSkill,
-            openSkillDetail = ::openSkillDetail,
+            setSkillEnabled = ::setSkillEnabled,
             currentProviderMode = ::currentProviderMode,
             openAccessibilitySettings = ::openAccessibilitySettings,
             hideKeyboard = ::hideKeyboard,
-            recordMcpResult = mcpResultStore::recordMcpResult,
-            mcpResult = mcpResultStore::forMcp,
+            recordMcpResult = sectionResults::recordMcpResult,
+            mcpResult = sectionResults::forMcp,
             refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
         ).render()
     }
 
-    private val mcpResultStore = McpResultStore()
-
-    private fun openSkillDetail(skillId: String) {
-        navigationController.openSkillDetail(skillId)
-        showSection(AppSection.SETTINGS)
-    }
-
-    private fun closeSkillDetail() {
-        navigationController.closeSkillDetail()
-        showSection(AppSection.SETTINGS)
-    }
-
-    private fun findSkill(skillId: String): Skill? {
-        return skillRegistry.allSkills().firstOrNull { it.id == skillId }
-    }
-
-    private fun renderSkillDetailScreen() {
-        SkillDetailRenderer(
-            activity = this,
-            contentRoot = contentRoot,
-            skillId = navigationController.activeSkillDetailId,
-            findSkill = ::findSkill,
-            selectedSkillId = { skillRegistry.activeSkill()?.id },
-            closeSkillDetail = ::closeSkillDetail,
-            commitSelectedSkill = ::commitSelectedSkill,
-            refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
-        ).render()
-    }
+    private val sectionResults = SectionResultStore()
 
     private fun refreshExecutionLog() {
         if (::executionLogList.isInitialized) {
@@ -401,7 +379,10 @@ class MainActivity : Activity() {
         return LogsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
-            exportDebugTrace = ::exportDebugTrace
+            latestResult = sectionResults::forLogs,
+            exportDebugTrace = ::exportDebugTrace,
+            recordLogsResult = sectionResults::recordLogsResult,
+            refreshLogsScreen = { showSection(AppSection.LOGS) }
         )
     }
 
@@ -424,7 +405,27 @@ class MainActivity : Activity() {
     }
 
     private fun selectedSkill(): Skill? {
-        return skillRegistry.activeSkill()
+        return skillRegistry.activeSkill
+    }
+
+    private fun loadDisabledSkillIds(): Set<String> {
+        return preferences.getStringSet("disabled_skills", emptySet()).orEmpty()
+            .filter { id -> skills.any { skill -> skill.id == id } }
+            .toSet()
+    }
+
+    private fun persistSkillRegistry() {
+        preferences.edit()
+            .putString("active_skill", skillRegistry.activeSkillId)
+            .putStringSet("disabled_skills", skillRegistry.disabledSkillIds)
+            .apply()
+    }
+
+    private fun statusPill(): View {
+        return timelineCard(
+            "Runtime",
+            "${currentProviderMode().label()}\n${localModelRuntime.status().shortLine()}\n${if (AccessibilityBridge.isConnected()) "Accessibility connected" else "Accessibility not connected"}"
+        )
     }
 
     private fun hideKeyboard(anchor: View) {
@@ -461,7 +462,9 @@ class MainActivity : Activity() {
             runId = navigationController.activeRunDetailId,
             findAgentRun = ::findAgentRun,
             closeRunDetail = ::closeRunDetail,
-            exportRunTrace = ::exportRunTrace
+            exportRunTrace = ::exportRunTrace,
+            recordLogsResult = sectionResults::recordLogsResult,
+            refreshCurrentSection = { showSection(navigationController.activeSection) }
         ).render()
     }
 
