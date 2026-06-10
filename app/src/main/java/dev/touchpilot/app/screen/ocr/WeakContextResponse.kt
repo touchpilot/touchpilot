@@ -1,5 +1,7 @@
 package dev.touchpilot.app.screen.ocr
 
+import dev.touchpilot.app.security.SensitiveTextRedactor
+
 /**
  * Generates the honest, conservative response copy TouchPilot should produce when
  * Accessibility data is too thin to summarize a screen. Keeping this in one place
@@ -23,7 +25,11 @@ object WeakContextResponse {
                 if (fallback.text.isEmpty()) {
                     GENERIC_WEAK
                 } else {
-                    val snippet = fallback.text.joinToString(separator = " | ")
+                    // OCR output is untrusted and may contain secrets read off
+                    // the screen, so redact before surfacing (per the
+                    // OcrFallback contract) and only then truncate.
+                    val snippet = SensitiveTextRedactor
+                        .redact(fallback.text.joinToString(separator = " | "))
                         .take(160)
                     "I cannot read this screen reliably from Accessibility data " +
                         "(${quality.reason.name.lowercase().replace('_', ' ')}). " +

@@ -5,37 +5,25 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
-import dev.touchpilot.app.R
 import dev.touchpilot.app.agent.AgentRunCompletionStatus
 import dev.touchpilot.app.agent.AgentRunCompletionSummary
 import dev.touchpilot.app.agent.AgentRunState
 import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.AgentStepStatus
-import dev.touchpilot.app.agent.ToolCallCardModel
-import dev.touchpilot.app.agent.ToolCallPolicyStatus
-import dev.touchpilot.app.agent.ToolCallResultStatus
 import dev.touchpilot.app.agent.timelineChipAccent
 import dev.touchpilot.app.agent.timelineChipLabel
 import dev.touchpilot.app.agent.timelineDetail
 import dev.touchpilot.app.agent.timelineLabel
-import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
-import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rounded
-import dev.touchpilot.app.ui.rowButtonParams
-import dev.touchpilot.app.ui.secondaryButton
 import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.timelineCard
@@ -50,103 +38,10 @@ class ChatScreenRenderer(
     private val agentRunState: () -> AgentRunState,
     private val runtimeLabel: () -> String,
     private val skillTitle: () -> String,
-    private val setChatTaskInput: (EditText) -> Unit,
-    private val submitChatMessage: () -> Unit,
     private val cancelAgentRun: () -> Unit,
     private val openRunDetail: (String) -> Unit,
     private val refreshChatScreen: () -> Unit,
-    private val buildApprovalMessage: (ChatEvent.ApprovalPrompt) -> String,
-    private val formatToolCallBody: (ToolCallCardModel) -> String,
 ) {
-    fun buildChatInputBar(): LinearLayout {
-        val bar = LinearLayout(activity).apply {
-            id = R.id.chat_input_bar
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-            setBackgroundColor(Theme.SurfaceRaised)
-            setPadding(20, 12, 20, 10)
-        }
-        bar.addView(
-            View(activity).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    1
-                )
-                setBackgroundColor(Theme.StrokeDark)
-            }
-        )
-
-        val inputRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-            setPadding(0, 12, 0, 0)
-        }
-        val taskInput = EditText(activity).apply {
-            id = R.id.agent_task_input
-            hint = "Message TouchPilot..."
-            setSingleLine(false)
-            minLines = 1
-            maxLines = 5
-            textSize = 14.5f
-            setTextColor(Color.WHITE)
-            setHintTextColor(Theme.MutedText)
-            setLineSpacing(4f, 1f)
-            background = rounded(Theme.Card, 24, Theme.StrokeDark)
-            setPadding(22, 14, 22, 14)
-            minHeight = 56
-            imeOptions = EditorInfo.IME_ACTION_SEND.toInt()
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == EditorInfo.IME_ACTION_SEND) {
-                    submitChatMessage()
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-        setChatTaskInput(taskInput)
-        inputRow.addView(
-            taskInput,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
-            }
-        )
-        inputRow.addView(
-            MaterialButton(activity).apply {
-                id = R.id.run_agent_button
-                text = "Send"
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
-                isAllCaps = false
-                minHeight = 56
-                minWidth = 0
-                insetTop = 0
-                insetBottom = 0
-                gravity = Gravity.CENTER
-                setTextColor(Theme.OnAccent)
-                backgroundTintList = ColorStateList.valueOf(Theme.Accent)
-                cornerRadius = 28
-                setPadding(28, 0, 32, 0)
-                icon = ContextCompat.getDrawable(activity, R.drawable.ic_send)
-                iconTint = ColorStateList.valueOf(Theme.OnAccent)
-                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = 10
-                iconSize = 40
-                setOnClickListener { submitChatMessage() }
-            },
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                56
-            ).apply {
-                leftMargin = 10
-            }
-        )
-        bar.addView(inputRow)
-        return bar
-    }
-
     fun render() {
         contentRoot.addView(activity.sectionTitle("Chat"))
         contentRoot.addView(statusPill())
@@ -205,9 +100,15 @@ class ChatScreenRenderer(
             )
             is ChatEvent.StepTimeline -> stepTimelineCard(event)
             is ChatEvent.CompletionSummary -> completionSummaryCard(event.summary, event.runId)
-            is ChatEvent.ToolCall -> toolCallCard(event.card)
-            is ChatEvent.ApprovalPrompt -> approvalCard(event)
-            is ChatEvent.ClarificationPrompt -> clarificationCard(event)
+            is ChatEvent.ToolCall -> ToolCallCardRenderer(activity).render(event.card)
+            is ChatEvent.ApprovalPrompt -> ChatDecisionCardRenderer(
+                activity = activity,
+                refreshChatScreen = refreshChatScreen
+            ).approvalCard(event)
+            is ChatEvent.ClarificationPrompt -> ChatDecisionCardRenderer(
+                activity = activity,
+                refreshChatScreen = refreshChatScreen
+            ).clarificationCard(event)
         }
     }
 
@@ -449,69 +350,6 @@ class ChatScreenRenderer(
         return card.withMargins(top = 8, bottom = 8)
     }
 
-    private fun toolCallCard(cardModel: ToolCallCardModel): View {
-        val blocked = cardModel.policyStatus == ToolCallPolicyStatus.BLOCKED ||
-            cardModel.resultStatus == ToolCallResultStatus.BLOCKED
-        val failed = cardModel.resultStatus == ToolCallResultStatus.FAILED
-        val needsApproval = cardModel.policyStatus == ToolCallPolicyStatus.APPROVAL_REQUIRED
-        val stroke = when {
-            blocked || failed -> Theme.Danger
-            needsApproval -> Theme.Warning
-            cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED -> Theme.Accent
-            else -> Theme.StrokeDark
-        }
-
-        val card = MaterialCardView(activity).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = stroke
-            strokeWidth = if (blocked || failed || needsApproval) 2 else 1
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
-        }
-        val header = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        header.addView(
-            TextView(activity).apply {
-                text = cardModel.tool
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        header.addView(
-            activity.statusChip(cardModel.resultStatus.label, accent = cardModel.resultStatus == ToolCallResultStatus.SUCCEEDED)
-        )
-        content.addView(header)
-
-        content.addView(
-            TextView(activity).apply {
-                text = "Policy: ${cardModel.policyStatus.label}"
-                textSize = 11.5f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(stroke)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-
-        content.addView(
-            TextView(activity).apply {
-                text = formatToolCallBody(cardModel)
-                textSize = 12.5f
-                setTextColor(Theme.BodyText)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-        card.addView(content)
-        return card.withMargins(top = 6, right = 24, bottom = 6)
-    }
-
     private fun completionSummaryCard(summary: AgentRunCompletionSummary, runId: String): View {
         val stroke = completionSummaryStroke(summary.status)
         val card = MaterialCardView(activity).apply {
@@ -609,173 +447,6 @@ class ChatScreenRenderer(
             AgentRunCompletionStatus.NEEDS_CLARIFICATION,
             AgentRunCompletionStatus.CANCELLED -> Theme.Warning
         }
-    }
-
-    private fun approvalCard(event: ChatEvent.ApprovalPrompt): View {
-        val request = event.request
-        val tool = request.tool
-        val card = MaterialCardView(activity).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = when (event.state) {
-                ApprovalState.PENDING -> Theme.Accent
-                ApprovalState.APPROVED -> Theme.Accent
-                ApprovalState.REJECTED -> Theme.StrokeDark
-            }
-            strokeWidth = 2
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20, 18, 20, 18)
-        }
-
-        val statusLabel = when (event.state) {
-            ApprovalState.PENDING -> "Approval requested"
-            ApprovalState.APPROVED -> "Approved"
-            ApprovalState.REJECTED -> "Rejected"
-        }
-        content.addView(
-            TextView(activity).apply {
-                text = "$statusLabel - ${tool.name}"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }
-        )
-        content.addView(
-            TextView(activity).apply {
-                text = buildApprovalMessage(event)
-                textSize = 12.5f
-                setTextColor(Theme.BodyText)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-
-        if (event.state == ApprovalState.PENDING) {
-            val buttonRow = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, 14, 0, 0)
-            }
-            buttonRow.addView(
-                activity.primaryButton("Approve", iconRes = R.drawable.ic_check) {
-                    resolveApproval(event, true)
-                }.apply { id = R.id.approval_approve_button },
-                rowButtonParams()
-            )
-            buttonRow.addView(
-                activity.secondaryButton("Reject", iconRes = R.drawable.ic_close) {
-                    resolveApproval(event, false)
-                }.apply { id = R.id.approval_reject_button },
-                rowButtonParams()
-            )
-            content.addView(buttonRow)
-        }
-
-        card.addView(content)
-        return card.withMargins(top = 8, bottom = 8)
-    }
-
-    private fun resolveApproval(event: ChatEvent.ApprovalPrompt, approved: Boolean) {
-        if (event.state != ApprovalState.PENDING) return
-        event.state = if (approved) ApprovalState.APPROVED else ApprovalState.REJECTED
-        event.onDecision(approved)
-        refreshChatScreen()
-    }
-
-    private fun clarificationCard(event: ChatEvent.ClarificationPrompt): View {
-        val card = MaterialCardView(activity).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = when (event.state) {
-                ClarificationState.PENDING -> Theme.Accent
-                ClarificationState.ANSWERED -> Theme.StrokeDark
-            }
-            strokeWidth = 2
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20, 18, 20, 18)
-        }
-
-        val statusLabel = when (event.state) {
-            ClarificationState.PENDING -> "Clarification needed"
-            ClarificationState.ANSWERED -> "Answered"
-        }
-        content.addView(
-            TextView(activity).apply {
-                text = statusLabel
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            }
-        )
-        content.addView(
-            TextView(activity).apply {
-                text = event.question
-                textSize = 14f
-                setTextColor(Color.WHITE)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-        if (event.detail.isNotBlank()) {
-            content.addView(
-                TextView(activity).apply {
-                    text = SensitiveTextRedactor.redact(event.detail)
-                    textSize = 12.5f
-                    setTextColor(Theme.BodyText)
-                    setPadding(0, 6, 0, 0)
-                }
-            )
-        }
-
-        if (event.state == ClarificationState.PENDING && event.choices.isNotEmpty()) {
-            event.choices.forEach { choice ->
-                val label = SensitiveTextRedactor.redact(choice)
-                content.addView(
-                    activity.secondaryButton(label) {
-                        resolveClarification(event, label)
-                    }.apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT
-                        ).apply {
-                            topMargin = 10
-                        }
-                    }
-                )
-            }
-        } else if (event.state == ClarificationState.ANSWERED) {
-            content.addView(
-                TextView(activity).apply {
-                    text = "You: ${event.selectedAnswer.orEmpty()}"
-                    textSize = 12.5f
-                    setTextColor(Theme.Accent)
-                    setPadding(0, 10, 0, 0)
-                }
-            )
-        } else if (event.state == ClarificationState.PENDING) {
-            content.addView(
-                TextView(activity).apply {
-                    text = "Reply in the chat box below."
-                    textSize = 12.5f
-                    setTextColor(Theme.MutedText)
-                    setPadding(0, 10, 0, 0)
-                }
-            )
-        }
-
-        card.addView(content)
-        return card.withMargins(top = 8, bottom = 8)
-    }
-
-    private fun resolveClarification(event: ChatEvent.ClarificationPrompt, answer: String) {
-        if (event.state != ClarificationState.PENDING) return
-        event.state = ClarificationState.ANSWERED
-        event.selectedAnswer = answer
-        event.onAnswer(answer)
-        refreshChatScreen()
     }
 
     private fun stepTimelineCard(event: ChatEvent.StepTimeline): View {

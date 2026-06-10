@@ -112,7 +112,7 @@ class McpHttpClient(
         }
 
         val responseText = if (connection.responseCode in 200..299) {
-            connection.getHeaderField(SessionHeader)?.takeIf { it.isNotBlank() }?.let {
+            connection.getHeaderField(SessionHeader)?.trim()?.takeIf { it.isNotBlank() }?.let {
                 sessionId = it
             }
             connection.inputStream.bufferedReader().use { it.readText() }
@@ -124,18 +124,34 @@ class McpHttpClient(
         return parseResponse(responseText)
     }
 
-    private fun parseResponse(responseText: String): JSONObject {
+    internal fun parseResponse(responseText: String): JSONObject {
         val trimmed = responseText.trim()
         if (trimmed.startsWith("{")) return JSONObject(trimmed)
 
-        val eventData = trimmed
-            .lineSequence()
-            .filter { it.startsWith("data:") }
-            .joinToString(separator = "\n") { it.removePrefix("data:").trim() }
-            .trim()
+        // SSE events are separated by a blank line. Within an event the `data:`
+        // lines belong to that event only and are joined with `\n` — they must
+        // not be merged with the next event's data, or a leading notification
+        // would silently swallow the actual JSON-RPC response.
+        val events = trimmed.split(Regex("\\r?\\n\\r?\\n"))
+            .mapNotNull { block ->
+                val payload = block.lineSequence()
+                    .filter { it.startsWith("data:") }
+                    .joinToString(separator = "\n") { it.removePrefix("data:").trim() }
+                    .trim()
+                if (payload.startsWith("{")) {
+                    runCatching { JSONObject(payload) }.getOrNull()
+                } else {
+                    null
+                }
+            }
 
-        if (eventData.startsWith("{")) return JSONObject(eventData)
-        error("MCP response did not contain a JSON object")
+        // Prefer the JSON-RPC response event (carries `result` or `error`);
+        // notifications such as `notifications/progress` have neither and must
+        // not shadow the real response.
+        val response = events.firstOrNull { it.has("result") || it.has("error") }
+            ?: events.firstOrNull()
+
+        return response ?: error("MCP response did not contain a JSON object")
     }
 
     private fun renderContent(content: JSONArray): String {

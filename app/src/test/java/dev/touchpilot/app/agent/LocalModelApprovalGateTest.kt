@@ -21,7 +21,6 @@ class LocalModelApprovalGateTest {
     fun localModelMediumRiskCommandRoutesToApproval() {
         val provider = LocalModelCommandProvider(
             runtime = StubRuntime("""{"tool":"open_app","args":{"target":"Settings"}}"""),
-            fallback = LocalRouterCommandProvider("open Settings", null),
             task = "open Settings",
             skill = null
         )
@@ -46,7 +45,6 @@ class LocalModelApprovalGateTest {
     fun localModelLowRiskCommandSkipsApproval() {
         val provider = LocalModelCommandProvider(
             runtime = StubRuntime("""{"tool":"observe_screen","args":{}}"""),
-            fallback = LocalRouterCommandProvider("look around", null),
             task = "look around",
             skill = null
         )

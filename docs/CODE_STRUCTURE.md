@@ -46,6 +46,10 @@ Packaged skills are canonical under:
 app/src/main/assets/skills/
 ```
 
+Bundled skill files should follow the Skills v2 contract documented in
+[Skills](SKILLS.md). Keep skill metadata in packaged assets so the Android app,
+tests, and local agent runtime all read the same source.
+
 Packaged local model assets are canonical under:
 
 ```text

@@ -1,23 +1,18 @@
 package dev.touchpilot.app
 
 import android.app.Activity
-import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Rect
-import android.graphics.Typeface
 import android.os.Bundle
 import android.provider.Settings
-import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -27,47 +22,36 @@ import com.google.android.material.tabs.TabLayout
 import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
-import dev.touchpilot.app.agent.AgentRunDetailFormatter
-import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunRecord
-import dev.touchpilot.app.agent.AgentRunStepStatus
 import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
-import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillStore
+import dev.touchpilot.app.navigation.AppSection
+import dev.touchpilot.app.navigation.NavigationController
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
 import dev.touchpilot.app.runtime.ToolExecutionController
-import dev.touchpilot.app.security.SensitiveTextRedactor
-import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolApprovalProvider
-import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.runtime.AgentRunController
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
+import dev.touchpilot.app.ui.AppShellRenderer
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.label
-import dev.touchpilot.app.ui.primaryButton
-import dev.touchpilot.app.ui.rounded
-import dev.touchpilot.app.ui.secondaryButton
-import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.shortLine
-import dev.touchpilot.app.ui.statusChip
-import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.chat.ChatEvent
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
+import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
-import dev.touchpilot.app.ui.settings.SettingsPanel
 import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
-import dev.touchpilot.app.ui.withMargins
 import java.io.File
 import java.util.Locale
 
@@ -85,17 +69,14 @@ class MainActivity : Activity() {
     private lateinit var chatTaskInput: EditText
     private lateinit var statusView: TextView
     private lateinit var executionLogList: LinearLayout
-    private var bottomNav: TabLayout? = null
+    private lateinit var appShellRenderer: AppShellRenderer
+    private val navigationController = NavigationController()
 
-    private var activeSection = Section.CHAT
-    private var activeSettingsPanel: SettingsPanel? = null
-    private var pendingSettingsAnimationDirection = 0
     private var selectedSkillId: String? = null
     private var expandedSkillReferenceId: String? = null
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
-    private var activeRunDetailId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,7 +110,7 @@ class MainActivity : Activity() {
             conversation = conversation,
             currentProviderMode = ::currentProviderMode,
             runOnUiThread = { block -> runOnUiThread(block) },
-            showChat = { showSection(Section.CHAT) },
+            showChat = { showSection(AppSection.CHAT) },
             refreshExecutionLog = ::refreshExecutionLog,
             refreshStatus = ::refreshStatus,
             refreshStepTimeline = ::refreshStepTimeline,
@@ -143,7 +124,7 @@ class MainActivity : Activity() {
         }
 
         setContentView(buildRoot())
-        showSection(Section.CHAT)
+        showSection(AppSection.CHAT)
         refreshStatus()
     }
 
@@ -151,171 +132,45 @@ class MainActivity : Activity() {
         super.onResume()
         refreshStatus()
         if (::contentRoot.isInitialized) {
-            showSection(activeSection)
+            showSection(navigationController.activeSection)
         }
     }
 
     private fun buildRoot(): View {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Theme.Background)
-
-            addView(buildHeader())
-
-            scrollView = ScrollView(this@MainActivity).apply {
-                id = R.id.chat_scroll_view
-                setFillViewport(false)
-                isScrollbarFadingEnabled = true
-                contentRoot = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(24, 18, 24, 20)
-                }
-                addView(contentRoot)
-            }
-            addView(
-                scrollView,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    0,
-                    1f
-                )
-            )
-
-            chatInputBar = chatScreenRenderer().buildChatInputBar()
-            addView(chatInputBar)
-
-            addView(buildBottomNav())
-        }
-    }
-
-    private fun buildHeader(): View {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(28, 64, 28, 12)
-            setBackgroundColor(Theme.Background)
-
-            val row = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-
-            row.addView(
-                TextView(this@MainActivity).apply {
-                    id = R.id.touchpilot_title
-                    text = "Touch"
-                    textSize = 24f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.WHITE)
-                }
-            )
-            row.addView(
-                TextView(this@MainActivity).apply {
-                    text = "Pilot"
-                    textSize = 24f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Theme.Accent)
-                }
-            )
-
-            addView(row)
-
-            statusView = TextView(this@MainActivity).apply {
-                id = R.id.touchpilot_status
-                textSize = 11.5f
-                setPadding(0, 6, 0, 0)
-                setTextColor(Color.rgb(150, 164, 178))
-            }
-            addView(statusView)
-        }
-    }
-
-    private fun buildBottomNav(): View {
-        return TabLayout(this).apply {
-            bottomNav = this
-            setBackgroundColor(Theme.Card)
-            setPadding(12, 8, 12, 18)
-            tabMode = TabLayout.MODE_FIXED
-            tabGravity = TabLayout.GRAVITY_FILL
-            setSelectedTabIndicatorColor(Color.TRANSPARENT)
-            setTabTextColors(Theme.NavText, Theme.Accent)
-
-            Section.values().forEach { section ->
-                addTab(
-                    newTab()
-                        .setCustomView(bottomNavLabel(section))
-                        .setTag(section),
-                    section == activeSection
-                )
-            }
-
-            addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab) {
-                    (tab.tag as? Section)?.let { section ->
-                        if (section != activeSection) {
-                            showSection(section)
-                        }
-                    }
-                }
-
-                override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-                override fun onTabReselected(tab: TabLayout.Tab) = Unit
-            })
-        }.withMargins()
-    }
-
-    private fun bottomNavLabel(section: Section): View {
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            minimumWidth = 0
-            minimumHeight = 56
-            setPadding(8, 6, 8, 6)
-        }
-        column.addView(
-            ImageView(this).apply {
-                setImageResource(section.iconRes)
-                imageTintList = ColorStateList.valueOf(Theme.NavText)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                contentDescription = section.label
-            },
-            LinearLayout.LayoutParams(40, 40)
+        appShellRenderer = AppShellRenderer(
+            activity = this,
+            activeSection = { navigationController.activeSection },
+            onSectionSelected = ::showSection,
+            setChatTaskInput = { chatTaskInput = it },
+            submitChatMessage = ::submitChatMessage
         )
-        column.addView(
-            TextView(this).apply {
-                text = section.label
-                gravity = Gravity.CENTER
-                setSingleLine(true)
-                textSize = 11f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Theme.NavText)
-                setPadding(0, 2, 0, 0)
-            }
-        )
-        return column
+        val shellViews = appShellRenderer.render()
+        scrollView = shellViews.scrollView
+        contentRoot = shellViews.contentRoot
+        chatInputBar = shellViews.chatInputBar
+        statusView = shellViews.statusView
+        return shellViews.root
     }
 
-    private fun showSection(section: Section) {
-        if (section != Section.CHAT && section != Section.LOGS) {
-            activeRunDetailId = null
-        }
-        activeSection = section
+    private fun showSection(section: AppSection) {
+        navigationController.showSection(section)
         updateBottomNav()
-        chatInputBar.visibility = if (section == Section.CHAT) View.VISIBLE else View.GONE
+        chatInputBar.visibility = if (section == AppSection.CHAT) View.VISIBLE else View.GONE
         contentRoot.removeAllViews()
         when (section) {
-            Section.CHAT -> renderChatScreen()
-            Section.TOOLS -> renderToolsScreen()
-            Section.LOGS -> renderLogsScreen()
-            Section.SETTINGS -> renderSettingsScreen()
+            AppSection.CHAT -> renderChatScreen()
+            AppSection.TOOLS -> renderToolsScreen()
+            AppSection.LOGS -> renderLogsScreen()
+            AppSection.SETTINGS -> renderSettingsScreen()
         }
         animatePendingSettingsTransition(section)
     }
 
-    private fun animatePendingSettingsTransition(section: Section) {
-        if (section != Section.SETTINGS || pendingSettingsAnimationDirection == 0) return
+    private fun animatePendingSettingsTransition(section: AppSection) {
+        if (section != AppSection.SETTINGS) return
 
-        val direction = pendingSettingsAnimationDirection
-        pendingSettingsAnimationDirection = 0
+        val direction = navigationController.consumeSettingsAnimationDirection()
+        if (direction == 0) return
         val travel = (contentRoot.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).toFloat()
         contentRoot.translationX = travel * direction
         contentRoot.alpha = 0.96f
@@ -328,23 +183,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateBottomNav() {
-        val nav = bottomNav ?: return
-        val index = Section.values().indexOf(activeSection)
-        if (index >= 0 && nav.selectedTabPosition != index) {
-            nav.getTabAt(index)?.select()
-        }
-        Section.values().forEachIndexed { tabIndex, section ->
-            val container = nav.getTabAt(tabIndex)?.customView as? LinearLayout
-            val selected = section == activeSection
-            val tint = if (selected) Theme.OnAccent else Theme.NavText
-            (container?.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(tint)
-            (container?.getChildAt(1) as? TextView)?.setTextColor(tint)
-            container?.background = rounded(
-                fill = if (selected) Theme.Accent else Color.TRANSPARENT,
-                radius = 10,
-                stroke = if (selected) Theme.Accent else Color.TRANSPARENT
-            )
-        }
+        appShellRenderer.updateBottomNav()
     }
 
     private fun submitChatMessage() {
@@ -365,18 +204,14 @@ class MainActivity : Activity() {
             agentRunState = { agentRunController.runState },
             runtimeLabel = { currentProviderMode().label() },
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
-            setChatTaskInput = { chatTaskInput = it },
-            submitChatMessage = ::submitChatMessage,
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
-            refreshChatScreen = { showSection(Section.CHAT) },
-            buildApprovalMessage = { buildApprovalMessage(it.request) },
-            formatToolCallBody = ::formatToolCallBody,
+            refreshChatScreen = { showSection(AppSection.CHAT) },
         )
     }
 
     private fun renderChatScreen() {
-        if (activeRunDetailId != null) {
+        if (navigationController.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
         }
@@ -417,7 +252,7 @@ class MainActivity : Activity() {
             else -> id
         }
         preferences.edit().putString("active_skill", selectedSkillId).apply()
-        showSection(Section.SETTINGS)
+        showSection(AppSection.SETTINGS)
     }
 
     private fun renderToolsScreen() {
@@ -428,7 +263,7 @@ class MainActivity : Activity() {
             statusPill = ::statusPill,
             openAccessibilitySettings = ::openAccessibilitySettings,
             toolsResult = sectionResults::forTools,
-            refreshToolsScreen = { showSection(Section.TOOLS) },
+            refreshToolsScreen = { showSection(AppSection.TOOLS) },
             hideKeyboard = ::hideKeyboard,
             bindKeyboardScrollSpacer = ::bindKeyboardScrollSpacer,
             getFocusSelectorIndex = { focusSelectorIndex },
@@ -452,7 +287,7 @@ class MainActivity : Activity() {
                 }
 
                 override fun refreshToolsScreen() {
-                    showSection(Section.TOOLS)
+                    showSection(AppSection.TOOLS)
                 }
             }
         )
@@ -487,7 +322,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderLogsScreen() {
-        if (activeRunDetailId != null) {
+        if (navigationController.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
         }
@@ -502,9 +337,9 @@ class MainActivity : Activity() {
             preferences = preferences,
             skills = skills,
             localModelRuntime = localModelRuntime,
-            activeSettingsPanel = { activeSettingsPanel },
-            setActiveSettingsPanel = { activeSettingsPanel = it },
-            setPendingAnimationDirection = { pendingSettingsAnimationDirection = it },
+            activeSettingsPanel = { navigationController.activeSettingsPanel },
+            openSettingsPanel = navigationController::openSettingsPanel,
+            closeSettingsPanel = navigationController::closeSettingsPanel,
             selectedSkillId = { selectedSkillId },
             expandedSkillReferenceId = { expandedSkillReferenceId },
             commitSelectedSkill = ::commitSelectedSkill,
@@ -513,7 +348,7 @@ class MainActivity : Activity() {
             hideKeyboard = ::hideKeyboard,
             recordMcpResult = sectionResults::recordMcpResult,
             mcpResult = sectionResults::forMcp,
-            refreshSettingsScreen = { showSection(Section.SETTINGS) }
+            refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
         ).render()
     }
 
@@ -532,7 +367,7 @@ class MainActivity : Activity() {
             latestResult = sectionResults::forLogs,
             exportDebugTrace = ::exportDebugTrace,
             recordLogsResult = sectionResults::recordLogsResult,
-            refreshLogsScreen = { showSection(Section.LOGS) }
+            refreshLogsScreen = { showSection(AppSection.LOGS) }
         )
     }
 
@@ -565,20 +400,6 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun localModelStatusCard(): View {
-        val status = localModelRuntime.status()
-        return timelineCard(
-            "Local model",
-            """
-            Runtime: ${status.runtime}
-            Status: ${if (status.available) "available" else "fallback active"}
-            Model asset: ${status.modelAsset}
-            Version: ${status.version}
-            ${status.message}
-            """.trimIndent()
-        )
-    }
-
     private fun hideKeyboard(anchor: View) {
         val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         manager.hideSoftInputFromWindow(anchor.windowToken, 0)
@@ -592,254 +413,31 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun buildApprovalMessage(request: ToolApprovalRequest): String {
-        val redactedArgs = SensitiveTextRedactor.redact(request.args)
-        val argsText = if (redactedArgs.isEmpty()) {
-            "none"
-        } else {
-            redactedArgs.entries.joinToString(separator = "\n") { entry ->
-                "${entry.key}: ${entry.value.take(MaxApprovalArgLength)}"
-            }
-        }
-
-        return """
-            Risk: ${request.tool.risk}
-            Tool: ${request.tool.name}
-            Description: ${request.tool.description}
-            Why approval is needed: ${request.policy.reason}
-            Data affected: ${request.policy.dataAffected}
-            If approved: ${request.policy.ifApproved}
-
-            Arguments:
-            $argsText
-        """.trimIndent()
-    }
-
-    private fun formatToolCallBody(cardModel: ToolCallCardModel): String {
-        return buildString {
-            appendLine("Arguments:")
-            append(formatToolArgs(cardModel.args))
-            if (cardModel.message.isNotBlank()) {
-                appendLine()
-                appendLine()
-                append("Result: ")
-                append(cardModel.message)
-            }
-            if (!cardModel.verificationStatus.isNullOrBlank()) {
-                appendLine()
-                appendLine()
-                append("Verification: ")
-                append(cardModel.verificationStatus)
-                if (!cardModel.verificationReason.isNullOrBlank()) {
-                    append(" - ")
-                    append(cardModel.verificationReason)
-                }
-            }
-        }
-    }
-
-    private fun formatToolArgs(args: Map<String, String>): String {
-        if (args.isEmpty()) return "none"
-        return args.entries.joinToString(separator = "\n") { entry ->
-            "${entry.key}: ${entry.value.take(MaxToolCardFieldLength)}"
-        }
-    }
-
     private fun openRunDetail(runId: String) {
-        activeRunDetailId = runId
-        showSection(activeSection)
+        navigationController.openRunDetail(runId)
+        showSection(navigationController.activeSection)
     }
 
     private fun closeRunDetail() {
-        activeRunDetailId = null
-        showSection(activeSection)
+        navigationController.closeRunDetail()
+        showSection(navigationController.activeSection)
     }
 
     private fun findAgentRun(runId: String): AgentRunRecord? {
         return agentRunController.findRun(runId)
     }
 
-    private fun renderRecentAgentRuns() {
-        contentRoot.addView(
-            TextView(this).apply {
-                text = "Recent agent runs"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                setPadding(0, 12, 0, 4)
-            }
-        )
-        if (agentRunController.runHistory.isEmpty()) {
-            contentRoot.addView(
-                timelineCard(
-                    title = "No agent runs yet",
-                    body = "Run a task from Chat to inspect structured run details here."
-                )
-            )
-            return
-        }
-
-        agentRunController.runHistory.asReversed().forEach { record ->
-            contentRoot.addView(
-                timelineCard(
-                    title = record.task,
-                    body = AgentRunDetailFormatter.compactSummary(record),
-                    actionHint = "Tap for run details",
-                    onClick = { openRunDetail(record.id) }
-                )
-            )
-        }
-    }
-
     private fun renderAgentRunDetailScreen() {
-        val runId = activeRunDetailId
-        contentRoot.addView(sectionTitle("Run details"))
-        contentRoot.addView(
-            secondaryButton("Go Back") {
-                closeRunDetail()
-            }.apply {
-                id = R.id.run_detail_back_button
-                minHeight = 46
-            }.withMargins(bottom = 12)
-        )
-
-        val record = runId?.let(::findAgentRun)
-        if (record == null) {
-            contentRoot.addView(
-                timelineCard(
-                    title = "Run unavailable",
-                    body = "This run is no longer available. It may have been cleared when the app restarted."
-                )
-            )
-            return
-        }
-
-        contentRoot.addView(
-            summaryCard(
-                title = "Task",
-                value = SensitiveTextRedactor.redact(record.task),
-                chipText = record.id,
-                chipAccent = true
-            )
-        )
-        contentRoot.addView(
-            timelineCard(
-                title = "Timing",
-                body = buildString {
-                    append("Started: ${AgentRunDetailFormatter.formatTimestamp(record.startedAtMillis)}")
-                    appendLine()
-                    append("Completed: ${AgentRunDetailFormatter.formatTimestamp(record.completedAtMillis)}")
-                }
-            )
-        )
-        contentRoot.addView(
-            timelineCard(
-                title = "Stop reason",
-                body = AgentRunDetailFormatter.deriveStopReason(record)
-            )
-        )
-        contentRoot.addView(
-            primaryButton("Export Run Trace") {
-                val file = exportRunTrace(record)
-                sectionResults.recordLogsResult("Run trace exported: ${file.absolutePath}")
-                showSection(activeSection)
-            }.apply { id = R.id.export_run_trace_button }
-        )
-
-        val steps = AgentRunDetailFormatter.formatSteps(record)
-        contentRoot.addView(
-            TextView(this).apply {
-                text = if (steps.isEmpty()) "Steps" else "Steps (${steps.size})"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                setPadding(0, 12, 0, 4)
-            }
-        )
-        if (steps.isEmpty()) {
-            contentRoot.addView(
-                timelineCard(
-                    title = "No step data",
-                    body = record.errorMessage?.let { error ->
-                        "Run failed before structured events were recorded: ${SensitiveTextRedactor.redact(error)}"
-                    } ?: "Structured run events are unavailable for this run."
-                )
-            )
-            return
-        }
-
-        steps.forEach { step ->
-            contentRoot.addView(runDetailStepCard(step))
-        }
-    }
-
-    private fun runDetailStepCard(step: AgentRunDisplayStep): View {
-        val card = MaterialCardView(this).apply {
-            setCardBackgroundColor(Theme.Card)
-            strokeColor = stepStatusColor(step.status)
-            strokeWidth = 2
-            radius = 8f
-            cardElevation = 0f
-        }
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
-        }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        header.addView(
-            TextView(this).apply {
-                text = "Step ${step.index}"
-                textSize = 12f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        header.addView(statusChip(step.status.label, accent = step.status != AgentRunStepStatus.INFO))
-        content.addView(header)
-        content.addView(
-            TextView(this).apply {
-                text = step.title
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-        content.addView(
-            TextView(this).apply {
-                text = AgentRunDetailFormatter.formatTimestamp(step.timestampMillis)
-                textSize = 11f
-                setTextColor(Theme.MutedText)
-                setPadding(0, 4, 0, 0)
-            }
-        )
-        content.addView(
-            TextView(this).apply {
-                text = step.detail
-                textSize = 12.5f
-                setTextColor(Theme.BodyText)
-                setPadding(0, 8, 0, 0)
-            }
-        )
-        card.addView(content)
-        return card.withMargins(top = 6, bottom = 6)
-    }
-
-    private fun stepStatusColor(status: AgentRunStepStatus): Int {
-        return when (status) {
-            AgentRunStepStatus.SUCCESS,
-            AgentRunStepStatus.COMPLETE -> Theme.Accent
-            AgentRunStepStatus.FAILED,
-            AgentRunStepStatus.BLOCKED -> Theme.StrokeDark
-            AgentRunStepStatus.RUNNING,
-            AgentRunStepStatus.WAITING,
-            AgentRunStepStatus.PENDING -> Color.rgb(255, 196, 86)
-            AgentRunStepStatus.INFO -> Theme.StrokeDark
-        }
+        AgentRunDetailRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            runId = navigationController.activeRunDetailId,
+            findAgentRun = ::findAgentRun,
+            closeRunDetail = ::closeRunDetail,
+            exportRunTrace = ::exportRunTrace,
+            recordLogsResult = sectionResults::recordLogsResult,
+            refreshCurrentSection = { showSection(navigationController.activeSection) }
+        ).render()
     }
 
     private fun exportRunTrace(record: AgentRunRecord): File =
@@ -847,18 +445,5 @@ class MainActivity : Activity() {
 
     private fun exportDebugTrace(): File =
         debugTraceExporter.exportDebugTrace()
-
-    private enum class Section(val label: String, @DrawableRes val iconRes: Int) {
-        CHAT("Chat", R.drawable.ic_chat),
-        TOOLS("Tools", R.drawable.ic_tools),
-        LOGS("Logs", R.drawable.ic_logs),
-        SETTINGS("Settings", R.drawable.ic_settings)
-    }
-
-    private companion object {
-        const val MaxApprovalArgLength = 500
-        const val MaxToolCardFieldLength = 700
-        val ProviderModeLabels = listOf("Local router", "Local model")
-    }
 
 }

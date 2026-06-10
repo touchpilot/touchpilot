@@ -131,23 +131,44 @@ class ToolVerifier {
     ): ToolVerificationResult {
         val text = args["text"].orEmpty()
         val focused = after.nodes.firstOrNull { it.focused && it.isInputField }
-        val inputWithText = after.inputFields.firstOrNull { it.text.raw == text }
-        val received = focused?.text?.raw == text || inputWithText != null
 
-        return if (received) {
-            ToolVerificationResult.Passed(
+        // Use containment, not exact equality: fields routinely retain prior
+        // text, apply formatting, or surround the typed value with a hint/suffix.
+        // This mirrors verifyWaitForUi's contains-based check.
+        val inputWithText = after.inputFields.firstOrNull { it.text.raw.contains(text) }
+        val readableMatch = text.isNotEmpty() &&
+            (focused?.text?.raw?.contains(text) == true || inputWithText != null)
+
+        if (readableMatch) {
+            return ToolVerificationResult.Passed(
                 reason = "input field contains expected text",
                 data = mapOf(
                     "text_length" to text.length.toString(),
                     "node_id" to (focused?.nodeId ?: inputWithText?.nodeId).orEmpty(),
                 )
             )
-        } else {
-            ToolVerificationResult.Failed(
-                reason = "no focused or visible input field contains the typed text",
-                data = mapOf("text_length" to text.length.toString())
+        }
+
+        // Masked / secure inputs (password, PIN, etc.) never expose the typed
+        // secret through accessibility, so a text read-back is impossible. A
+        // focused secure input is the best available evidence that the text was
+        // delivered. Reporting failure here would make the agent retry and
+        // double-enter the secret. The secret is never echoed into the data map.
+        val maskedSecureInput = focused != null && (focused.sensitive || focused.text.isSensitive)
+        if (maskedSecureInput) {
+            return ToolVerificationResult.Passed(
+                reason = "typed into a masked or secure input; contents are not exposed for verification",
+                data = mapOf(
+                    "text_length" to text.length.toString(),
+                    "node_id" to focused.nodeId.orEmpty(),
+                )
             )
         }
+
+        return ToolVerificationResult.Failed(
+            reason = "no focused or visible input field contains the typed text",
+            data = mapOf("text_length" to text.length.toString())
+        )
     }
 
     private fun verifyScroll(

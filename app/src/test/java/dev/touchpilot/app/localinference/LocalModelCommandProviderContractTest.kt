@@ -1,10 +1,10 @@
 package dev.touchpilot.app.localinference
 
 import dev.touchpilot.app.agent.AgentCommandParser
-import dev.touchpilot.app.agent.LocalRouterCommandProvider
 import dev.touchpilot.app.memory.Skill
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class LocalModelCommandProviderContractTest {
     @Test
@@ -27,25 +27,27 @@ class LocalModelCommandProviderContractTest {
     }
 
     @Test
-    fun fallsBackOnMalformedModelOutput() {
+    fun returnsFinalAnswerOnMalformedModelOutput() {
         val provider = providerFor("not json", task = "go back")
 
         val command = AgentCommandParser.parse(provider.complete("", "screen"))
 
-        assertEquals("observe_screen", command.tool)
+        assertNull(command.tool)
+        assertEquals("Local model could not route this task safely.", command.finalAnswer)
     }
 
     @Test
-    fun fallsBackOnUnknownToolOutput() {
+    fun returnsFinalAnswerOnUnknownToolOutput() {
         val provider = providerFor("""{"tool":"unknown_tool","args":{}}""", task = "go home")
 
         val command = AgentCommandParser.parse(provider.complete("", "screen"))
 
-        assertEquals("observe_screen", command.tool)
+        assertNull(command.tool)
+        assertEquals("Local model could not route this task safely.", command.finalAnswer)
     }
 
     @Test
-    fun fallsBackOnInvalidArgumentOutput() {
+    fun returnsFinalAnswerOnInvalidArgumentOutput() {
         val provider = providerFor(
             """{"tool":"scroll","args":{"direction":"sideways"}}""",
             task = "scroll"
@@ -53,11 +55,12 @@ class LocalModelCommandProviderContractTest {
 
         val command = AgentCommandParser.parse(provider.complete("", "screen"))
 
-        assertEquals("observe_screen", command.tool)
+        assertNull(command.tool)
+        assertEquals("Local model could not route this task safely.", command.finalAnswer)
     }
 
     @Test
-    fun fallsBackOnSkillDisallowedOutput() {
+    fun returnsFinalAnswerOnSkillDisallowedOutput() {
         val skill = Skill(
             id = "observe-only",
             title = "Observe Only",
@@ -72,7 +75,8 @@ class LocalModelCommandProviderContractTest {
 
         val command = AgentCommandParser.parse(provider.complete("", "screen"))
 
-        assertEquals("observe_screen", command.tool)
+        assertNull(command.tool)
+        assertEquals("Local model could not route this task safely.", command.finalAnswer)
     }
 
     private fun providerFor(
@@ -82,7 +86,6 @@ class LocalModelCommandProviderContractTest {
     ): LocalModelCommandProvider {
         return LocalModelCommandProvider(
             runtime = StubRuntime(output),
-            fallback = LocalRouterCommandProvider(task, skill),
             task = task,
             skill = skill
         )

@@ -111,34 +111,6 @@ class IntentGate : IntentClassifier {
     }
 
     private fun detectExactCommand(normalized: String): IntentDecision.ExactCommand? {
-        if ("scroll up" in normalized) {
-            return IntentDecision.ExactCommand(
-                tool = "scroll",
-                args = mapOf("direction" to "backward"),
-                reason = "scroll up phrase"
-            )
-        }
-        if ("scroll" in normalized) {
-            return IntentDecision.ExactCommand(
-                tool = "scroll",
-                args = mapOf("direction" to "forward"),
-                reason = "scroll phrase"
-            )
-        }
-        if ("back" in normalized) {
-            return IntentDecision.ExactCommand(
-                tool = "press_back",
-                args = emptyMap(),
-                reason = "back phrase"
-            )
-        }
-        if ("home" in normalized) {
-            return IntentDecision.ExactCommand(
-                tool = "press_home",
-                args = emptyMap(),
-                reason = "home phrase"
-            )
-        }
         SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
             return IntentDecision.ExactCommand(
                 tool = "open_settings_panel",
@@ -170,6 +142,34 @@ class IntentGate : IntentClassifier {
                     reason = "tap or press phrase"
                 )
             }
+        if (ScrollUpPattern.containsMatchIn(normalized)) {
+            return IntentDecision.ExactCommand(
+                tool = "scroll",
+                args = mapOf("direction" to "backward"),
+                reason = "scroll up phrase"
+            )
+        }
+        if (ScrollPattern.containsMatchIn(normalized)) {
+            return IntentDecision.ExactCommand(
+                tool = "scroll",
+                args = mapOf("direction" to "forward"),
+                reason = "scroll phrase"
+            )
+        }
+        if (BackPattern.containsMatchIn(normalized)) {
+            return IntentDecision.ExactCommand(
+                tool = "press_back",
+                args = emptyMap(),
+                reason = "back phrase"
+            )
+        }
+        if (HomePattern.containsMatchIn(normalized)) {
+            return IntentDecision.ExactCommand(
+                tool = "press_home",
+                args = emptyMap(),
+                reason = "home phrase"
+            )
+        }
         return null
     }
 
@@ -239,5 +239,12 @@ class IntentGate : IntentClassifier {
         val OpenAppPattern: Regex = Regex("(?:open|launch)\\s+([\\w .-]+)")
         val LongPressPattern: Regex = Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
         val TapPattern: Regex = Regex("(?:tap|press)\\s+([\\w .-]+)")
+
+        // Word-boundary anchors keep bare navigation routes from triggering on
+        // accidental substring hits like "feedback", "homemade", or "scrollbar".
+        val ScrollUpPattern: Regex = Regex("\\bscroll\\s+up\\b")
+        val ScrollPattern: Regex = Regex("\\bscroll\\b")
+        val BackPattern: Regex = Regex("\\bback\\b")
+        val HomePattern: Regex = Regex("\\bhome\\b")
     }
 }

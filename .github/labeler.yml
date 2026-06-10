@@ -36,6 +36,7 @@
       - any-glob-to-any-file:
           - "docs/LOCAL_INFERENCE.md"
           - "app/src/main/java/**/agent/AgentCommandProvider.kt"
+          - "app/src/main/java/**/localinference/**"
 
 "area: skills":
   - changed-files:
