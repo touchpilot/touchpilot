@@ -66,15 +66,18 @@ object WorkflowClassifier {
         }.lowercase()
 
         val classes = linkedSetOf<PolicyWorkflowClass>()
-        if (isSensitiveTextEntry(request)) {
+        val sensitiveTextEntry = isSensitiveTextEntry(request)
+        if (sensitiveTextEntry) {
             classes.add(PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY)
         }
         if (isMessageSend(request, screenAwareHaystack)) {
             classes.add(PolicyWorkflowClass.MESSAGE_SEND)
         }
-        blockedIntentPatterns
-            .filter { pattern -> pattern.needle in intentHaystack }
-            .forEach { pattern -> classes.add(pattern.workflowClass) }
+        if (!sensitiveTextEntry) {
+            blockedIntentPatterns
+                .filter { pattern -> pattern.needle in intentHaystack }
+                .forEach { pattern -> classes.add(pattern.workflowClass) }
+        }
 
         if (classes.isEmpty()) {
             classes.add(PolicyWorkflowClass.GENERAL)
@@ -83,6 +86,7 @@ object WorkflowClassifier {
     }
 
     fun blockedIntentRule(request: ToolPolicyRequest): PolicyRule? {
+        if (isSensitiveTextEntry(request)) return null
         val intentHaystack = intentHaystack(request)
         val match = blockedIntentPatterns.firstOrNull { pattern -> pattern.needle in intentHaystack }
             ?: return null
