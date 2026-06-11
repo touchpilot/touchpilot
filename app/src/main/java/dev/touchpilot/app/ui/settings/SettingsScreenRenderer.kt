@@ -15,7 +15,10 @@ import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.memory.SkillDetailFormatter
+import dev.touchpilot.app.memory.SkillRisk
 import dev.touchpilot.app.navigation.SettingsPanel
+import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.description
 import dev.touchpilot.app.ui.editText
@@ -40,8 +43,8 @@ class SettingsScreenRenderer(
     private val openSettingsPanel: (SettingsPanel) -> Unit,
     private val closeSettingsPanel: () -> Unit,
     private val selectedSkillId: () -> String?,
-    private val expandedSkillReferenceId: () -> String?,
     private val commitSelectedSkill: (String?) -> Unit,
+    private val openSkillDetail: (String) -> Unit,
     private val currentProviderMode: () -> AgentProviderMode,
     private val openAccessibilitySettings: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
@@ -73,12 +76,27 @@ class SettingsScreenRenderer(
             activity.summaryCard(
                 title = "Active skill",
                 value = active?.title ?: "No skill selected",
-                chipText = if (active != null) "${active.allowedTools.size} tools" else "none",
-                chipAccent = active != null
+                chipText = active?.let { SkillDetailFormatter.formatLabel(it.risk) } ?: "none",
+                chipAccent = active != null && active.risk != SkillRisk.LOW
             )
         )
+        if (active != null) {
+            contentRoot.addView(
+                activity.timelineCard(
+                    title = "Active skill scope",
+                    body = buildString {
+                        appendLine(SkillDetailFormatter.displayDescription(active))
+                        appendLine()
+                        append("${active.allowedTools.size} allowed tools")
+                    },
+                    actionHint = "Tap to inspect skill details",
+                    onClick = { openSkillDetail(active.id) }
+                )
+            )
+        }
 
         contentRoot.addView(activity.formLabel("Available skills"))
+        contentRoot.addView(skillsPanelIntro())
         if (skills.isEmpty()) {
             contentRoot.addView(activity.timelineCard("Installed skills", "No bundled skills found."))
             return
@@ -89,35 +107,32 @@ class SettingsScreenRenderer(
                 title = "No skill",
                 subtitle = "Run TouchPilot without a skill scope",
                 badge = null,
-                selected = selectedSkillId() == null
-            ) { commitSelectedSkill(null) }
+                selected = selectedSkillId() == null,
+                onSelect = { commitSelectedSkill(null) },
+                onViewDetails = null
+            )
         )
         skills.forEach { skill ->
-            val description = skill.markdown.lineSequence()
-                .map { it.trim() }
-                .firstOrNull { it.isNotBlank() && !it.startsWith("#") && !it.startsWith("-") }
-                .orEmpty()
+            val description = SkillDetailFormatter.displayDescription(skill)
             contentRoot.addView(
                 skillSelectRow(
                     title = skill.title,
                     subtitle = description.ifBlank { "No description provided" },
-                    badge = "${skill.allowedTools.size} tools",
-                    selected = selectedSkillId() == skill.id
-                ) { commitSelectedSkill(skill.id) }
-            )
-            if (expandedSkillReferenceId() == skill.id) {
-                contentRoot.addView(
-                    activity.timelineCard(
-                        "Skill reference",
-                        buildString {
-                            appendLine(skill.markdown.trim())
-                            appendLine()
-                            appendLine("Allowed tools:")
-                            skill.allowedTools.forEach { appendLine("- $it") }
-                        }.trim()
-                    )
+                    badge = SkillDetailFormatter.formatLabel(skill.risk),
+                    selected = selectedSkillId() == skill.id,
+                    onSelect = { commitSelectedSkill(skill.id) },
+                    onViewDetails = { openSkillDetail(skill.id) }
                 )
-            }
+            )
+        }
+    }
+
+    private fun skillsPanelIntro(): View {
+        return TextView(activity).apply {
+            text = "Select a skill to scope tools and prompts. Open details to review risk, allowed tools, and success criteria before enabling."
+            textSize = 12f
+            setTextColor(Theme.MutedText)
+            setPadding(0, 0, 0, activity.dp(8))
         }
     }
 
@@ -140,11 +155,13 @@ class SettingsScreenRenderer(
                     title = option.label(),
                     subtitle = option.description(),
                     badge = null,
-                    selected = option == mode
-                ) {
-                    preferences.edit().putString("agent_provider_mode", option.name).apply()
-                    refreshSettingsScreen()
-                }
+                    selected = option == mode,
+                    onSelect = {
+                        preferences.edit().putString("agent_provider_mode", option.name).apply()
+                        refreshSettingsScreen()
+                    },
+                    onViewDetails = null
+                )
             )
         }
 
@@ -386,7 +403,8 @@ class SettingsScreenRenderer(
         subtitle: String,
         badge: String?,
         selected: Boolean,
-        onClick: () -> Unit
+        onSelect: () -> Unit,
+        onViewDetails: (() -> Unit)?
     ): View {
         val card = MaterialCardView(activity).apply {
             setCardBackgroundColor(Theme.Card)
@@ -396,12 +414,15 @@ class SettingsScreenRenderer(
             cardElevation = 0f
             isClickable = true
             isFocusable = true
-            setOnClickListener { onClick() }
+            setOnClickListener { onSelect() }
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
         }
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(18, 14, 18, 14)
         }
         val column = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -424,9 +445,24 @@ class SettingsScreenRenderer(
         )
         row.addView(column, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         if (badge != null) {
-            row.addView(activity.statusChip(badge, accent = selected))
+            row.addView(
+                activity.statusChip(
+                    badge,
+                    accent = badge != SkillDetailFormatter.formatLabel(SkillRisk.LOW)
+                )
+            )
         }
-        card.addView(row)
+        content.addView(row)
+        if (onViewDetails != null) {
+            content.addView(
+                activity.secondaryButton("View details") {
+                    onViewDetails()
+                }.apply {
+                    minHeight = 40
+                }.withMargins(top = activity.dp(10))
+            )
+        }
+        card.addView(content)
         return card.withMargins(top = 6, bottom = 6)
     }
 

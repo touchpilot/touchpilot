@@ -13,10 +13,14 @@ class NavigationController(initialState: NavigationState = NavigationState()) {
     val activeRunDetailId: String?
         get() = state.activeRunDetailId
 
+    val activeSkillDetailId: String?
+        get() = state.activeSkillDetailId
+
     fun showSection(section: AppSection): NavigationState {
         state = state.copy(
             activeSection = section,
-            activeRunDetailId = state.activeRunDetailId.takeIf { section.supportsRunDetail }
+            activeRunDetailId = state.activeRunDetailId.takeIf { section.supportsRunDetail },
+            activeSkillDetailId = state.activeSkillDetailId.takeIf { section == AppSection.SETTINGS }
         )
         return state
     }
@@ -35,6 +39,7 @@ class NavigationController(initialState: NavigationState = NavigationState()) {
         if (state.activeSettingsPanel != null) {
             state = state.copy(
                 activeSettingsPanel = null,
+                activeSkillDetailId = null,
                 pendingSettingsAnimationDirection = BackSettingsAnimation
             )
         }
@@ -56,6 +61,16 @@ class NavigationController(initialState: NavigationState = NavigationState()) {
 
     fun closeRunDetail(): NavigationState {
         state = state.copy(activeRunDetailId = null)
+        return state
+    }
+
+    fun openSkillDetail(skillId: String): NavigationState {
+        state = state.copy(activeSkillDetailId = skillId)
+        return state
+    }
+
+    fun closeSkillDetail(): NavigationState {
+        state = state.copy(activeSkillDetailId = null)
         return state
     }
 

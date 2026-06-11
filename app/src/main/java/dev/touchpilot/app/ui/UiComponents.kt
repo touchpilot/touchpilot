@@ -167,6 +167,39 @@ fun Context.statusChip(text: String, accent: Boolean): TextView {
     }
 }
 
+fun Context.detailSectionView(
+    title: String,
+    body: String,
+    muted: Boolean = false
+): View {
+    val sectionContainer = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = rounded(TouchPilotTheme.SurfaceRaised, 12, TouchPilotTheme.StrokeDark)
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+    }
+    sectionContainer.addView(
+        TextView(this).apply {
+            text = title
+            textSize = 10.5f
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = true
+            letterSpacing = 0.06f
+            setTextColor(TouchPilotTheme.MutedText)
+        }
+    )
+    sectionContainer.addView(
+        TextView(this).apply {
+            text = body
+            textSize = 12.5f
+            setTextColor(if (muted) TouchPilotTheme.MutedText else TouchPilotTheme.BodyText)
+            setTextIsSelectable(true)
+            setLineSpacing(4f, 1f)
+            setPadding(0, dp(8), 0, 0)
+        }
+    )
+    return sectionContainer
+}
+
 fun Context.timelineCard(
     title: String,
     body: String,

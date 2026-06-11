@@ -44,6 +44,7 @@ import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
 import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
+import dev.touchpilot.app.ui.settings.SkillDetailRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import java.io.File
 
@@ -65,7 +66,6 @@ class MainActivity : Activity() {
     private val navigationController = NavigationController()
 
     private var selectedSkillId: String? = null
-    private var expandedSkillReferenceId: String? = null
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
@@ -173,6 +173,9 @@ class MainActivity : Activity() {
         if (navigationController.activeRunDetailId != null) {
             return "Run details"
         }
+        if (navigationController.activeSkillDetailId != null) {
+            return "Skill details"
+        }
         return when (navigationController.activeSection) {
             AppSection.CHAT -> "Chat"
             AppSection.TOOLS -> "Android Tools"
@@ -260,11 +263,6 @@ class MainActivity : Activity() {
 
     private fun commitSelectedSkill(id: String?) {
         selectedSkillId = id
-        expandedSkillReferenceId = when {
-            id == null -> null
-            expandedSkillReferenceId == id -> null
-            else -> id
-        }
         preferences.edit().putString("active_skill", selectedSkillId).apply()
         showSection(AppSection.SETTINGS)
     }
@@ -339,6 +337,11 @@ class MainActivity : Activity() {
     }
 
     private fun renderSettingsScreen() {
+        if (navigationController.activeSkillDetailId != null) {
+            renderSkillDetailScreen()
+            return
+        }
+
         SettingsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
@@ -349,8 +352,8 @@ class MainActivity : Activity() {
             openSettingsPanel = navigationController::openSettingsPanel,
             closeSettingsPanel = navigationController::closeSettingsPanel,
             selectedSkillId = { selectedSkillId },
-            expandedSkillReferenceId = { expandedSkillReferenceId },
             commitSelectedSkill = ::commitSelectedSkill,
+            openSkillDetail = ::openSkillDetail,
             currentProviderMode = ::currentProviderMode,
             openAccessibilitySettings = ::openAccessibilitySettings,
             hideKeyboard = ::hideKeyboard,
@@ -361,6 +364,33 @@ class MainActivity : Activity() {
     }
 
     private val mcpResultStore = McpResultStore()
+
+    private fun openSkillDetail(skillId: String) {
+        navigationController.openSkillDetail(skillId)
+        showSection(AppSection.SETTINGS)
+    }
+
+    private fun closeSkillDetail() {
+        navigationController.closeSkillDetail()
+        showSection(AppSection.SETTINGS)
+    }
+
+    private fun findSkill(skillId: String): Skill? {
+        return skills.firstOrNull { it.id == skillId }
+    }
+
+    private fun renderSkillDetailScreen() {
+        SkillDetailRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            skillId = navigationController.activeSkillDetailId,
+            findSkill = ::findSkill,
+            selectedSkillId = { selectedSkillId },
+            closeSkillDetail = ::closeSkillDetail,
+            commitSelectedSkill = ::commitSelectedSkill,
+            refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
+        ).render()
+    }
 
     private fun refreshExecutionLog() {
         if (::executionLogList.isInitialized) {

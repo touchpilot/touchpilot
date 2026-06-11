@@ -12,6 +12,7 @@ class NavigationControllerTest {
         assertEquals(AppSection.CHAT, controller.activeSection)
         assertNull(controller.activeSettingsPanel)
         assertNull(controller.activeRunDetailId)
+        assertNull(controller.activeSkillDetailId)
         assertEquals(0, controller.consumeSettingsAnimationDirection())
     }
 
@@ -76,5 +77,50 @@ class NavigationControllerTest {
 
         assertEquals(AppSection.LOGS, controller.activeSection)
         assertNull(controller.activeRunDetailId)
+    }
+
+    @Test
+    fun skillDetailSurvivesSettingsButClosesForOtherSections() {
+        val controller = NavigationController()
+
+        controller.showSection(AppSection.SETTINGS)
+        controller.openSettingsPanel(SettingsPanel.SKILLS)
+        controller.openSkillDetail("settings")
+
+        assertEquals("settings", controller.activeSkillDetailId)
+
+        controller.showSection(AppSection.SETTINGS)
+
+        assertEquals("settings", controller.activeSkillDetailId)
+
+        controller.showSection(AppSection.CHAT)
+
+        assertNull(controller.activeSkillDetailId)
+    }
+
+    @Test
+    fun closingSettingsPanelClearsSkillDetail() {
+        val controller = NavigationController()
+
+        controller.openSettingsPanel(SettingsPanel.SKILLS)
+        controller.openSkillDetail("browser")
+        controller.closeSettingsPanel()
+
+        assertNull(controller.activeSettingsPanel)
+        assertNull(controller.activeSkillDetailId)
+    }
+
+    @Test
+    fun closingSkillDetailKeepsSettingsSection() {
+        val controller = NavigationController()
+
+        controller.showSection(AppSection.SETTINGS)
+        controller.openSettingsPanel(SettingsPanel.SKILLS)
+        controller.openSkillDetail("messages")
+        controller.closeSkillDetail()
+
+        assertEquals(AppSection.SETTINGS, controller.activeSection)
+        assertEquals(SettingsPanel.SKILLS, controller.activeSettingsPanel)
+        assertNull(controller.activeSkillDetailId)
     }
 }

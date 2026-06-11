@@ -60,4 +60,7 @@
     <item name="save_cloud_api_button" type="id" />
     <item name="export_run_trace_button" type="id" />
     <item name="run_detail_back_button" type="id" />
+    <item name="skill_detail_back_button" type="id" />
+    <item name="skill_detail_activate_button" type="id" />
+    <item name="skill_detail_clear_button" type="id" />
 </resources>
