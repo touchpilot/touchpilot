@@ -65,7 +65,15 @@ class AndroidToolExecutor(
 
             val spec = AndroidToolCatalog.find(name)
             if (spec != null) {
-                when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
+                when (val decision = policy.evaluate(
+                    ToolPolicyRequest(
+                        tool = spec,
+                        args = args,
+                        source = source,
+                        activeScreen = observeScreen(),
+                        foregroundApp = AccessibilityBridge.getForegroundApp()
+                    )
+                )) {
                     is PolicyDecision.Block -> {
                         record(name, "policy=block", false, decision.userMessage)
                         return ToolResult(false, decision.userMessage)

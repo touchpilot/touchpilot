@@ -1,5 +1,7 @@
 package dev.touchpilot.app.agent
 
+import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.security.ActionPolicy
 import dev.touchpilot.app.security.DefaultActionPolicy
@@ -66,6 +68,8 @@ class AgentRunner(
         private val toolExecutor: AndroidToolExecutor
     ) : LocalAgentLoopTools {
         override fun observeScreen(): String = toolExecutor.observeScreen()
+
+        override fun foregroundApp(): ForegroundAppInfo = AccessibilityBridge.getForegroundApp()
 
         override fun validate(name: String, args: Map<String, String>): String? {
             return toolExecutor.validate(name, args)

@@ -1,5 +1,6 @@
 package dev.touchpilot.app.agent
 
+import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.security.ActionPolicy
 import dev.touchpilot.app.security.DefaultActionPolicy
@@ -197,6 +198,7 @@ class BoundedLocalAgentLoop(
                         args = command.args,
                         source = source,
                         activeScreen = currentScreen,
+                        foregroundApp = tools.foregroundApp(),
                         activeSkillId = skill?.id,
                         activeSkillTitle = skill?.title,
                         activeSkillRisk = skill?.risk
@@ -457,6 +459,7 @@ class BoundedLocalAgentLoop(
 
 interface LocalAgentLoopTools {
     fun observeScreen(): String
+    fun foregroundApp(): ForegroundAppInfo = ForegroundAppInfo.Disconnected
     fun validate(name: String, args: Map<String, String>): String?
     fun findTool(name: String): ToolSpec?
     fun execute(name: String, args: Map<String, String>, source: ToolSource): ToolResult
