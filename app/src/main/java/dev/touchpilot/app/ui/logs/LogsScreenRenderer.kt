@@ -322,18 +322,19 @@ class LogsScreenRenderer(
             iconTint = ColorStateList.valueOf(Theme.BodyText)
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
             iconPadding = 0
-            iconSize = 16
-            minWidth = activity.dp(30)
-            minHeight = activity.dp(30)
-            layoutParams = LinearLayout.LayoutParams(activity.dp(30), activity.dp(30)).apply {
-                setMargins(activity.dp(5), 0, 0, 0)
+            iconSize = activity.dp(24)
+            minWidth = activity.dp(44)
+            minHeight = activity.dp(44)
+            layoutParams = LinearLayout.LayoutParams(activity.dp(44), activity.dp(44)).apply {
+                setMargins(activity.dp(2), 0, 0, 0)
             }
             insetTop = 0
             insetBottom = 0
-            backgroundTintList = ColorStateList.valueOf(Theme.SurfaceRaised)
-            strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
-            strokeWidth = 1
-            cornerRadius = activity.dp(15)
+            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            strokeWidth = 0
+            elevation = 0f
+            stateListAnimator = null
+            rippleColor = ColorStateList.valueOf(Color.argb(40, 255, 255, 255))
             contentDescription = description
             setPadding(0, 0, 0, 0)
             setOnClickListener { onClick() }
