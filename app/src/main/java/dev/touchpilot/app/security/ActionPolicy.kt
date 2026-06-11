@@ -1,7 +1,6 @@
 package dev.touchpilot.app.security
 
 import dev.touchpilot.app.memory.SkillRisk
-import dev.touchpilot.app.tools.ToolRisk
 import dev.touchpilot.app.tools.ToolSpec
 
 enum class ToolSource {
@@ -59,118 +58,95 @@ interface ActionPolicy {
     fun evaluate(request: ToolPolicyRequest): PolicyDecision
 }
 
-class DefaultActionPolicy : ActionPolicy {
+/**
+ * Adapts the central [PolicyEngine] to the legacy [PolicyDecision] surface the
+ * runtime and approval UI already consume.
+ *
+ * All callers route through one engine so tool execution, local model output,
+ * local router output, skills, and MCP cannot drift into different safety
+ * behavior. This class makes no decisions of its own — it only translates the
+ * engine's decision into the existing [PolicyDecision] shape and user-facing
+ * copy (including the advisory active-skill risk note on approvals).
+ */
+class DefaultActionPolicy(
+    private val engine: PolicyEngine = PolicyEngine()
+) : ActionPolicy {
     override fun evaluate(request: ToolPolicyRequest): PolicyDecision {
-        if (request.tool.risk == ToolRisk.LOW) {
-            return PolicyDecision.Allow("low risk action")
-        }
-
-        val intentHaystack = buildString {
-            append(request.tool.name)
-            append(' ')
-            append(request.args.values.joinToString(separator = " "))
-        }.lowercase()
-
-        blockedWorkflow(intentHaystack)?.let { return it }
-
-        val screenAwareHaystack = buildString {
-            append(intentHaystack)
-            append(' ')
-            append(request.activeScreen)
-        }.lowercase()
-
-        if (isSensitiveTextEntry(request)) {
-            return PolicyDecision.Block(
-                reason = "password or secret entry is blocked",
-                userMessage = "TouchPilot will not enter passwords, recovery codes, API keys, or other secrets."
-            )
-        }
-
-        if (isMessageSend(request, screenAwareHaystack)) {
-            return approval(
-                request,
-                reason = "sending a message requires explicit approval",
-                dataAffected = "A message or outbound communication may be sent from the current app.",
-                ifApproved = "TouchPilot will continue with the requested send action."
-            )
-        }
-
-        if (request.source == ToolSource.MCP && request.tool.risk != ToolRisk.LOW) {
-            return approval(
-                request,
-                reason = "MCP tools are outside the built-in Android trust boundary",
-                dataAffected = "The MCP server may receive tool arguments and affect an external system.",
-                ifApproved = "TouchPilot will call the requested MCP tool once."
-            )
-        }
-
-        return when {
-            request.tool.risk == ToolRisk.BLOCKED -> PolicyDecision.Block(
-                reason = "tool is marked blocked",
-                userMessage = "${request.tool.name} is blocked by policy."
-            )
-            request.tool.risk == ToolRisk.HIGH || request.tool.risk == ToolRisk.MEDIUM -> approval(
-                request,
-                reason = "${request.tool.risk.name.lowercase()} risk Android action",
-                dataAffected = "The current Android app or screen may be changed.",
-                ifApproved = "TouchPilot will run ${request.tool.name} with the shown arguments."
-            )
-            else -> PolicyDecision.Allow("low risk action")
+        val decision = engine.decide(request)
+        return when (decision.kind) {
+            PolicyDecisionKind.ALLOW -> PolicyDecision.Allow("low risk action")
+            PolicyDecisionKind.ASK -> approval(request, decision.primary)
+            PolicyDecisionKind.DENY -> deny(request, decision.primary)
+            PolicyDecisionKind.BLOCK -> block(request, decision.primary)
         }
     }
 
-    private fun blockedWorkflow(haystack: String): PolicyDecision.Block? {
-        val blocked = listOf(
-            "payment" to "payments are blocked",
-            "pay " to "payments are blocked",
-            "password" to "password workflows are blocked",
-            "passcode" to "password workflows are blocked",
-            "account recovery" to "account recovery workflows are blocked",
-            "recover account" to "account recovery workflows are blocked",
-            "factory reset" to "destructive settings changes are blocked",
-            "erase all" to "destructive settings changes are blocked",
-            "delete account" to "destructive account changes are blocked",
-            "purchase" to "purchases are blocked",
-            "buy now" to "purchases are blocked",
-            "bank" to "banking or financial actions are blocked",
-            "wire transfer" to "banking or financial actions are blocked",
-            "transfer money" to "banking or financial actions are blocked"
-        )
-        val match = blocked.firstOrNull { (needle, _) -> needle in haystack } ?: return null
-        return PolicyDecision.Block(
-            reason = match.second,
-            userMessage = "TouchPilot blocked this request because ${match.second}."
-        )
-    }
-
-    private fun isSensitiveTextEntry(request: ToolPolicyRequest): Boolean {
-        if (request.tool.name != "type_text") return false
-        val text = request.args["text"].orEmpty()
-        return SensitiveTextRedactor.containsSensitiveText(text)
-    }
-
-    private fun isMessageSend(request: ToolPolicyRequest, haystack: String): Boolean {
-        if (request.tool.name != "tap") return false
-        val tapText = request.args["text"].orEmpty().lowercase()
-        val tapsSend = tapText in setOf("send", "send message", "submit")
-        val looksLikeMessageApp = listOf("messages", "sms", "whatsapp", "telegram", "signal", "mail", "gmail")
-            .any { it in haystack }
-        return tapsSend && looksLikeMessageApp
-    }
-
-    private fun approval(
-        request: ToolPolicyRequest,
-        reason: String,
-        dataAffected: String,
-        ifApproved: String
-    ): PolicyDecision.RequireApproval {
+    private fun approval(request: ToolPolicyRequest, primary: PolicyRule): PolicyDecision.RequireApproval {
+        val toolName = request.tool.name
+        val (reason, dataAffected, ifApproved) = when {
+            primary.workflowClass == PolicyWorkflowClass.MESSAGE_SEND -> Triple(
+                "sending a message requires explicit approval",
+                "A message or outbound communication may be sent from the current app.",
+                "TouchPilot will continue with the requested send action.",
+            )
+            primary.subject == PolicySubject.SOURCE -> Triple(
+                "MCP tools are outside the built-in Android trust boundary",
+                "The MCP server may receive tool arguments and affect an external system.",
+                "TouchPilot will call the requested MCP tool once.",
+            )
+            else -> Triple(
+                "${request.tool.risk.name.lowercase()} risk Android action",
+                "The current Android app or screen may be changed.",
+                "TouchPilot will run $toolName with the shown arguments.",
+            )
+        }
         return PolicyDecision.RequireApproval(
             reason = reason,
-            userMessage = "Approval required for ${request.tool.name}: $reason.",
+            userMessage = "Approval required for $toolName: $reason.",
             dataAffected = dataAffected,
             ifApproved = ifApproved,
-            skillContext = skillRiskContext(request)
+            skillContext = skillRiskContext(request),
         )
+    }
+
+    private fun block(request: ToolPolicyRequest, primary: PolicyRule): PolicyDecision.Block {
+        val toolName = request.tool.name
+        return when (primary.workflowClass) {
+            PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY -> PolicyDecision.Block(
+                reason = "password or secret entry is blocked",
+                userMessage = "TouchPilot will not enter passwords, recovery codes, API keys, or other secrets.",
+            )
+            PolicyWorkflowClass.GENERAL -> PolicyDecision.Block(
+                reason = "tool is marked blocked",
+                userMessage = "$toolName is blocked by policy.",
+            )
+            else -> {
+                val phrase = blockedPhrase(primary.workflowClass)
+                PolicyDecision.Block(
+                    reason = phrase,
+                    userMessage = "TouchPilot blocked this request because $phrase.",
+                )
+            }
+        }
+    }
+
+    private fun deny(request: ToolPolicyRequest, primary: PolicyRule): PolicyDecision.Deny {
+        return PolicyDecision.Deny(
+            reason = primary.reason,
+            userMessage = "TouchPilot denied ${request.tool.name}: ${primary.reason}.",
+        )
+    }
+
+    private fun blockedPhrase(workflowClass: PolicyWorkflowClass): String = when (workflowClass) {
+        PolicyWorkflowClass.PAYMENT -> "payments are blocked"
+        PolicyWorkflowClass.PURCHASE -> "purchases are blocked"
+        PolicyWorkflowClass.DELETION -> "destructive changes are blocked"
+        PolicyWorkflowClass.ACCOUNT_CHANGE -> "account changes are blocked"
+        PolicyWorkflowClass.ACCOUNT_RECOVERY -> "account recovery workflows are blocked"
+        PolicyWorkflowClass.PERMISSION_CHANGE -> "permission changes are blocked"
+        PolicyWorkflowClass.SECURITY_SETTINGS -> "security settings changes are blocked"
+        PolicyWorkflowClass.UNKNOWN_SENSITIVE -> "this looks like a sensitive workflow"
+        else -> "this workflow is blocked"
     }
 
     /**
