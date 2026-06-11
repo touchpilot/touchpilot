@@ -60,6 +60,9 @@ class LocalModelContractsTest {
             "The requested Settings screen is foreground.",
             skillJson.getJSONArray("success_criteria").getString(0)
         )
+        // The human-written skill guidance must reach the local model too,
+        // matching the prompt path's "Instructions" section.
+        assertEquals("instructions", skillJson.getString("instructions"))
     }
 
     @Test

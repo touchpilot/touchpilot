@@ -74,7 +74,9 @@ data class LocalModelSkillContext(
     val risk: String,
     val allowedTools: List<String>,
     val examples: List<String>,
-    val successCriteria: List<String>
+    val successCriteria: List<String>,
+    /** Human-written skill guidance (the SKILL.md body), mirroring the prompt path. */
+    val instructions: String
 ) {
     fun toJson(): JSONObject {
         return JSONObject()
@@ -85,6 +87,7 @@ data class LocalModelSkillContext(
             .put("allowed_tools", JSONArray(allowedTools))
             .put("examples", JSONArray(examples))
             .put("success_criteria", JSONArray(successCriteria))
+            .put("instructions", instructions)
     }
 
     companion object {
@@ -96,7 +99,8 @@ data class LocalModelSkillContext(
                 risk = skill.risk.name.lowercase(),
                 allowedTools = skill.allowedTools.toList(),
                 examples = skill.examples,
-                successCriteria = skill.successCriteria
+                successCriteria = skill.successCriteria,
+                instructions = skill.markdown
             )
         }
     }
