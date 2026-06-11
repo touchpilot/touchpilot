@@ -9,6 +9,7 @@ import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.tools.ToolResult
 import dev.touchpilot.app.tools.ToolSpec
 
@@ -45,6 +46,7 @@ class BoundedLocalAgentLoop(
         publishSteps()
 
         var currentScreen = tools.observeScreen()
+        var currentScreenContext = tools.observeScreenContext()
         var context = initialContext(task, currentScreen)
         var nextStepContext = NextStepContext.initial(task)
         var consecutiveFailures = 0
@@ -197,6 +199,7 @@ class BoundedLocalAgentLoop(
                         args = command.args,
                         source = source,
                         activeScreen = currentScreen,
+                        activeScreenContext = currentScreenContext,
                         activeSkillId = skill?.id,
                         activeSkillTitle = skill?.title,
                         activeSkillRisk = skill?.risk
@@ -288,6 +291,7 @@ class BoundedLocalAgentLoop(
                     return stopped(transcript, events, steps, AgentStepStopReason.REPEATED_TOOL_FAILURE)
                 }
                 currentScreen = tools.observeScreen()
+                currentScreenContext = tools.observeScreenContext()
                 context = recoveryContext(task, transcript.toString(), currentScreen)
                 nextStepContext = NextStepContext(
                     task = task,
@@ -309,6 +313,7 @@ class BoundedLocalAgentLoop(
             } else {
                 tools.observeScreen()
             }
+            currentScreenContext = tools.observeScreenContext()
             transcript.appendLine("Verification screen length: ${verificationScreen.length}")
 
             if (result.ok) {
@@ -457,6 +462,7 @@ class BoundedLocalAgentLoop(
 
 interface LocalAgentLoopTools {
     fun observeScreen(): String
+    fun observeScreenContext(): ScreenContext
     fun validate(name: String, args: Map<String, String>): String?
     fun findTool(name: String): ToolSpec?
     fun execute(name: String, args: Map<String, String>, source: ToolSource): ToolResult

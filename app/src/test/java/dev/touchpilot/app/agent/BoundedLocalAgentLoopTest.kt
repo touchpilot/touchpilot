@@ -2,6 +2,7 @@ package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.ToolResult
 import dev.touchpilot.app.tools.ToolSpec
@@ -132,6 +133,8 @@ class BoundedLocalAgentLoopTest {
         private val resultQueue = ArrayDeque(results)
 
         override fun observeScreen(): String = "Home screen"
+
+        override fun observeScreenContext(): ScreenContext = ScreenContext.Empty
 
         override fun validate(name: String, args: Map<String, String>): String? {
             return AndroidToolCatalog.validate(name, args)
