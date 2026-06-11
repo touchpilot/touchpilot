@@ -23,6 +23,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Install only what build/test/lint need. The default ("tools …")
+          # pulls the Android Emulator, whose download intermittently fails to
+          # unzip on the runner ("Error on ZipFile unknown archive"). The
+          # emulator is only needed by the separate live-tests workflow.
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Make Gradle executable
         run: chmod +x ./gradlew
