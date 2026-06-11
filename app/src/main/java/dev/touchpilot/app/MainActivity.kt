@@ -27,6 +27,8 @@ import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.memory.SharedPreferencesSkillStore
+import dev.touchpilot.app.memory.SkillRegistry
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.navigation.AppSection
 import dev.touchpilot.app.navigation.NavigationController
@@ -50,7 +52,7 @@ import java.io.File
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
-    private lateinit var skills: List<Skill>
+    private lateinit var skillRegistry: SkillRegistry
     private lateinit var toolExecutor: AndroidToolExecutor
     private lateinit var debugTraceExporter: DebugTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
@@ -65,7 +67,6 @@ class MainActivity : Activity() {
     private lateinit var appShellRenderer: AppShellRenderer
     private val navigationController = NavigationController()
 
-    private var selectedSkillId: String? = null
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
@@ -76,7 +77,7 @@ class MainActivity : Activity() {
         preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
         ToolExecutionLog.configure(this)
         val skillLoad = SkillStore(this).load()
-        skills = skillLoad.skills
+        skillRegistry = SkillRegistry(skillLoad.skills, SharedPreferencesSkillStore(preferences))
         skillLoad.invalid.forEach { invalid ->
             ToolExecutionLog.record(
                 name = "skill_load_failed",
@@ -93,7 +94,6 @@ class MainActivity : Activity() {
             observeScreen = { toolExecutor.observeScreen() }
         )
         localModelRuntime = LiteRtCommandModelRuntime(this)
-        selectedSkillId = preferences.getString("active_skill", null)
 
         reasoningCore = DefaultLocalReasoningCore(
             invocation = defaultAgentRunInvocation(
@@ -104,7 +104,7 @@ class MainActivity : Activity() {
                 localModelRuntime = localModelRuntime
             ),
             sessionContext = { currentReasoningContext() },
-            availableSkills = { skills },
+            availableSkills = { skillRegistry.enabledSkills() },
             screenContextProvider = { AccessibilityBridge.observeScreenContext() }
         )
         agentRunController = AgentRunController(
@@ -262,8 +262,7 @@ class MainActivity : Activity() {
     }
 
     private fun commitSelectedSkill(id: String?) {
-        selectedSkillId = id
-        preferences.edit().putString("active_skill", selectedSkillId).apply()
+        skillRegistry.setActiveSkill(id)
         showSection(AppSection.SETTINGS)
     }
 
@@ -346,12 +345,12 @@ class MainActivity : Activity() {
             activity = this,
             contentRoot = contentRoot,
             preferences = preferences,
-            skills = skills,
+            skills = skillRegistry.enabledSkills(),
             localModelRuntime = localModelRuntime,
             activeSettingsPanel = { navigationController.activeSettingsPanel },
             openSettingsPanel = navigationController::openSettingsPanel,
             closeSettingsPanel = navigationController::closeSettingsPanel,
-            selectedSkillId = { selectedSkillId },
+            selectedSkillId = { skillRegistry.activeSkill()?.id },
             commitSelectedSkill = ::commitSelectedSkill,
             openSkillDetail = ::openSkillDetail,
             currentProviderMode = ::currentProviderMode,
@@ -376,7 +375,7 @@ class MainActivity : Activity() {
     }
 
     private fun findSkill(skillId: String): Skill? {
-        return skills.firstOrNull { it.id == skillId }
+        return skillRegistry.allSkills().firstOrNull { it.id == skillId }
     }
 
     private fun renderSkillDetailScreen() {
@@ -385,7 +384,7 @@ class MainActivity : Activity() {
             contentRoot = contentRoot,
             skillId = navigationController.activeSkillDetailId,
             findSkill = ::findSkill,
-            selectedSkillId = { selectedSkillId },
+            selectedSkillId = { skillRegistry.activeSkill()?.id },
             closeSkillDetail = ::closeSkillDetail,
             commitSelectedSkill = ::commitSelectedSkill,
             refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
@@ -425,7 +424,7 @@ class MainActivity : Activity() {
     }
 
     private fun selectedSkill(): Skill? {
-        return skills.firstOrNull { it.id == selectedSkillId }
+        return skillRegistry.activeSkill()
     }
 
     private fun hideKeyboard(anchor: View) {
