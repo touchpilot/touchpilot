@@ -6,6 +6,7 @@ import dev.touchpilot.app.security.ToolApprovalRequest
 
 object ChatToolTextFormatter {
     fun approvalMessage(request: ToolApprovalRequest): String {
+        val policy = request.policy
         val redactedArgs = SensitiveTextRedactor.redact(request.args)
         val argsText = if (redactedArgs.isEmpty()) {
             "none"
@@ -16,15 +17,29 @@ object ChatToolTextFormatter {
         }
 
         return buildString {
-            appendLine("Risk: ${request.tool.risk}")
+            appendLine(policy.headline.ifBlank { policy.userMessage })
+            appendLine()
+            if (policy.workflowLabel.isNotBlank()) {
+                appendLine("Workflow: ${policy.workflowLabel}")
+            }
+            appendLine(
+                if (policy.riskSummary.isNotBlank()) {
+                    "Risk: ${policy.riskSummary}"
+                } else {
+                    "Tool risk: ${request.tool.risk}"
+                }
+            )
             appendLine("Tool: ${request.tool.name}")
             appendLine("Description: ${request.tool.description}")
-            appendLine("Why approval is needed: ${request.policy.reason}")
-            if (request.policy.skillContext.isNotBlank()) {
-                appendLine("Skill context: ${request.policy.skillContext}")
+            appendLine("Why approval is needed: ${policy.reason}")
+            if (policy.skillContext.isNotBlank()) {
+                appendLine("Skill context: ${policy.skillContext}")
             }
-            appendLine("Data affected: ${request.policy.dataAffected}")
-            appendLine("If approved: ${request.policy.ifApproved}")
+            if (policy.cautionNote.isNotBlank()) {
+                appendLine("Review carefully: ${policy.cautionNote}")
+            }
+            appendLine("What may change: ${policy.dataAffected}")
+            appendLine("If approved: ${policy.ifApproved}")
             appendLine()
             appendLine("Arguments:")
             append(argsText)

@@ -21,7 +21,7 @@ class AppAwarePolicyEngineTest {
 
         val approval = assertIs<PolicyDecision.RequireApproval>(decision)
         assertTrue(approval.reason.contains("banking"))
-        assertTrue(approval.dataAffected.contains("sensitive"))
+        assertTrue(approval.dataAffected.contains("Bank balances"))
     }
 
     @Test

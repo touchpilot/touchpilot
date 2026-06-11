@@ -43,7 +43,15 @@ sealed class PolicyDecision {
          * skill. Empty when no skill (or only a low-risk skill) is active. It only
          * adds caution to the prompt — it never changes the decision.
          */
-        val skillContext: String = ""
+        val skillContext: String = "",
+        /** Short prompt title shown in the approval UI. */
+        val headline: String = "",
+        /** Human-readable risk band summary for the approval card. */
+        val riskSummary: String = "",
+        /** Workflow or app-context label derived from policy metadata. */
+        val workflowLabel: String = "",
+        /** Extra caution shown for high-risk tools, skills, or workflows. */
+        val cautionNote: String = ""
     ) : PolicyDecision()
 
     data class Deny(

@@ -1,6 +1,5 @@
 package dev.touchpilot.app.security
 
-import dev.touchpilot.app.memory.SkillRisk
 import dev.touchpilot.app.tools.ToolRisk
 
 /**
@@ -56,57 +55,13 @@ class PolicyEngine {
             PolicyDecisionKind.ALLOW -> PolicyDecision.Allow(
                 reason = evaluation.userMessage.ifBlank { "low risk action" }
             )
-            PolicyDecisionKind.ASK -> requireApproval(request, evaluation)
+            PolicyDecisionKind.ASK -> ApprovalCopyBuilder.build(request, evaluation)
             PolicyDecisionKind.DENY -> PolicyDecision.Deny(
                 reason = evaluation.userMessage,
                 userMessage = evaluation.userMessage
             )
             PolicyDecisionKind.BLOCK -> blockDecision(request, evaluation)
         }
-    }
-
-    private fun requireApproval(
-        request: ToolPolicyRequest,
-        evaluation: PolicyEvaluation
-    ): PolicyDecision.RequireApproval {
-        val askRules = evaluation.rules.filter { it.decision == PolicyDecisionKind.ASK }
-        val primary = askRules.firstOrNull { it.subject == PolicySubject.WORKFLOW && it.workflowClass == PolicyWorkflowClass.MESSAGE_SEND }
-            ?: askRules.firstOrNull { it.subject == PolicySubject.SOURCE }
-            ?: askRules.firstOrNull { it.subject == PolicySubject.APP }
-            ?: askRules.firstOrNull { it.subject == PolicySubject.TOOL }
-            ?: askRules.first()
-
-        val (dataAffected, ifApproved) = when {
-            primary.workflowClass == PolicyWorkflowClass.MESSAGE_SEND -> {
-                "A message or outbound communication may be sent from the current app." to
-                    "TouchPilot will continue with the requested send action."
-            }
-            primary.subject == PolicySubject.SOURCE -> {
-                "The MCP server may receive tool arguments and affect an external system." to
-                    "TouchPilot will call the requested MCP tool once."
-            }
-            primary.subject == PolicySubject.APP -> {
-                "The current app or screen may expose sensitive banking, account, or security data." to
-                    "TouchPilot will run ${request.tool.name} in the current app context."
-            }
-            else -> {
-                "The current Android app or screen may be changed." to
-                    "TouchPilot will run ${request.tool.name} with the shown arguments."
-            }
-        }
-
-        val reason = when {
-            primary.subject == PolicySubject.TOOL ->
-                "${request.tool.risk.name.lowercase()} risk Android action"
-            else -> primary.reason
-        }
-        return PolicyDecision.RequireApproval(
-            reason = reason,
-            userMessage = "Approval required for ${request.tool.name}: $reason.",
-            dataAffected = dataAffected,
-            ifApproved = ifApproved,
-            skillContext = skillRiskContext(request)
-        )
     }
 
     private fun blockDecision(
@@ -128,14 +83,6 @@ class PolicyEngine {
             else -> "TouchPilot blocked this request because $reason."
         }
         return PolicyDecision.Block(reason = reason, userMessage = userMessage)
-    }
-
-    private fun skillRiskContext(request: ToolPolicyRequest): String {
-        val risk = request.activeSkillRisk ?: return ""
-        if (risk == SkillRisk.LOW) return ""
-        val title = request.activeSkillTitle?.takeIf { it.isNotBlank() } ?: "the active skill"
-        return "This action is requested under the ${risk.name.lowercase()}-risk skill " +
-            "\"$title\". Review carefully before approving."
     }
 
     private fun sensitiveTextEntryRule(): PolicyRule {
