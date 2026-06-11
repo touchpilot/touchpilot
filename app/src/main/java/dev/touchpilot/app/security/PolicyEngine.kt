@@ -1,99 +1,165 @@
 package dev.touchpilot.app.security
 
+import dev.touchpilot.app.memory.SkillRisk
 import dev.touchpilot.app.tools.ToolRisk
 
 /**
- * Central, deterministic policy engine (Milestone 7, issue 3).
- *
- * Every command producer — direct tool execution, local model output, local
- * router output, skills, and MCP — resolves its safety decision here, so
- * behavior cannot drift between callers. Decisions come only from local,
- * testable signals (tool risk, sensitive workflow class, and source) expressed
- * as [PolicyRule]s over the Safety/Policy v2 model ([PolicyV2Model]) and the
- * [WorkflowRiskClassifier]. The model never decides approval.
- *
- * Decision precedence is strictest-wins (block > deny > ask > allow), so a
- * sensitive signal can only raise caution, never lower it, and an unknown
- * sensitive workflow ([PolicyWorkflowClass.UNKNOWN_SENSITIVE]) blocks by default.
- *
- * The engine preserves current behavior:
- * - low-risk observation/wait tools are always allowed (screen/workflow context
- *   cannot escalate them);
- * - sensitive-workflow and secret-entry actions block;
- * - message sends and medium/high-risk actions ask for approval;
- * - MCP tools ask before crossing the external trust boundary.
+ * Central policy path for tool execution decisions. Collects rules from tool
+ * risk, workflow class, and source, then applies the strictest decision so
+ * callers cannot drift into different safety behavior.
  */
 class PolicyEngine {
-
-    data class Decision(
-        val kind: PolicyDecisionKind,
-        /** The rule that determined the decision; used for user-facing copy. */
-        val primary: PolicyRule,
-        val rules: List<PolicyRule>,
-    )
-
-    fun decide(request: ToolPolicyRequest): Decision {
-        val rules = rulesFor(request)
-        val kind = PolicyDecisionKind.strictest(rules.map { it.decision })
-        return Decision(kind = kind, primary = primaryRule(rules, kind), rules = rules)
-    }
-
-    private fun rulesFor(request: ToolPolicyRequest): List<PolicyRule> {
-        val rules = mutableListOf<PolicyRule>()
-        rules += PolicyV2Defaults.ruleForToolRisk(request.tool.risk)
-
-        // Low-risk tools only observe or wait; they cannot perform a sensitive
-        // workflow, so screen/workflow context must never escalate them.
-        if (request.tool.risk == ToolRisk.LOW) return rules
-
-        // Sensitive workflow inferred from the action itself (tool + arguments),
-        // matching the previous argument-scoped blocked-workflow / secret-entry
-        // checks. Screen text is intentionally excluded here so passive context
-        // cannot turn an approval into a block.
-        val actionClass = WorkflowRiskClassifier
-            .classify(request.tool.name, request.args)
-            .workflowClass
-        if (actionClass != PolicyWorkflowClass.GENERAL) {
-            rules += PolicyV2Defaults.ruleForWorkflow(actionClass)
-        }
-
-        // Sending a message is screen-aware: the messaging context only appears
-        // in the active screen text.
-        val sendsMessage = PolicyWorkflowClass.MESSAGE_SEND in WorkflowRiskClassifier
-            .classify(request.tool.name, request.args, request.activeScreen)
-            .matched
-        if (sendsMessage) {
-            rules += PolicyV2Defaults.ruleForWorkflow(PolicyWorkflowClass.MESSAGE_SEND)
-        }
-
-        // External MCP tools ask before crossing the built-in trust boundary.
-        if (request.source == ToolSource.MCP) {
-            rules += PolicyRule(
-                id = "source-mcp",
-                subject = PolicySubject.SOURCE,
-                decision = PolicyDecisionKind.ASK,
-                reason = "MCP tools are outside the built-in Android trust boundary",
-                workflowClass = PolicyWorkflowClass.EXTERNAL_MCP,
-                riskBand = PolicyRiskBand.MEDIUM,
+    fun evaluate(request: ToolPolicyRequest): PolicyEvaluation {
+        if (request.tool.risk == ToolRisk.LOW) {
+            return PolicyEvaluation(
+                decision = PolicyDecisionKind.ALLOW,
+                rules = listOf(PolicyV2Defaults.ruleForToolRisk(ToolRisk.LOW)),
+                userMessage = "low risk action"
             )
         }
 
-        return rules
+        val rules = mutableListOf<PolicyRule>()
+        rules.add(PolicyV2Defaults.ruleForToolRisk(request.tool.risk))
+
+        WorkflowClassifier.blockedIntentRule(request)?.let(rules::add)
+
+        WorkflowClassifier.classify(request).forEach { workflowClass ->
+            if (workflowClass == PolicyWorkflowClass.GENERAL) return@forEach
+            if (workflowClass == PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY) {
+                rules.add(sensitiveTextEntryRule())
+                return@forEach
+            }
+            if (workflowClass == PolicyWorkflowClass.MESSAGE_SEND) {
+                rules.add(messageSendRule())
+                return@forEach
+            }
+        }
+
+        if (request.source == ToolSource.MCP && request.tool.risk != ToolRisk.LOW) {
+            rules.add(mcpSourceRule())
+        }
+
+        return PolicyEvaluation.fromRules(rules)
     }
 
-    /**
-     * The deciding rule for the chosen decision. Among rules that share the
-     * strictest decision, the most specific reason wins: a named workflow, then
-     * source, then the tool itself.
-     */
-    private fun primaryRule(rules: List<PolicyRule>, kind: PolicyDecisionKind): PolicyRule {
-        val deciding = rules.filter { it.decision == kind }
-        return deciding.minByOrNull { copyPriority(it) } ?: rules.first()
+    fun decide(request: ToolPolicyRequest): PolicyDecision {
+        return toRuntimeDecision(request, evaluate(request))
     }
 
-    private fun copyPriority(rule: PolicyRule): Int = when {
-        rule.subject == PolicySubject.WORKFLOW && rule.workflowClass != PolicyWorkflowClass.GENERAL -> 0
-        rule.subject == PolicySubject.SOURCE -> 1
-        else -> 2
+    private fun toRuntimeDecision(
+        request: ToolPolicyRequest,
+        evaluation: PolicyEvaluation
+    ): PolicyDecision {
+        return when (evaluation.decision) {
+            PolicyDecisionKind.ALLOW -> PolicyDecision.Allow(
+                reason = evaluation.userMessage.ifBlank { "low risk action" }
+            )
+            PolicyDecisionKind.ASK -> requireApproval(request, evaluation)
+            PolicyDecisionKind.DENY -> PolicyDecision.Deny(
+                reason = evaluation.userMessage,
+                userMessage = evaluation.userMessage
+            )
+            PolicyDecisionKind.BLOCK -> blockDecision(request, evaluation)
+        }
+    }
+
+    private fun requireApproval(
+        request: ToolPolicyRequest,
+        evaluation: PolicyEvaluation
+    ): PolicyDecision.RequireApproval {
+        val askRules = evaluation.rules.filter { it.decision == PolicyDecisionKind.ASK }
+        val primary = askRules.firstOrNull { it.subject == PolicySubject.WORKFLOW && it.workflowClass == PolicyWorkflowClass.MESSAGE_SEND }
+            ?: askRules.firstOrNull { it.subject == PolicySubject.SOURCE }
+            ?: askRules.firstOrNull { it.subject == PolicySubject.TOOL }
+            ?: askRules.first()
+
+        val (dataAffected, ifApproved) = when {
+            primary.workflowClass == PolicyWorkflowClass.MESSAGE_SEND -> {
+                "A message or outbound communication may be sent from the current app." to
+                    "TouchPilot will continue with the requested send action."
+            }
+            primary.subject == PolicySubject.SOURCE -> {
+                "The MCP server may receive tool arguments and affect an external system." to
+                    "TouchPilot will call the requested MCP tool once."
+            }
+            else -> {
+                "The current Android app or screen may be changed." to
+                    "TouchPilot will run ${request.tool.name} with the shown arguments."
+            }
+        }
+
+        val reason = when {
+            primary.subject == PolicySubject.TOOL ->
+                "${request.tool.risk.name.lowercase()} risk Android action"
+            else -> primary.reason
+        }
+        return PolicyDecision.RequireApproval(
+            reason = reason,
+            userMessage = "Approval required for ${request.tool.name}: $reason.",
+            dataAffected = dataAffected,
+            ifApproved = ifApproved,
+            skillContext = skillRiskContext(request)
+        )
+    }
+
+    private fun blockDecision(
+        request: ToolPolicyRequest,
+        evaluation: PolicyEvaluation
+    ): PolicyDecision.Block {
+        val blockRules = evaluation.rules.filter { it.decision == PolicyDecisionKind.BLOCK }
+        val primary = blockRules.firstOrNull { it.workflowClass == PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY }
+            ?: blockRules.firstOrNull { it.subject == PolicySubject.WORKFLOW }
+            ?: blockRules.firstOrNull { it.subject == PolicySubject.TOOL }
+            ?: blockRules.first()
+
+        val reason = primary.reason
+        val userMessage = when {
+            primary.workflowClass == PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY ->
+                "TouchPilot will not enter passwords, recovery codes, API keys, or other secrets."
+            primary.subject == PolicySubject.TOOL && request.tool.risk == ToolRisk.BLOCKED ->
+                "${request.tool.name} is blocked by policy."
+            else -> "TouchPilot blocked this request because $reason."
+        }
+        return PolicyDecision.Block(reason = reason, userMessage = userMessage)
+    }
+
+    private fun skillRiskContext(request: ToolPolicyRequest): String {
+        val risk = request.activeSkillRisk ?: return ""
+        if (risk == SkillRisk.LOW) return ""
+        val title = request.activeSkillTitle?.takeIf { it.isNotBlank() } ?: "the active skill"
+        return "This action is requested under the ${risk.name.lowercase()}-risk skill " +
+            "\"$title\". Review carefully before approving."
+    }
+
+    private fun sensitiveTextEntryRule(): PolicyRule {
+        return PolicyRule(
+            id = "workflow-sensitive-text-entry",
+            subject = PolicySubject.WORKFLOW,
+            decision = PolicyDecisionKind.BLOCK,
+            reason = "password or secret entry is blocked",
+            workflowClass = PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY,
+            riskBand = PolicyRiskBand.BLOCKED
+        )
+    }
+
+    private fun messageSendRule(): PolicyRule {
+        return PolicyRule(
+            id = "workflow-message-send",
+            subject = PolicySubject.WORKFLOW,
+            decision = PolicyDecisionKind.ASK,
+            reason = "sending a message requires explicit approval",
+            workflowClass = PolicyWorkflowClass.MESSAGE_SEND,
+            riskBand = PolicyRiskBand.MEDIUM
+        )
+    }
+
+    private fun mcpSourceRule(): PolicyRule {
+        return PolicyRule(
+            id = "source-mcp",
+            subject = PolicySubject.SOURCE,
+            decision = PolicyDecisionKind.ASK,
+            reason = "MCP tools are outside the built-in Android trust boundary",
+            riskBand = PolicyRiskBand.MEDIUM
+        )
     }
 }
