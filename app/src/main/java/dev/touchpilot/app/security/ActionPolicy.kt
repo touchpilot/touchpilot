@@ -1,5 +1,6 @@
 package dev.touchpilot.app.security
 
+import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.memory.SkillRisk
 import dev.touchpilot.app.tools.ToolSpec
 
@@ -16,6 +17,7 @@ data class ToolPolicyRequest(
     val args: Map<String, String>,
     val source: ToolSource,
     val activeScreen: String = "",
+    val foregroundApp: ForegroundAppInfo? = null,
     val activeSkillId: String? = null,
     val activeSkillTitle: String? = null,
     val activeSkillRisk: SkillRisk? = null

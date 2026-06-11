@@ -39,6 +39,8 @@ class PolicyEngine {
             rules.add(mcpSourceRule())
         }
 
+        rules.addAll(AppContextClassifier.rules(request))
+
         return PolicyEvaluation.fromRules(rules)
     }
 
@@ -70,6 +72,7 @@ class PolicyEngine {
         val askRules = evaluation.rules.filter { it.decision == PolicyDecisionKind.ASK }
         val primary = askRules.firstOrNull { it.subject == PolicySubject.WORKFLOW && it.workflowClass == PolicyWorkflowClass.MESSAGE_SEND }
             ?: askRules.firstOrNull { it.subject == PolicySubject.SOURCE }
+            ?: askRules.firstOrNull { it.subject == PolicySubject.APP }
             ?: askRules.firstOrNull { it.subject == PolicySubject.TOOL }
             ?: askRules.first()
 
@@ -81,6 +84,10 @@ class PolicyEngine {
             primary.subject == PolicySubject.SOURCE -> {
                 "The MCP server may receive tool arguments and affect an external system." to
                     "TouchPilot will call the requested MCP tool once."
+            }
+            primary.subject == PolicySubject.APP -> {
+                "The current app or screen may expose sensitive banking, account, or security data." to
+                    "TouchPilot will run ${request.tool.name} in the current app context."
             }
             else -> {
                 "The current Android app or screen may be changed." to
