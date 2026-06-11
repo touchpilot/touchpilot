@@ -4,7 +4,6 @@ import android.app.Activity
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolResult
@@ -17,9 +16,6 @@ class ToolExecutionController(
 ) {
     fun executeAndRender(name: String, args: Map<String, String>): ToolResult {
         val result = toolExecutor.execute(name, args, ToolSource.DIRECT_DEBUG)
-        callbacks.recordToolsResult(
-            SensitiveTextRedactor.redact("$name($args) -> ${result.ok}: ${result.message}")
-        )
         callbacks.refreshDeveloperLogs()
         return result
     }
@@ -43,9 +39,6 @@ class ToolExecutionController(
         Thread {
             val result = toolExecutor.execute(name, args, ToolSource.DIRECT_DEBUG)
             activity.runOnUiThread {
-                callbacks.recordToolsResult(
-                    SensitiveTextRedactor.redact("$name -> ${result.ok}: ${result.message}")
-                )
                 callbacks.refreshDeveloperLogs()
                 callbacks.refreshToolsScreen()
             }

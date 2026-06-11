@@ -290,10 +290,6 @@ class MainActivity : Activity() {
             activity = this,
             toolExecutor = toolExecutor,
             callbacks = object : ToolExecutionCallbacks {
-                override fun recordToolsResult(message: String) {
-                    sectionResults.recordToolsResult(message)
-                }
-
                 override fun refreshDeveloperLogs() {
                     refreshExecutionLog()
                 }
@@ -358,13 +354,13 @@ class MainActivity : Activity() {
             currentProviderMode = ::currentProviderMode,
             openAccessibilitySettings = ::openAccessibilitySettings,
             hideKeyboard = ::hideKeyboard,
-            recordMcpResult = sectionResults::recordMcpResult,
-            mcpResult = sectionResults::forMcp,
+            recordMcpResult = mcpResultStore::recordMcpResult,
+            mcpResult = mcpResultStore::forMcp,
             refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
         ).render()
     }
 
-    private val sectionResults = SectionResultStore()
+    private val mcpResultStore = McpResultStore()
 
     private fun refreshExecutionLog() {
         if (::executionLogList.isInitialized) {
