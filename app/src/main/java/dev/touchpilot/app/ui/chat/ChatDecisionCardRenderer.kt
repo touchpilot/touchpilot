@@ -46,7 +46,7 @@ class ChatDecisionCardRenderer(
         }
         content.addView(
             TextView(activity).apply {
-                text = "$statusLabel - ${tool.name}"
+                text = request.policy.headline.ifBlank { "$statusLabel - ${tool.name}" }
                 textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
