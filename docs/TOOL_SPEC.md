@@ -36,15 +36,26 @@ Tools are the only way an agent may affect the Android device.
 - `wait_for_ui`: wait for a screen change or expected text.
 - `wait_for_idle`: wait until the redacted screen context remains stable.
 - `wait_for_app`: wait until a package name or launcher label is foreground.
+- `wait_for_element`: wait until a node matching a structured query (text,
+  content description, node ID, or class name) appears on screen.
 - `focus_input`: focus a visible editable input field without typing.
 - `clear_text`: clear the focused or resolved editable input field.
 - `dismiss_keyboard`: hide the soft keyboard if it is visible.
 
 The app implements `observe_screen`, `observe_screen_context`, `open_app`,
 `open_settings_panel`, `tap`, `long_press`, `type_text`, `scroll`, `swipe`, `press_back`,
-`press_home`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`, `focus_input`,
-`clear_text`, and `dismiss_keyboard` from the Android Tools screen and the
-agent command-provider loop.
+`press_home`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`, `wait_for_element`,
+`focus_input`, `clear_text`, and `dismiss_keyboard` from the Android Tools screen
+and the agent command-provider loop.
+
+`wait_for_element` is the structured counterpart of `wait_for_ui` and the
+polling counterpart of `find_element`. It accepts the same query filters as
+`find_element` (`text`, `content_description`, `node_id`, `class_name`, and an
+optional `match` mode of `exact`, `contains`, or `semantic`) plus an optional
+`timeout_ms`, and polls the normalized screen context until a node matches or
+the bounded timeout (default 5,000 ms; 250–30,000 ms) elapses. It reuses the
+`find_element` matcher, executes no Accessibility action (LOW risk, read-only),
+and never logs raw query text — only filter lengths.
 
 `swipe` has two input modes. In **direction mode** (the primary path) the caller
 passes `direction` (`left`, `right`, `up`, or `down`, naming the direction the

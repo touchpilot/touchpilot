@@ -3,7 +3,9 @@ package dev.touchpilot.app.tools
 import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.security.SensitiveTextRedactor
 
-class ToolVerifier {
+class ToolVerifier(
+    private val findElementMatcher: FindElementMatcher = FindElementMatcher(),
+) {
     fun verify(
         toolName: String,
         args: Map<String, String>,
@@ -36,6 +38,7 @@ class ToolVerifier {
                     "required_stable_ms" to (result.data["required_stable_ms"] ?: ""),
                 )
             )
+            "wait_for_element" -> verifyWaitForElement(args, after)
             "wait_for_app" -> ToolVerificationResult.Passed(
                 reason = "foreground app matched requested target",
                 data = mapOf(
@@ -243,6 +246,28 @@ class ToolVerifier {
             ToolVerificationResult.Failed(
                 reason = "expected UI text is not present after wait",
                 data = mapOf("text" to SensitiveTextRedactor.redact(expected))
+            )
+        }
+    }
+
+    private fun verifyWaitForElement(
+        args: Map<String, String>,
+        after: ScreenContext,
+    ): ToolVerificationResult {
+        val query = WaitForElement.queryFromArgs(args)
+        val matches = findElementMatcher.match(after, query)
+        return if (matches.isNotEmpty()) {
+            ToolVerificationResult.Passed(
+                reason = "a matching element is present after the wait",
+                data = mapOf(
+                    "count" to matches.size.toString(),
+                    "match_mode" to query.match.wireName,
+                )
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "no element matched the query after the wait",
+                data = mapOf("match_mode" to query.match.wireName)
             )
         }
     }

@@ -210,6 +210,9 @@ class AndroidToolExecutor(
             "wait_for_app" -> {
                 executeWaitForApp(args)
             }
+            "wait_for_element" -> {
+                executeWaitForElement(args)
+            }
             "focus_input" -> {
                 val text = args["text"].orEmpty()
                 val nodeId = args["node_id"].orEmpty()
@@ -340,6 +343,30 @@ class AndroidToolExecutor(
             false,
             result.message
         )
+        return result
+    }
+
+    private fun executeWaitForElement(args: Map<String, String>): ToolResult {
+        val query = WaitForElement.queryFromArgs(args)
+        val timeout = WaitForElement.timeoutMs(args)
+        val logArgs = WaitForElement.logArgs(args, timeout)
+        val deadline = System.currentTimeMillis() + timeout
+        var latest = AccessibilityBridge.observeScreenContext()
+
+        while (System.currentTimeMillis() <= deadline) {
+            val matches = findElementMatcher.match(latest, query)
+            if (matches.isNotEmpty()) {
+                record("wait_for_element", logArgs, true, "waitForElement")
+                return WaitForElement.successResult(args, matches.size)
+            }
+            val remainingMs = deadline - System.currentTimeMillis()
+            if (remainingMs <= 0L) break
+            sleeper(minOf(150L, remainingMs))
+            latest = AccessibilityBridge.observeScreenContext()
+        }
+
+        val result = WaitForElement.timeoutResult(args, timeout)
+        record("wait_for_element", logArgs, false, result.message)
         return result
     }
 

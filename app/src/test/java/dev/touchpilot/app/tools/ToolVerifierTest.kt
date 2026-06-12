@@ -205,6 +205,33 @@ class ToolVerifierTest {
     }
 
     @Test
+    fun waitForElementPassesWhenMatchingElementIsPresent() {
+        val result = verifier.verify(
+            toolName = "wait_for_element",
+            args = mapOf("text" to "Continue"),
+            result = ToolResult(ok = true, message = "waitForElement"),
+            before = screen(),
+            after = screen(nodes = listOf(button("0", "Continue"))),
+        )
+
+        val passed = assertIs<ToolVerificationResult.Passed>(result)
+        assertEquals("1", passed.data["count"])
+    }
+
+    @Test
+    fun waitForElementFailsWhenNoElementMatches() {
+        val result = verifier.verify(
+            toolName = "wait_for_element",
+            args = mapOf("text" to "Continue", "match" to "exact"),
+            result = ToolResult(ok = true, message = "waitForElement"),
+            before = screen(),
+            after = screen(nodes = listOf(button("0", "Cancel"))),
+        )
+
+        assertIs<ToolVerificationResult.Failed>(result)
+    }
+
+    @Test
     fun dismissKeyboardPassesWhenKeyboardWasHidden() {
         val result = verifier.verify(
             toolName = "dismiss_keyboard",
