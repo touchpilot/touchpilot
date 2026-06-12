@@ -9,9 +9,12 @@ import dev.touchpilot.app.agent.ClarificationFromToolResult
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.androidcontrol.DismissKeyboardOutcome
 import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
+import dev.touchpilot.app.security.ActionPolicy
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
+import dev.touchpilot.app.security.ToolApprovalProvider
+import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.screen.NodeBounds
@@ -34,7 +37,8 @@ import dev.touchpilot.app.tools.targets.TypeTextTarget
 
 class AndroidToolExecutor(
     private val context: Context,
-    private val policy: DefaultActionPolicy = DefaultActionPolicy(),
+    private val policy: ActionPolicy = DefaultActionPolicy(),
+    private val approvalProvider: ToolApprovalProvider? = null,
     private val targetResolver: TargetResolver = TargetResolver(),
     private val scrollResolver: ScrollResolver = ScrollResolver(targetResolver),
     private val retryPolicy: AndroidToolRetryPolicy = AndroidToolRetryPolicy(),
@@ -63,8 +67,13 @@ class AndroidToolExecutor(
                 return ToolResult(false, validationError)
             }
 
+            // Policy is only evaluated here for DIRECT_DEBUG calls (debug panel, tests, future
+            // MCP adapters). Calls that arrive via BoundedLocalAgentLoop already pass through
+            // the loop's policy + approval gate with a consistent screen snapshot; re-evaluating
+            // here with a fresh observeScreen() would create a TOCTOU window and double-prompt
+            // the user. For loop sources the loop is authoritative — the executor trusts it.
             val spec = AndroidToolCatalog.find(name)
-            if (spec != null) {
+            if (spec != null && source == ToolSource.DIRECT_DEBUG) {
                 when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
                     is PolicyDecision.Block -> {
                         record(name, "policy=block", false, decision.userMessage)
@@ -74,8 +83,15 @@ class AndroidToolExecutor(
                         record(name, "policy=deny", false, decision.userMessage)
                         return ToolResult(false, decision.userMessage)
                     }
-                    is PolicyDecision.Allow,
-                    is PolicyDecision.RequireApproval -> Unit
+                    is PolicyDecision.RequireApproval -> {
+                        val provider = approvalProvider
+                        val approved = provider != null && provider.approve(ToolApprovalRequest(spec, args, decision))
+                        if (!approved) {
+                            record(name, "policy=require_approval", false, decision.userMessage)
+                            return ToolResult(false, decision.userMessage)
+                        }
+                    }
+                    is PolicyDecision.Allow -> Unit
                 }
             }
 
