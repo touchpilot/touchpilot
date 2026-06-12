@@ -135,6 +135,56 @@ Every model output is treated as untrusted. It still passes through JSON
 parsing, tool validation, skill allowlists, safety policy, approval flow, and
 redacted logs/traces.
 
+## Benchmark Summary
+
+Issue #268 requires a minimal local benchmark summary that maintainers can use
+to compare model changes without external services.
+
+The benchmark path is intentionally narrow:
+
+- Uses static local tasks only.
+- Does not execute Android actions.
+- Does not send network requests.
+- Measures model load time and repeated `route()` inference time.
+- Reports a simple heap delta metric when the runtime can observe it.
+
+### Run the formatter/unit contract
+
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+export ANDROID_SDK_ROOT=$ANDROID_HOME
+./gradlew :app:testDebugUnitTest --tests 'dev.touchpilot.app.localinference.LocalModelBenchmarkTest'
+```
+
+### Run the live bundled-model benchmark
+
+This test requires an attached emulator or device:
+
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+export ANDROID_SDK_ROOT=$ANDROID_HOME
+./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=dev.touchpilot.app.localinference.LocalModelBenchmarkSummaryLiveTest
+```
+
+The live test logs a PR-friendly summary like:
+
+```text
+Local model benchmark summary
+runtime=LiteRT version=tiny-router-1 asset=models/command_router/model.tflite available=true
+load_ms=12.34 load_heap_delta_kb=256
+iterations_per_scenario=5
+- open_settings: avg_ms=0.42 min_ms=0.39 max_ms=0.51 avg_heap_delta_kb=0 sample={"tool":"open_app","args":{"target":"settings"}}
+notes=static local examples only | no Android tool execution | no network requests
+```
+
+### Limitations
+
+- Results are only comparable on roughly similar hardware and thermal state.
+- The current benchmark exercises the bundled LiteRT command router only.
+- Heap delta is a coarse process-level signal, not a memory profiler.
+- The benchmark is designed for regression checks in PR review, not product UI.
+
 ## Recommended Next Runtime
 
 Use LiteRT first for a small command-routing model, because the target task is
