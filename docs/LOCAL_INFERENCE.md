@@ -7,6 +7,21 @@ execution before larger trained routing models are added.
 
 ## Runtime Evaluation
 
+TouchPilot now includes a static target-ranking evaluation path for Milestone 8.
+It uses committed fixture screens plus expected node IDs to measure whether the
+existing deterministic ranking path keeps the right target at rank 1 or within
+an allowed top-N threshold, without executing any Android action.
+
+Run it with:
+
+```bash
+./gradlew testDebugUnitTest --tests 'dev.touchpilot.app.tools.targets.TargetRankingEvaluatorTest'
+```
+
+The current committed fixture set lives at:
+
+- `app/src/test/resources/target-ranking/fixtures.json`
+
 ### ExecuTorch
 
 ExecuTorch is the strongest fit for a future Android-native LLM path. It
