@@ -33,10 +33,37 @@ app/src/main/java/dev/touchpilot/app/
   tools/            Tool catalog, validation, execution, retry, verification, and targets
 ```
 
-`MainActivity.kt` currently owns the developer UI and app orchestration. As the
-UI hardening work continues, screen renderers and shared UI components should
-move into `app/src/main/java/dev/touchpilot/app/ui/` while keeping behavior
-unchanged.
+`MainActivity.kt` currently owns app orchestration and wires together navigation,
+runtime controllers, skill selection, logs, and screen renderers. Most visible
+screen construction now lives under `app/src/main/java/dev/touchpilot/app/ui/`,
+including chat, tools, logs, settings, shell, and shared component helpers.
+Future refactoring should continue shrinking `MainActivity.kt` by moving
+orchestration state into focused controllers without changing runtime behavior.
+
+## Runtime Shape
+
+```mermaid
+flowchart LR
+    MainActivity[MainActivity.kt] --> UI[UI renderers]
+    MainActivity --> Navigation[NavigationController]
+    MainActivity --> Skills[SkillRegistry]
+    MainActivity --> Runtime[Runtime controllers]
+
+    UI --> Chat[chat/]
+    UI --> ToolsUi[tools/]
+    UI --> LogsUi[logs/]
+    UI --> SettingsUi[settings/]
+
+    Runtime --> AgentRunController
+    Runtime --> ToolExecutionController
+
+    AgentRunController --> Agent[agent/]
+    ToolExecutionController --> Tools[tools/]
+
+    Tools --> AndroidControl[androidcontrol/]
+    Tools --> Security[security/]
+    Tools --> Logging[logging/]
+```
 
 ## Assets
 

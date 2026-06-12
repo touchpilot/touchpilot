@@ -23,6 +23,114 @@ MCP Client
   -> External tools
 ```
 
+## Current Runtime Workflow
+
+```mermaid
+flowchart TD
+    User[User] --> UI[TouchPilot Android UI]
+
+    UI --> Chat[Chat Page]
+    UI --> Tools[Tools Page]
+    UI --> Logs[Logs Page]
+    UI --> Settings[Settings Page]
+
+    Chat --> IntentGate[IntentGate]
+    IntentGate -->|Exact command| FixedCommand[FixedCommandProvider]
+    IntentGate -->|Known skill| SkillMode[Skill Registry]
+    IntentGate -->|Screen question| ScreenInquiry[ScreenContext Answer]
+    IntentGate -->|Ambiguous or unsafe| ClarifyOrBlock[Clarify or Refuse]
+    IntentGate -->|Needs reasoning| LocalModel[LiteRT or Local Router]
+
+    FixedCommand --> AgentRunner[Agent Runner]
+    SkillMode --> AgentRunner
+    LocalModel --> AgentRunner
+
+    AgentRunner --> ToolExecutor[AndroidToolExecutor]
+    Tools --> ToolController[ToolExecutionController]
+    ToolController --> ToolExecutor
+
+    ToolExecutor --> Policy[DefaultActionPolicy]
+    Policy -->|allow| ToolCatalog[AndroidToolCatalog]
+    Policy -->|deny or block| ToolResult[ToolResult]
+
+    ToolCatalog --> Accessibility[TouchPilotAccessibilityService]
+    Accessibility --> AndroidScreen[Android Screen and Apps]
+
+    Accessibility --> ScreenContext[observe_screen_context]
+    ScreenContext --> ToolVerifier[ToolVerifier]
+    ToolVerifier --> ToolResult
+
+    ToolResult --> LogsStore[Developer Logs DB]
+    ToolResult --> ChatCards[Chat Tool Cards]
+    ToolResult --> ToolsResult[Tools Result Card]
+
+    LogsStore --> Logs
+```
+
+## Tool Execution Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant UI as TouchPilot UI
+    participant G as IntentGate
+    participant R as Reasoning or Router
+    participant E as AndroidToolExecutor
+    participant P as ActionPolicy
+    participant A as AccessibilityService
+    participant V as ToolVerifier
+    participant L as Logs
+
+    U->>UI: Enter task or press tool button
+    UI->>G: Classify task
+    G->>R: Route exact, local, or skill task
+    R->>E: Execute tool(name,args)
+    E->>P: Check risk and safety policy
+    P-->>E: Allow, deny, or block
+    E->>A: Observe or act on Android screen
+    A-->>E: ScreenContext or action result
+    E->>V: Verify result against before and after screen
+    V-->>E: passed, failed, or skipped
+    E->>L: Record redacted developer log
+    E-->>UI: Render result
+```
+
+## Current Code Map
+
+```mermaid
+flowchart LR
+    MainActivity[MainActivity.kt] --> Renderers[UI Renderers]
+    Renderers --> ChatRenderer[ChatScreenRenderer]
+    Renderers --> ToolsRenderer[ToolsScreenRenderer]
+    Renderers --> LogsRenderer[LogsScreenRenderer]
+    Renderers --> SettingsRenderer[SettingsScreenRenderer]
+
+    MainActivity --> Runtime[Runtime Controllers]
+    Runtime --> AgentRunController
+    Runtime --> ToolExecutionController
+
+    AgentRunController --> Agent[Agent Layer]
+    Agent --> IntentGate
+    Agent --> LocalReasoningCore
+    Agent --> AgentRunner
+
+    ToolExecutionController --> ToolsLayer[Tools Layer]
+    ToolsLayer --> AndroidToolExecutor
+    ToolsLayer --> AndroidToolCatalog
+    ToolsLayer --> ToolVerifier
+    ToolsLayer --> RetryPolicy
+
+    AndroidToolExecutor --> AndroidControl[Android Control]
+    AndroidControl --> AccessibilityBridge
+    AccessibilityBridge --> TouchPilotAccessibilityService
+
+    TouchPilotAccessibilityService --> ScreenContextBuilder
+    ScreenContextBuilder --> NormalizedContext[Normalized ScreenContext JSON]
+
+    ToolsLayer --> LogsLayer[ToolExecutionLog]
+    LogsLayer --> DeveloperLogStore
+```
+
 ## Core Modules
 
 - `app`: Android UI, navigation, settings, permissions.

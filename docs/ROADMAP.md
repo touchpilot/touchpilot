@@ -46,8 +46,8 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 3 | Complete | Screen context and local understanding. |
 | Milestone 4 | Complete | Reliable Android control. |
 | Milestone 5 | Complete | Local multi-step agent loop. |
-| Milestone 6 | Next | Skills system v2. |
-| Milestone 7 | Planned | Safety and policy v2. |
+| Milestone 6 | In final review | Skills system v2. |
+| Milestone 7 | Active | Safety and policy v2. |
 | Milestone 8 | Planned | Local model quality. |
 | Milestone 9 | Planned | Product UI v2. |
 | Milestone 10 | Planned | Workflow automation. |
@@ -57,8 +57,21 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 14 | Planned | Advanced local AI. |
 | Milestone 15 | Planned | 1.0 release. |
 
-The active roadmap now starts at Milestone 6. Milestones 1 through 5 are
-retained as completed baselines so future work has a clear starting point.
+The active roadmap is between the final Milestone 6 skill-system PRs and the
+first Milestone 7 safety-policy PRs. Milestones 1 through 5 are retained as
+completed baselines so future work has a clear starting point.
+
+Current project status:
+
+- Milestones 1 through 5 are complete in the main branch.
+- Milestone 6 is mostly implemented: the app has a skill registry, active skill
+  selection, enabled/disabled skill state, skill-aware command context, tool
+  allowlists, and active-skill risk context in approvals.
+- Remaining Milestone 6 work is concentrated in open PRs for skill matching,
+  enable/disable controls, and bundled Skills v2 pack updates.
+- Milestone 7 has started. Open work covers sensitive workflow classification,
+  central policy decisions, app-aware policy rules, risk-specific approval copy,
+  and broader redaction for logs and traces.
 
 ## Completed Baseline: Milestone 1
 
@@ -266,6 +279,12 @@ subscreen and stopping when the expected state is reached.
 
 Goal: turn skills into the local knowledge layer for Android tasks.
 
+Status: in final review. The core runtime paths are present: bundled skills are
+loaded through a registry, disabled skills are excluded from matching, an active
+skill can scope agent context, tool visibility is filtered by skill allowlists,
+and approval prompts can include active-skill risk context. Remaining work is
+mainly finishing the open skill-pack and skill-management PRs.
+
 ```text
 local skill files
        │
@@ -299,6 +318,10 @@ or explain the skill path.
 ## Milestone 7: Safety and Policy v2
 
 Goal: make local Android automation safe by default.
+
+Status: active. The first policy model and active-skill risk surfaces are in
+main, and follow-up PRs are open for workflow classifiers, centralized policy
+decisions, app-aware policy, approval copy, and expanded redaction.
 
 ```text
 tool request

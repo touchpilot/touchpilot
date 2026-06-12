@@ -31,6 +31,20 @@ The first milestone is a local Android app that can:
 - tap, type, scroll, open apps, and press back/home through approved tools,
 - record every model decision and tool execution in local logs.
 
+## Current Status
+
+TouchPilot has completed the local Android agent foundation, hybrid local AI
+core, normalized screen context, reliable Android control baseline, and bounded
+local multi-step loop. The current codebase includes a Skills v2 registry,
+active skill selection, skill-aware prompts, skill allowlists, and risk-aware
+approval context.
+
+The active project work is now split between finishing the remaining Skills v2
+pack/UI PRs and starting Milestone 7 safety and policy v2. Open Milestone 7 work
+focuses on sensitive workflow classification, central policy decisions,
+app-aware policy rules, risk-specific approval copy, and expanded redaction for
+logs and traces.
+
 ## Development
 
 Build the Android debug APK:
