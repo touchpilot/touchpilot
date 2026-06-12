@@ -40,13 +40,7 @@ class TargetResolver(
             )
         }
 
-        val allMatches = context.nodes.mapNotNull { node ->
-            scoreNode(
-                node = node,
-                context = context,
-                selector = selector,
-            )
-        }.sortedWith(compareByDescending<TargetCandidate> { it.confidence }.thenBy { it.node.nodeId.orEmpty() })
+        val allMatches = rankCandidates(context, selector)
 
         val actionable = allMatches.filter { it.node.enabled }
         if (actionable.isEmpty()) {
@@ -82,6 +76,22 @@ class TargetResolver(
         }
 
         return TargetResolutionResult.Resolved(best)
+    }
+
+    /**
+     * Read-only ranking path for Milestone 8 evaluation. This exposes the
+     * same deterministic candidate ordering that runtime resolution uses,
+     * without executing any Android action or changing resolver behavior.
+     */
+    fun rankCandidates(context: ScreenContext, selector: TargetSelector): List<TargetCandidate> {
+        if (!selector.isValid() || context.nodes.isEmpty()) return emptyList()
+        return context.nodes.mapNotNull { node ->
+            scoreNode(
+                node = node,
+                context = context,
+                selector = selector,
+            )
+        }.sortedWith(compareByDescending<TargetCandidate> { it.confidence }.thenBy { it.node.nodeId.orEmpty() })
     }
 
     private fun scoreNode(
