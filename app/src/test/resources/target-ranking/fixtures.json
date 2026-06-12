@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "settings_exact_text",
+      "description": "Exact text match should rank the Wi-Fi row first on a static Settings screen.",
+      "expected_node_id": "0.1",
+      "expected_max_rank": 1,
+      "selector": {
+        "text": "Wi-Fi",
+        "role": "BUTTON"
+      },
+      "screen": {
+        "app_label": "Settings",
+        "package_name": "com.android.settings",
+        "window_title": "Network & internet",
+        "nodes": [
+          {
+            "node_id": "0.0",
+            "role": "BUTTON",
+            "text": "Bluetooth",
+            "bounds": "0,0,100,60",
+            "clickable": true
+          },
+          {
+            "node_id": "0.1",
+            "role": "BUTTON",
+            "text": "Wi-Fi",
+            "bounds": "0,60,100,120",
+            "clickable": true
+          },
+          {
+            "node_id": "0.2",
+            "role": "TEXT",
+            "text": "Connected devices",
+            "bounds": "0,120,100,180"
+          }
+        ]
+      }
+    },
+    {
+      "id": "role_disambiguates_search",
+      "description": "Role hints should prefer the button over static text when labels match.",
+      "expected_node_id": "0.1",
+      "expected_max_rank": 1,
+      "selector": {
+        "text": "Search",
+        "role": "BUTTON"
+      },
+      "screen": {
+        "app_label": "Launcher",
+        "package_name": "com.android.launcher3",
+        "window_title": "Home",
+        "nodes": [
+          {
+            "node_id": "0.0",
+            "role": "TEXT",
+            "text": "Search",
+            "bounds": "0,0,100,40"
+          },
+          {
+            "node_id": "0.1",
+            "role": "BUTTON",
+            "text": "Search",
+            "bounds": "0,40,100,100",
+            "clickable": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "view_id_identity_beats_partial_text",
+      "description": "A view-id selector should rank the expected target first even when other labels are similar.",
+      "expected_node_id": "wifi_row",
+      "expected_max_rank": 1,
+      "selector": {
+        "view_id_resource_name": "com.android.settings:id/wifi_row"
+      },
+      "screen": {
+        "app_label": "Settings",
+        "package_name": "com.android.settings",
+        "window_title": "Network & internet",
+        "nodes": [
+          {
+            "node_id": "mobile_row",
+            "role": "BUTTON",
+            "text": "Mobile network",
+            "view_id_resource_name": "com.android.settings:id/mobile_row",
+            "bounds": "0,0,100,60",
+            "clickable": true
+          },
+          {
+            "node_id": "wifi_row",
+            "role": "BUTTON",
+            "text": "Wi-Fi",
+            "view_id_resource_name": "com.android.settings:id/wifi_row",
+            "bounds": "0,60,100,120",
+            "clickable": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "near_top_contains_case",
+      "description": "A broader contains selector may tie, but the expected target should still remain near the top.",
+      "expected_node_id": "0.1",
+      "expected_max_rank": 2,
+      "selector": {
+        "text": "Settings"
+      },
+      "screen": {
+        "app_label": "TouchPilot",
+        "package_name": "dev.touchpilot.app",
+        "window_title": "Tools",
+        "nodes": [
+          {
+            "node_id": "0.0",
+            "role": "BUTTON",
+            "text": "Open Accessibility Settings",
+            "bounds": "0,0,100,60",
+            "clickable": true
+          },
+          {
+            "node_id": "0.1",
+            "role": "BUTTON",
+            "text": "Open Settings Panel",
+            "bounds": "0,60,100,120",
+            "clickable": true
+          },
+          {
+            "node_id": "0.2",
+            "role": "BUTTON",
+            "text": "Observe Screen",
+            "bounds": "0,120,100,180",
+            "clickable": true
+          }
+        ]
+      }
+    }
+  ]
+}
