@@ -351,7 +351,12 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         val settle = timeoutMs.coerceIn(50L, 5_000L).coerceAtMost(500L)
         Thread.sleep(settle)
         controller.showMode = previousMode
-        return DismissKeyboardOutcome.Hidden
+        // Restoring the previous show mode can re-trigger the platform
+        // auto-show while a focused editable field is still on screen. Give the
+        // IME a brief window to settle, then measure the real visibility rather
+        // than assuming the hide stuck.
+        Thread.sleep(settle)
+        return DismissKeyboardOutcome.Hidden(stillVisibleAfter = isKeyboardVisible())
     }
 
     fun waitForText(text: String, timeoutMs: Long): Boolean {

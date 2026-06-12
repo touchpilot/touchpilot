@@ -248,12 +248,13 @@ class ToolVerifierTest {
     }
 
     @Test
-    fun dismissKeyboardVerifierFailsDefensivelyIfStillVisibleSurfaces() {
-        // The executor cannot currently produce still_visible_after=true:
-        // softKeyboardController.showMode = HIDDEN is synchronous in IMMS
-        // and the action does not poll for window-list confirmation.
-        // The verifier branch is kept defensively so a future regression
-        // that resurrects a polled-failure code path is still surfaced.
+    fun dismissKeyboardVerifierFailsWhenStillVisibleSurfaces() {
+        // The executor can genuinely produce still_visible_after=true now:
+        // dismissKeyboard restores the previous show mode (which can re-trigger
+        // the platform auto-show while an editable field is still focused),
+        // then re-measures isKeyboardVisible(), and DismissKeyboardOutcome.Hidden
+        // carries that measured value. When the keyboard is back, the verifier
+        // must fail so the agent knows the dismissal did not stick.
         val result = verifier.verify(
             toolName = "dismiss_keyboard",
             args = emptyMap(),
