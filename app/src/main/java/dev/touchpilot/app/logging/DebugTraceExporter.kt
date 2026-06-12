@@ -46,9 +46,6 @@ class DebugTraceExporter(
         return file
     }
 
-    private fun traceDirectory(): File {
-        return File(context.getExternalFilesDir(null), "debug-traces").apply {
-            mkdirs()
-        }
-    }
+    private fun traceDirectory(): File =
+        File(context.getExternalFilesDir(null), "debug-traces").apply { mkdirs() }
 }

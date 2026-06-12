@@ -16,6 +16,11 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.annotation.DrawableRes
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.tabs.TabLayout
+import dev.touchpilot.app.agent.AgentEvent
+import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentStep
@@ -49,6 +54,7 @@ import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.settings.SkillDetailRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import java.io.File
+import java.util.Locale
 
 class MainActivity : Activity() {
     private lateinit var preferences: SharedPreferences
@@ -465,12 +471,10 @@ class MainActivity : Activity() {
         ).render()
     }
 
-    private fun exportRunTrace(record: AgentRunRecord): File {
-        return debugTraceExporter.exportRunTrace(record)
-    }
+    private fun exportRunTrace(record: AgentRunRecord): File =
+        debugTraceExporter.exportRunTrace(record)
 
-    private fun exportDebugTrace(): File {
-        return debugTraceExporter.exportDebugTrace()
-    }
+    private fun exportDebugTrace(): File =
+        debugTraceExporter.exportDebugTrace()
 
 }
