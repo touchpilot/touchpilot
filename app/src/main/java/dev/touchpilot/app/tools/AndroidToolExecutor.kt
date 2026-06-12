@@ -65,7 +65,15 @@ class AndroidToolExecutor(
 
             val spec = AndroidToolCatalog.find(name)
             if (spec != null) {
-                when (val decision = policy.evaluate(ToolPolicyRequest(spec, args, source, observeScreen()))) {
+                when (val decision = policy.evaluate(
+                    ToolPolicyRequest(
+                        tool = spec,
+                        args = args,
+                        source = source,
+                        activeScreen = observeScreen(),
+                        activeScreenContext = observeScreenContext()
+                    )
+                )) {
                     is PolicyDecision.Block -> {
                         record(name, "policy=block", false, decision.userMessage)
                         return ToolResult(false, decision.userMessage)
@@ -908,6 +916,10 @@ class AndroidToolExecutor(
 
     fun observeScreen(): String {
         return AccessibilityBridge.observeScreen()
+    }
+
+    fun observeScreenContext(): ScreenContext {
+        return AccessibilityBridge.observeScreenContext()
     }
 
     fun openApp(target: String): Boolean {

@@ -2,6 +2,7 @@ package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.ToolResult
 import dev.touchpilot.app.tools.ToolSpec
@@ -187,6 +188,7 @@ class AgentRunCancellationTest {
     private class FakeTools(results: List<ToolResult>) : LocalAgentLoopTools {
         private val q = ArrayDeque(results)
         override fun observeScreen(): String = "Home screen"
+        override fun observeScreenContext(): ScreenContext = ScreenContext.Empty
         override fun validate(name: String, args: Map<String, String>): String? =
             AndroidToolCatalog.validate(name, args)
         override fun findTool(name: String): ToolSpec? = AndroidToolCatalog.find(name)
@@ -196,6 +198,7 @@ class AgentRunCancellationTest {
 
     private class RecordingTools(private val executed: MutableList<String>) : LocalAgentLoopTools {
         override fun observeScreen(): String = "Home screen"
+        override fun observeScreenContext(): ScreenContext = ScreenContext.Empty
         override fun validate(name: String, args: Map<String, String>): String? =
             AndroidToolCatalog.validate(name, args)
         override fun findTool(name: String): ToolSpec? = AndroidToolCatalog.find(name)

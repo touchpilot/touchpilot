@@ -5,6 +5,7 @@ import dev.touchpilot.app.security.ActionPolicy
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
@@ -66,6 +67,8 @@ class AgentRunner(
         private val toolExecutor: AndroidToolExecutor
     ) : LocalAgentLoopTools {
         override fun observeScreen(): String = toolExecutor.observeScreen()
+
+        override fun observeScreenContext(): ScreenContext = toolExecutor.observeScreenContext()
 
         override fun validate(name: String, args: Map<String, String>): String? {
             return toolExecutor.validate(name, args)
