@@ -19,12 +19,12 @@ object ChatToolTextFormatter {
             appendLine("Risk: ${request.tool.risk}")
             appendLine("Tool: ${request.tool.name}")
             appendLine("Description: ${request.tool.description}")
-            appendLine("Why approval is needed: ${request.policy.reason}")
+            appendLine("Why approval is needed: ${request.policy.reason.redacted()}")
             if (request.policy.skillContext.isNotBlank()) {
-                appendLine("Skill context: ${request.policy.skillContext}")
+                appendLine("Skill context: ${request.policy.skillContext.redacted()}")
             }
-            appendLine("Data affected: ${request.policy.dataAffected}")
-            appendLine("If approved: ${request.policy.ifApproved}")
+            appendLine("Data affected: ${request.policy.dataAffected.redacted()}")
+            appendLine("If approved: ${request.policy.ifApproved.redacted()}")
             appendLine()
             appendLine("Arguments:")
             append(argsText)
@@ -39,16 +39,16 @@ object ChatToolTextFormatter {
                 appendLine()
                 appendLine()
                 append("Result: ")
-                append(cardModel.message)
+                append(cardModel.message.redacted())
             }
             if (!cardModel.verificationStatus.isNullOrBlank()) {
                 appendLine()
                 appendLine()
                 append("Verification: ")
-                append(cardModel.verificationStatus)
+                append(cardModel.verificationStatus.redacted())
                 if (!cardModel.verificationReason.isNullOrBlank()) {
                     append(" - ")
-                    append(cardModel.verificationReason)
+                    append(cardModel.verificationReason.redacted())
                 }
             }
         }
@@ -63,4 +63,6 @@ object ChatToolTextFormatter {
 
     private const val MaxApprovalArgLength = 500
     private const val MaxToolCardFieldLength = 700
+
+    private fun String?.redacted(): String = SensitiveTextRedactor.redact(this.orEmpty())
 }

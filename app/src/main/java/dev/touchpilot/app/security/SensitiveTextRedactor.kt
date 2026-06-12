@@ -1,9 +1,19 @@
 package dev.touchpilot.app.security
 
 object SensitiveTextRedactor {
+    private const val AssignmentSensitiveKeyAlternation =
+        "api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|passcode|secret|otp|" +
+            "one[_-]?time[_-]?code|pin|recovery(?:[_-]?code)?|card(?:[_-]?(?:number|pan))?|" +
+            "cvv|cvc|security[_-]?code|cookie|session"
+
+    private const val SensitiveKeyAlternation =
+        "$AssignmentSensitiveKeyAlternation|auth(?:orization)?|email"
+
+    private val sensitiveKeyPattern = Regex("(?i)($SensitiveKeyAlternation)")
+
     private val redactionRules: List<RedactionRule> = listOf(
         RedactionRule.KeyAssignment(
-            keyAlternation = "api[_-]?key|access[_-]?token|refresh[_-]?token|password|passcode|secret"
+            keyAlternation = AssignmentSensitiveKeyAlternation
         ),
         RedactionRule.BearerHeader(),
         RedactionRule.LiteralValue(Regex("\\b\\d{13,19}\\b")),
@@ -39,9 +49,6 @@ object SensitiveTextRedactor {
     }
 
     private fun isSensitiveKey(key: String): Boolean {
-        return key.contains("password", ignoreCase = true) ||
-            key.contains("token", ignoreCase = true) ||
-            key.contains("secret", ignoreCase = true) ||
-            key.contains("api_key", ignoreCase = true)
+        return sensitiveKeyPattern.containsMatchIn(key)
     }
 }
