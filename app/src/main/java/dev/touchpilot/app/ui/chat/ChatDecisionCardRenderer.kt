@@ -115,7 +115,7 @@ class ChatDecisionCardRenderer(
         )
         content.addView(
             TextView(activity).apply {
-                text = event.question
+                text = SensitiveTextRedactor.redact(event.question)
                 textSize = 14f
                 setTextColor(Color.WHITE)
                 setPadding(0, 8, 0, 0)
@@ -151,7 +151,7 @@ class ChatDecisionCardRenderer(
         } else if (event.state == ClarificationState.ANSWERED) {
             content.addView(
                 TextView(activity).apply {
-                    text = "You: ${event.selectedAnswer.orEmpty()}"
+                    text = "You: ${SensitiveTextRedactor.redact(event.selectedAnswer.orEmpty())}"
                     textSize = 12.5f
                     setTextColor(Theme.Accent)
                     setPadding(0, 10, 0, 0)

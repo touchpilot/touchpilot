@@ -29,6 +29,23 @@ class SensitiveTextRedactorTest {
     }
 
     @Test
+    fun redactsExpandedSensitiveArgumentKeys() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf(
+                "otp_code" to "123456",
+                "card_number" to "4111111111111111",
+                "session_cookie" to "cookie-value",
+                "target" to "Settings"
+            )
+        )
+
+        assertEquals("[REDACTED]", redacted["otp_code"])
+        assertEquals("[REDACTED]", redacted["card_number"])
+        assertEquals("[REDACTED]", redacted["session_cookie"])
+        assertEquals("Settings", redacted["target"])
+    }
+
+    @Test
     fun preservesAuthorizationBearerHeaderStructure() {
         val redacted = SensitiveTextRedactor.redact("Authorization: Bearer abc123xyz")
 
