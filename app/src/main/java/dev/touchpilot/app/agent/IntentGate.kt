@@ -111,6 +111,44 @@ class IntentGate : IntentClassifier {
     }
 
     private fun detectExactCommand(normalized: String): IntentDecision.ExactCommand? {
+        if ("scroll up" in normalized) {
+            return IntentDecision.ExactCommand(
+                tool = "scroll",
+                args = mapOf("direction" to "backward"),
+                reason = "scroll up phrase"
+            )
+        }
+        if ("scroll" in normalized) {
+            return IntentDecision.ExactCommand(
+                tool = "scroll",
+                args = mapOf("direction" to "forward"),
+                reason = "scroll phrase"
+            )
+        }
+        if ("back" in normalized) {
+            return IntentDecision.ExactCommand(
+                tool = "press_back",
+                args = emptyMap(),
+                reason = "back phrase"
+            )
+        }
+        if ("home" in normalized) {
+            return IntentDecision.ExactCommand(
+                tool = "press_home",
+                args = emptyMap(),
+                reason = "home phrase"
+            )
+        }
+        // Detect recents before the open/launch pattern so phrases like
+        // "open recents" or "open the app switcher" route to recent_apps
+        // instead of being parsed as an open_app target.
+        if (RecentsPhrases.any { it in normalized }) {
+            return IntentDecision.ExactCommand(
+                tool = "recent_apps",
+                args = emptyMap(),
+                reason = "recent apps phrase"
+            )
+        }
         SettingsPanelIntent.panelFromTask(normalized)?.let { panel ->
             return IntentDecision.ExactCommand(
                 tool = "open_settings_panel",
@@ -234,6 +272,18 @@ class IntentGate : IntentClassifier {
             "you know what",
             "this thing",
             "that thing"
+        )
+
+        // Substring needles for the recents/overview screen. Kept specific so
+        // generic words like "overview" do not steal unrelated requests.
+        val RecentsPhrases: List<String> = listOf(
+            "recent apps",
+            "recent app",
+            "recents",
+            "app switcher",
+            "task switcher",
+            "switch apps",
+            "switch app"
         )
 
         val OpenAppPattern: Regex = Regex("(?:open|launch)\\s+([\\w .-]+)")

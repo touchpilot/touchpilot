@@ -97,6 +97,10 @@ object AccessibilityBridge {
         return service?.pressHome() ?: false
     }
 
+    fun openRecents(): Boolean {
+        return service?.openRecents() ?: false
+    }
+
     fun isKeyboardVisible(): Boolean {
         return service?.isKeyboardVisible() ?: false
     }

@@ -33,6 +33,8 @@ Tools are the only way an agent may affect the Android device.
   scrollable container's accessibility scroll action.
 - `press_back`: send Android back.
 - `press_home`: return to launcher.
+- `recent_apps`: open the recents/overview screen (app switcher) to switch
+  between recently used apps.
 - `wait_for_ui`: wait for a screen change or expected text.
 - `wait_for_idle`: wait until the redacted screen context remains stable.
 - `wait_for_app`: wait until a package name or launcher label is foreground.
@@ -42,9 +44,15 @@ Tools are the only way an agent may affect the Android device.
 
 The app implements `observe_screen`, `observe_screen_context`, `open_app`,
 `open_settings_panel`, `tap`, `long_press`, `type_text`, `scroll`, `swipe`, `press_back`,
-`press_home`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`, `focus_input`,
+`press_home`, `recent_apps`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`, `focus_input`,
 `clear_text`, and `dismiss_keyboard` from the Android Tools screen and the
 agent command-provider loop.
+
+`recent_apps` takes no arguments. It dispatches the
+`GLOBAL_ACTION_RECENTS` accessibility global action — the same mechanism as
+`press_back`/`press_home` — to open the system overview/app-switcher, then
+verifies that the screen or focus changed. It is MEDIUM risk and routed from
+phrases such as "recent apps", "app switcher", or "switch apps".
 
 `swipe` has two input modes. In **direction mode** (the primary path) the caller
 passes `direction` (`left`, `right`, `up`, or `down`, naming the direction the
