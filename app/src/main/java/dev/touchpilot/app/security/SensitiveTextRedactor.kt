@@ -38,10 +38,13 @@ object SensitiveTextRedactor {
             redactionRules.any { rule -> rule.matches(text) }
     }
 
+    private val apiKeyVariantPattern = Regex("(?i)api[_-]?key")
+
     private fun isSensitiveKey(key: String): Boolean {
         return key.contains("password", ignoreCase = true) ||
+            key.contains("passcode", ignoreCase = true) ||
             key.contains("token", ignoreCase = true) ||
             key.contains("secret", ignoreCase = true) ||
-            key.contains("api_key", ignoreCase = true)
+            apiKeyVariantPattern.containsMatchIn(key)
     }
 }
