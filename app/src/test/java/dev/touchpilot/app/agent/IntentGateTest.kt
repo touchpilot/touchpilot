@@ -37,6 +37,56 @@ class IntentGateTest {
     }
 
     @Test
+    fun classifiesSwipeLeftAsExactSwipe() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("swipe left"))
+        assertEquals("swipe", command.tool)
+        assertEquals("left", command.args["direction"])
+    }
+
+    @Test
+    fun classifiesSwipeRightAsExactSwipe() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("Swipe right"))
+        assertEquals("swipe", command.tool)
+        assertEquals("right", command.args["direction"])
+    }
+
+    @Test
+    fun classifiesSwipeUpAsExactSwipe() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("swipe up"))
+        assertEquals("swipe", command.tool)
+        assertEquals("up", command.args["direction"])
+    }
+
+    @Test
+    fun classifiesSwipeDownAsExactSwipe() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("swipe down"))
+        assertEquals("swipe", command.tool)
+        assertEquals("down", command.args["direction"])
+    }
+
+    @Test
+    fun classifiesSwipeWithFillerAsExactSwipe() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("swipe to the left"))
+        assertEquals("swipe", command.tool)
+        assertEquals("left", command.args["direction"])
+    }
+
+    @Test
+    fun swipeWithoutDirectionFallsThroughToLocalModel() {
+        // "swipe" with no recognizable direction is ambiguous; the deterministic
+        // gate should not invent one and instead defer to the local model.
+        assertIs<IntentDecision.LocalModelNeeded>(gate.classify("swipe across the carousel"))
+    }
+
+    @Test
+    fun tapTargetContainingSwipeIsTap() {
+        // "swipe" appearing inside a tap target should not steal the route.
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("tap swipe tutorial"))
+        assertEquals("tap", command.tool)
+        assertEquals("swipe tutorial", command.args["text"])
+    }
+
+    @Test
     fun classifiesOpenSettingsAsExactOpenApp() {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("Open Settings"))
         assertEquals("open_app", command.tool)
