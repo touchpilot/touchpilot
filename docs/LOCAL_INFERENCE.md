@@ -102,16 +102,37 @@ on-device inference and looks for:
 - `app/src/main/assets/models/command_router/manifest.json`
 - `app/src/main/assets/models/command_router/model.tflite`
 
-The manifest describes the runtime and model asset:
+The manifest is static, local metadata that identifies the bundled model role
+and the contract the runtime must understand. It must not reference remote
+assets.
 
 ```json
 {
+  "role": "command_router",
   "runtime": "LiteRT",
   "model_asset": "models/command_router/model.tflite",
   "tokenizer_asset": null,
-  "version": "tiny-router-1"
+  "version": "tiny-router-1",
+  "contract_version": 1
 }
 ```
+
+Manifest fields:
+
+| Field | Meaning |
+| --- | --- |
+| `role` | The local model role the asset serves (e.g. `command_router`). |
+| `runtime` | Runtime that loads the asset (currently `LiteRT`). |
+| `model_asset` | Path to the bundled model asset, relative to `assets/`. |
+| `tokenizer_asset` | Optional tokenizer asset path; `null`/blank when unused. |
+| `version` | Human-readable asset version label. |
+| `contract_version` | Input/output contract version the asset supports. Must be `>= 1` and `<=` the runtime's `SUPPORTED_CONTRACT_VERSION`. |
+
+`LocalModelManifest.parse` reads this file and applies defaults for omitted
+optional fields; `LocalModelManifest.validationErrors` validates it. A manifest
+that fails validation (blank required field, or an unsupported `contract_version`)
+makes the local model report as unavailable and the runtime falls back to the
+deterministic router. `LocalModelManifestTest` validates the bundled manifest.
 
 The bundled `tiny-router-1` model accepts compact task features and emits route
 logits for these commands:

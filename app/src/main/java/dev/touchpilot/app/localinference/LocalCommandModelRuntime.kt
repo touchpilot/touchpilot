@@ -8,20 +8,83 @@ import org.tensorflow.lite.Interpreter
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/**
+ * Static, local metadata for one bundled local model role. It records which role
+ * the asset serves, the runtime that loads it, the asset path, a human-readable
+ * version, and the input/output contract version the runtime must understand.
+ *
+ * Parsing is pure (no Android), so the manifest can be read and validated from
+ * unit tests as well as the app. It never fetches anything remote.
+ */
 data class LocalModelManifest(
+    val role: String,
     val runtime: String,
     val modelAsset: String,
     val tokenizerAsset: String?,
-    val version: String
-)
+    val version: String,
+    val contractVersion: Int
+) {
+    /** Problems with this manifest; an empty list means it is valid. */
+    fun validationErrors(): List<String> {
+        val errors = mutableListOf<String>()
+        if (role.isBlank()) errors += "role must not be blank"
+        if (runtime.isBlank()) errors += "runtime must not be blank"
+        if (modelAsset.isBlank()) errors += "model_asset must not be blank"
+        if (version.isBlank()) errors += "version must not be blank"
+        if (contractVersion < 1) {
+            errors += "contract_version must be >= 1 (was $contractVersion)"
+        } else if (contractVersion > SUPPORTED_CONTRACT_VERSION) {
+            errors += "contract_version $contractVersion is newer than supported $SUPPORTED_CONTRACT_VERSION"
+        }
+        return errors
+    }
+
+    val isValid: Boolean get() = validationErrors().isEmpty()
+
+    companion object {
+        /** Highest input/output contract version this build of the runtime understands. */
+        const val SUPPORTED_CONTRACT_VERSION = 1
+
+        const val DefaultRole = "command_router"
+        const val DefaultRuntime = "LiteRT"
+        const val DefaultModelAsset = "models/command_router/model.tflite"
+
+        /** Parses manifest JSON, applying defaults for omitted optional fields. */
+        fun parse(json: String): LocalModelManifest {
+            val obj = JSONObject(json)
+            return LocalModelManifest(
+                role = obj.optString("role", DefaultRole),
+                runtime = obj.optString("runtime", DefaultRuntime),
+                modelAsset = obj.optString("model_asset", DefaultModelAsset),
+                tokenizerAsset = obj.optString("tokenizer_asset", "").ifBlank { null },
+                version = obj.optString("version", "unknown"),
+                contractVersion = obj.optInt("contract_version", SUPPORTED_CONTRACT_VERSION)
+            )
+        }
+    }
+}
 
 data class LocalModelStatus(
     val available: Boolean,
     val runtime: String,
     val modelAsset: String,
     val version: String,
-    val message: String
+    val message: String,
+    val role: String = LocalModelManifest.DefaultRole,
+    val contractVersion: Int = LocalModelManifest.SUPPORTED_CONTRACT_VERSION
 )
+
+private fun LocalModelManifest.toStatus(available: Boolean, message: String): LocalModelStatus {
+    return LocalModelStatus(
+        available = available,
+        runtime = runtime,
+        modelAsset = modelAsset,
+        version = version,
+        message = message,
+        role = role,
+        contractVersion = contractVersion
+    )
+}
 
 interface LocalCommandModelRuntime {
     fun status(): LocalModelStatus
@@ -45,31 +108,27 @@ class LiteRtCommandModelRuntime(
                 message = "LiteRT command model manifest is not bundled."
             )
 
-        if (!assetExists(loadedManifest.modelAsset)) {
-            return LocalModelStatus(
+        val manifestErrors = loadedManifest.validationErrors()
+        if (manifestErrors.isNotEmpty()) {
+            return loadedManifest.toStatus(
                 available = false,
-                runtime = loadedManifest.runtime,
-                modelAsset = loadedManifest.modelAsset,
-                version = loadedManifest.version,
+                message = "LiteRT manifest is invalid: ${manifestErrors.joinToString("; ")}"
+            )
+        }
+
+        if (!assetExists(loadedManifest.modelAsset)) {
+            return loadedManifest.toStatus(
+                available = false,
                 message = "LiteRT model asset is missing; the run will stop with a final answer."
             )
         }
 
         val loadedInterpreter = interpreter
         return if (loadedInterpreter != null) {
-            LocalModelStatus(
-                available = true,
-                runtime = loadedManifest.runtime,
-                modelAsset = loadedManifest.modelAsset,
-                version = loadedManifest.version,
-                message = "LiteRT command model loaded."
-            )
+            loadedManifest.toStatus(available = true, message = "LiteRT command model loaded.")
         } else {
-            LocalModelStatus(
+            loadedManifest.toStatus(
                 available = false,
-                runtime = loadedManifest.runtime,
-                modelAsset = loadedManifest.modelAsset,
-                version = loadedManifest.version,
                 message = "LiteRT model asset could not be loaded; the run will stop with a final answer."
             )
         }
@@ -101,13 +160,7 @@ class LiteRtCommandModelRuntime(
     private fun loadManifest(): LocalModelManifest? {
         if (!assetExists(manifestAsset)) return null
         val json = context.assets.open(manifestAsset).bufferedReader().use { it.readText() }
-        val manifestJson = JSONObject(json)
-        return LocalModelManifest(
-            runtime = manifestJson.optString("runtime", RuntimeName),
-            modelAsset = manifestJson.optString("model_asset", DefaultModelAsset),
-            tokenizerAsset = manifestJson.optString("tokenizer_asset", "").ifBlank { null },
-            version = manifestJson.optString("version", "unknown")
-        )
+        return LocalModelManifest.parse(json)
     }
 
     private fun assetExists(path: String): Boolean {
