@@ -45,6 +45,8 @@ class SettingsScreenRenderer(
     private val selectedSkillId: () -> String?,
     private val commitSelectedSkill: (String?) -> Unit,
     private val openSkillDetail: (String) -> Unit,
+    private val isSkillEnabled: (String) -> Boolean,
+    private val setSkillEnabled: (String, Boolean) -> Unit,
     private val currentProviderMode: () -> AgentProviderMode,
     private val openAccessibilitySettings: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
@@ -113,27 +115,110 @@ class SettingsScreenRenderer(
             )
         )
         skills.forEach { skill ->
-            val description = SkillDetailFormatter.displayDescription(skill)
-            contentRoot.addView(
-                skillSelectRow(
-                    title = skill.title,
-                    subtitle = description.ifBlank { "No description provided" },
-                    badge = SkillDetailFormatter.formatLabel(skill.risk),
-                    selected = selectedSkillId() == skill.id,
-                    onSelect = { commitSelectedSkill(skill.id) },
-                    onViewDetails = { openSkillDetail(skill.id) }
-                )
-            )
+            contentRoot.addView(skillManageRow(skill))
         }
     }
 
     private fun skillsPanelIntro(): View {
         return TextView(activity).apply {
-            text = "Select a skill to scope tools and prompts. Open details to review risk, allowed tools, and success criteria before enabling."
+            text = "Enable the skills TouchPilot may use, then select one to scope tools and prompts. " +
+                "Disabled skills are excluded from selection and automatic matching."
             textSize = 12f
             setTextColor(Theme.MutedText)
             setPadding(0, 0, 0, activity.dp(8))
         }
+    }
+
+    /**
+     * A skill row with an enable/disable control. A disabled skill is shown
+     * dimmed with a "Disabled" chip, is not selectable, and (handled by the
+     * registry) is excluded from active selection and automatic matching. Only
+     * an enabled skill can be tapped to become the active scope.
+     */
+    private fun skillManageRow(skill: Skill): View {
+        val enabled = isSkillEnabled(skill.id)
+        val selected = enabled && selectedSkillId() == skill.id
+        val description = SkillDetailFormatter.displayDescription(skill)
+            .ifBlank { "No description provided" }
+
+        val card = MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = if (selected) Theme.Accent else Theme.StrokeDark
+            strokeWidth = if (selected) 2 else 1
+            radius = 8f
+            cardElevation = 0f
+            alpha = if (enabled) 1f else 0.6f
+            isClickable = enabled
+            isFocusable = enabled
+            if (enabled) {
+                setOnClickListener { commitSelectedSkill(skill.id) }
+            }
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+
+        val headerRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val titleColumn = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        titleColumn.addView(
+            TextView(activity).apply {
+                text = skill.title
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(
+                    when {
+                        !enabled -> Theme.MutedText
+                        selected -> Theme.Accent
+                        else -> Color.WHITE
+                    }
+                )
+            }
+        )
+        titleColumn.addView(
+            TextView(activity).apply {
+                text = description
+                textSize = 12f
+                setTextColor(Theme.MutedText)
+                setPadding(0, 3, 0, 0)
+            }
+        )
+        headerRow.addView(titleColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        if (!enabled) {
+            headerRow.addView(activity.statusChip("Disabled", accent = false))
+        } else {
+            headerRow.addView(
+                activity.statusChip(
+                    SkillDetailFormatter.formatLabel(skill.risk),
+                    accent = skill.risk != SkillRisk.LOW
+                )
+            )
+        }
+        content.addView(headerRow)
+
+        val actionRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        actionRow.addView(
+            activity.secondaryButton(if (enabled) "Disable" else "Enable") {
+                setSkillEnabled(skill.id, !enabled)
+                refreshSettingsScreen()
+            }.apply { minHeight = 40 },
+            rowButtonParams()
+        )
+        actionRow.addView(
+            activity.secondaryButton("View details") {
+                openSkillDetail(skill.id)
+            }.apply { minHeight = 40 },
+            rowButtonParams()
+        )
+        content.addView(actionRow.withMargins(top = activity.dp(10)))
+
+        card.addView(content)
+        return card.withMargins(top = 6, bottom = 6)
     }
 
     private fun renderRuntimePanel() {
