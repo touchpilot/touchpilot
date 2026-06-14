@@ -135,6 +135,54 @@ Every model output is treated as untrusted. It still passes through JSON
 parsing, tool validation, skill allowlists, safety policy, approval flow, and
 redacted logs/traces.
 
+## Benchmark Summary
+
+Milestone 8 balances model quality against on-device latency, memory, and load
+cost. `LocalModelBenchmark` is a minimal, PR-friendly way to catch obvious
+performance regressions in the local command path before and after a model
+change.
+
+What it measures:
+
+- **Load time** — the cold cost of the first `LocalCommandModelRuntime.status()`
+  call, which forces the lazy manifest and interpreter load.
+- **Inference time** — per-sample routing time over a fixed set of static
+  examples, reported as min / median / average / max.
+- **Heap delta** — a single best-effort heap-used delta across the run. It is a
+  coarse signal, not a memory profile, and is reported as `n/a` when GC makes the
+  delta meaningless.
+
+The benchmark runs against the `LocalCommandModelRuntime` contract only. The
+samples in `LocalModelBenchmarkSamples` are static local strings (back, home,
+scroll, open app, tap). Running them exercises the routing/inference path only:
+**no Android action is executed and no network request is made.**
+`LocalModelBenchmarkReport.summarize` renders a concise block suitable for
+pasting into a pull request.
+
+Run the JVM benchmark test and print its summary:
+
+```bash
+./gradlew :app:testDebugUnitTest \
+  --tests "dev.touchpilot.app.localinference.LocalModelBenchmarkTest"
+```
+
+On a device or emulator, point the benchmark at the bundled LiteRT runtime to
+get real load and inference numbers for the current `model.tflite`:
+
+```kotlin
+val result = LocalModelBenchmark().run(LiteRtCommandModelRuntime(context))
+println(LocalModelBenchmarkReport.summarize(result))
+```
+
+Limitations:
+
+- Timings are wall-clock and depend on device load, thermal state, and warm-up;
+  treat them as relative before/after signals, not absolute guarantees.
+- The clock is injectable, so the unit test's numbers are fixtures, not device
+  measurements.
+- Accuracy, a full performance dashboard, device-farm runs, and a UI benchmark
+  screen are intentionally out of scope (see issue #268).
+
 ## Recommended Next Runtime
 
 Use LiteRT first for a small command-routing model, because the target task is
