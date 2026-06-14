@@ -1,6 +1,7 @@
 package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.memory.SkillRisk
 import dev.touchpilot.app.tools.SettingsPanelIntent
 
 /**
@@ -28,7 +29,13 @@ sealed class IntentDecision {
     data class KnownSkill(
         val skillId: String,
         val skillTitle: String,
-        override val reason: String
+        override val reason: String,
+        /**
+         * Match strength in `0.0..1.0`. Title/alias phrase hits are high
+         * confidence; example and keyword overlap are lower. Surfaced so callers
+         * and logs can see *why* a skill was chosen and how strong the match was.
+         */
+        val confidence: Double = 1.0
     ) : IntentDecision()
 
     /**
@@ -173,18 +180,138 @@ class IntentGate : IntentClassifier {
         return null
     }
 
+    /**
+     * Matches the request against the enabled skills using registry data —
+     * title, aliases, examples, and skill-specific keywords — and returns the
+     * single best match with a confidence and reason.
+     *
+     * It runs *after* [detectExactCommand], so exact deterministic routes
+     * (`back`, `home`, `scroll`, `tap …`, `open …`) always win and can never be
+     * captured by a skill. Matching is deliberately conservative: phrases are
+     * matched on word boundaries (so `sms` does not match `smshing`), weak
+     * single-keyword hits must be distinctive, and high-risk skills never match
+     * on keyword overlap alone — they require a title/alias/example phrase.
+     */
     private fun detectKnownSkill(normalized: String, skills: List<Skill>): IntentDecision.KnownSkill? {
         if (skills.isEmpty()) return null
-        val match = skills.firstOrNull { skill ->
-            val title = skill.title.lowercase()
-            title.isNotBlank() && title in normalized
-        } ?: return null
+        val taskTokens = significantTokens(normalized)
+
+        var best: ScoredSkill? = null
+        for (skill in skills) {
+            val scored = scoreSkill(normalized, taskTokens, skill) ?: continue
+            // Strictly-greater keeps the first skill in load order on a tie.
+            if (best == null || scored.confidence > best.confidence) {
+                best = scored
+            }
+        }
+
+        val winner = best ?: return null
+        if (winner.confidence < MinSkillConfidence) return null
         return IntentDecision.KnownSkill(
-            skillId = match.id,
-            skillTitle = match.title,
-            reason = "skill '${match.title}' title matched"
+            skillId = winner.skill.id,
+            skillTitle = winner.skill.title,
+            reason = winner.reason,
+            confidence = winner.confidence
         )
     }
+
+    private fun scoreSkill(normalized: String, taskTokens: Set<String>, skill: Skill): ScoredSkill? {
+        val title = skill.title.trim()
+        if (title.isNotBlank() && containsPhrase(normalized, title)) {
+            return ScoredSkill(skill, TitleConfidence, "skill '${skill.title}' title matched")
+        }
+
+        val alias = skill.aliases
+            .map { it.trim() }
+            .filter { it.isNotBlank() && containsPhrase(normalized, it) }
+            .maxByOrNull { it.length }
+        if (alias != null) {
+            return ScoredSkill(skill, AliasConfidence, "skill '${skill.title}' alias '$alias' matched")
+        }
+
+        bestExampleMatch(taskTokens, skill.examples)?.let { match ->
+            return ScoredSkill(skill, match.confidence, "skill '${skill.title}' example '${match.example}' matched")
+        }
+
+        // Conservative for high-risk skills: never route them on loose keyword
+        // overlap; they must match an explicit title/alias/example phrase above.
+        if (skill.risk != SkillRisk.HIGH) {
+            keywordMatch(taskTokens, skill)?.let { match ->
+                return ScoredSkill(skill, match.confidence, "skill '${skill.title}' keyword '${match.keyword}' matched")
+            }
+        }
+        return null
+    }
+
+    private fun bestExampleMatch(taskTokens: Set<String>, examples: List<String>): ExampleMatch? {
+        if (taskTokens.isEmpty()) return null
+        var best: ExampleMatch? = null
+        for (example in examples) {
+            val exampleTokens = significantTokens(example)
+            if (exampleTokens.isEmpty()) continue
+            val overlap = taskTokens.intersect(exampleTokens)
+            if (overlap.size < 2) continue
+
+            val confidence = when {
+                // The user's phrase is fully contained in a known example (or
+                // vice versa) — a strong, specific signal.
+                taskTokens.size >= 2 && exampleTokens.containsAll(taskTokens) -> StrongExampleConfidence
+                exampleTokens.size >= 2 && taskTokens.containsAll(exampleTokens) -> StrongExampleConfidence
+                // Otherwise require a solid majority of the example's tokens.
+                overlap.size >= ((exampleTokens.size * 3 + 4) / 5) -> ExampleConfidence
+                else -> continue
+            }
+            if (best == null || confidence > best.confidence) {
+                best = ExampleMatch(example, confidence)
+            }
+        }
+        return best
+    }
+
+    private fun keywordMatch(taskTokens: Set<String>, skill: Skill): KeywordMatch? {
+        if (taskTokens.isEmpty()) return null
+        val keywords = skillKeywords(skill)
+        val matched = taskTokens.intersect(keywords)
+        return when {
+            matched.size >= 2 -> KeywordMatch(matched.sorted().joinToString(", "), MultiKeywordConfidence)
+            // A single keyword only counts when it is distinctive enough to not
+            // be incidental noise.
+            matched.size == 1 && matched.first().length >= DistinctiveKeywordLength ->
+                KeywordMatch(matched.first(), SingleKeywordConfidence)
+            else -> null
+        }
+    }
+
+    /** Distinctive tokens drawn from the skill's title, aliases, and examples. */
+    private fun skillKeywords(skill: Skill): Set<String> {
+        val tokens = linkedSetOf<String>()
+        tokens += significantTokens(skill.title)
+        skill.aliases.forEach { tokens += significantTokens(it) }
+        skill.examples.forEach { tokens += significantTokens(it) }
+        return tokens.filter { it.length >= KeywordMinLength }.toSet()
+    }
+
+    private fun significantTokens(text: String): Set<String> {
+        return normalizeWords(text)
+            .split(' ')
+            .filter { it.length >= 2 && it !in StopWords }
+            .toSet()
+    }
+
+    /** Word-boundary phrase containment, tolerant of punctuation/spacing. */
+    private fun containsPhrase(haystack: String, phrase: String): Boolean {
+        val normalizedPhrase = normalizeWords(phrase)
+        if (normalizedPhrase.isBlank()) return false
+        return (" " + normalizeWords(haystack) + " ").contains(" $normalizedPhrase ")
+    }
+
+    private fun normalizeWords(text: String): String {
+        return text.lowercase().replace(NonWord, " ").trim()
+    }
+
+    private data class ScoredSkill(val skill: Skill, val confidence: Double, val reason: String)
+    private data class ExampleMatch(val example: String, val confidence: Double)
+    private data class KeywordMatch(val keyword: String, val confidence: Double)
 
     private fun detectAmbiguousReference(normalized: String): IntentDecision.ClarificationNeeded? {
         val match = AmbiguousPhrases.firstOrNull { it in normalized } ?: return null
@@ -195,6 +322,30 @@ class IntentGate : IntentClassifier {
     }
 
     private companion object {
+        // Skill-matching tuning. Phrase hits (title/alias) are confident;
+        // example and keyword overlap are progressively weaker.
+        const val TitleConfidence = 1.0
+        const val AliasConfidence = 0.9
+        const val StrongExampleConfidence = 0.85
+        const val ExampleConfidence = 0.75
+        const val MultiKeywordConfidence = 0.65
+        const val SingleKeywordConfidence = 0.55
+        const val MinSkillConfidence = 0.5
+        const val KeywordMinLength = 3
+        const val DistinctiveKeywordLength = 4
+
+        val NonWord = Regex("[^a-z0-9]+")
+
+        // Generic filler dropped before token comparison so matching keys on
+        // distinctive words, not common command/connective words.
+        val StopWords: Set<String> = setOf(
+            "a", "an", "the", "to", "of", "for", "on", "in", "at", "is", "are",
+            "am", "be", "and", "or", "my", "me", "i", "you", "it", "this", "that",
+            "here", "there", "now", "please", "help", "with", "can", "could",
+            "do", "go", "get", "set", "want", "need", "let", "us", "show", "open",
+            "launch", "find"
+        )
+
         // Mirrors DefaultActionPolicy.blockedWorkflow so the gate refuses early
         // and the policy layer cannot be bypassed by a deterministic route.
         val UnsafePatterns: List<Pair<String, String>> = listOf(
