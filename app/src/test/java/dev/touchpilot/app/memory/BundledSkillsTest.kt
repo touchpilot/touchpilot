@@ -45,6 +45,58 @@ class BundledSkillsTest {
         assertTrue(skill.successCriteria.any { it.contains("approval", ignoreCase = true) })
     }
 
+    @Test
+    fun bundledAppLauncherSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("apps")
+        val skill = valid(SkillParser.parse("apps", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("App Launcher", skill.title)
+        assertEquals(SkillRisk.LOW, skill.risk)
+        assertTrue(skill.aliases.isNotEmpty())
+        assertTrue(skill.examples.isNotEmpty())
+        assertTrue(skill.successCriteria.isNotEmpty())
+        assertTrue("open_app" in skill.allowedTools)
+    }
+
+    @Test
+    fun bundledNavigationSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("navigation")
+        val skill = valid(SkillParser.parse("navigation", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("Device Navigation", skill.title)
+        assertEquals(SkillRisk.LOW, skill.risk)
+        assertTrue("press_home" in skill.allowedTools)
+        assertTrue("press_back" in skill.allowedTools)
+    }
+
+    @Test
+    fun everyBundledSkillParsesAsValidV2() {
+        val ids = bundledSkillIds()
+        assertTrue(ids.size >= 5, "expected at least the starter pack, found $ids")
+        for (id in ids) {
+            val skill = valid(SkillParser.parse(id, readBundledSkill(id), knownTools))
+            assertEquals(SkillFormat.V2, skill.format, "skill '$id' must be Skills v2")
+            assertEquals(id, skill.id)
+            assertTrue(skill.allowedTools.isNotEmpty(), "skill '$id' must declare allowed tools")
+            assertTrue(
+                skill.allowedTools.all { it in knownTools },
+                "skill '$id' references an unknown tool"
+            )
+        }
+    }
+
+    private fun bundledSkillIds(): List<String> {
+        val roots = listOf(File("src/main/assets/skills"), File("app/src/main/assets/skills"))
+        val root = roots.firstOrNull { it.isDirectory }
+            ?: error("Missing bundled skills directory")
+        return root.listFiles { file -> file.isDirectory && File(file, "SKILL.md").isFile }
+            ?.map { it.name }
+            ?.sorted()
+            .orEmpty()
+    }
+
     private fun readBundledSkill(id: String): String {
         val candidates = listOf(
             File("src/main/assets/skills/$id/SKILL.md"),

@@ -11,6 +11,23 @@ Skills are advisory context for the local agent. They can narrow tool
 visibility and describe successful task behavior, but they do not bypass tool
 validation, skill allowlists, approval prompts, or safety policy.
 
+## Bundled Skill Pack
+
+The starter pack ships these Skills v2 skills. Each declares aliases, examples,
+allowed tools, risk, and success criteria, and uses the smallest useful tool
+allowlist:
+
+| Skill | Id | Risk | Purpose |
+| --- | --- | --- | --- |
+| App Launcher | `apps` | low | Open and switch between installed apps. |
+| Device Navigation | `navigation` | low | Home, back, and recent apps; help the user find where they are. |
+| Browser | `browser` | low | Open pages, search the web, inspect visible results. |
+| Settings | `settings` | medium | Navigate and inspect Android Settings screens safely. |
+| Messages | `messages` | high | Draft and review SMS/messaging, with approval required before sending. |
+
+High-risk workflows (messaging) emphasize drafting and explicit confirmation;
+they never tap send, share, or confirm without user approval.
+
 ## Skills v2 Format
 
 Each `SKILL.md` should start with a front matter block followed by normal
