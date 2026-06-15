@@ -147,7 +147,7 @@ class LiteRtCommandModelRuntime(
         synchronized(loadedInterpreter) {
             loadedInterpreter.run(input, output)
         }
-        return output[0].toCommandJson(task, skill)
+        return output[0].toCommandJson(task, dispatched, skill)
     }
 
     private fun extractDispatchedTools(context: String): Set<String> {
@@ -186,69 +186,22 @@ class LiteRtCommandModelRuntime(
     }
 
     private fun buildFeatures(task: String, dispatched: Set<String>): Array<FloatArray> {
-        val normalized = task.trim().lowercase()
-        val features = FloatArray(RouteLabels.size)
-        when {
-            "back" in normalized && "press_back" !in dispatched -> features[RouteIndexBack] = 1f
-            "home" in normalized && "press_home" !in dispatched -> features[RouteIndexHome] = 1f
-            "scroll up" in normalized && "scroll" !in dispatched -> features[RouteIndexScrollUp] = 1f
-            "scroll" in normalized && "scroll" !in dispatched -> features[RouteIndexScrollDown] = 1f
-            OpenPattern.containsMatchIn(normalized) && "open_app" !in dispatched -> features[RouteIndexOpenApp] = 1f
-            TapPattern.containsMatchIn(normalized) && "tap" !in dispatched -> features[RouteIndexTapText] = 1f
-        }
-        return arrayOf(features)
+        return arrayOf(CommandRouteClassifier.buildFeatureVector(task, dispatched))
     }
 
-    private fun FloatArray.toCommandJson(task: String, skill: Skill?): String {
+    private fun FloatArray.toCommandJson(task: String, dispatched: Set<String>, skill: Skill?): String {
         val bestIndex = indices.maxByOrNull { this[it] } ?: return FinalFallback
         if (this[bestIndex] <= 0f) return FinalFallback
 
-        val route = when (bestIndex) {
-            RouteIndexBack -> LocalRoute("press_back")
-            RouteIndexHome -> LocalRoute("press_home")
-            RouteIndexScrollUp -> LocalRoute("scroll", mapOf("direction" to "backward"))
-            RouteIndexScrollDown -> LocalRoute("scroll", mapOf("direction" to "forward"))
-            RouteIndexOpenApp -> extract(OpenPattern, task)?.let { target ->
-                LocalRoute("open_app", mapOf("target" to target))
-            }
-            RouteIndexTapText -> extract(TapPattern, task)?.let { text ->
-                LocalRoute("tap", mapOf("text" to text))
-            }
-            else -> null
-        } ?: return FinalFallback
+        val route = CommandRouteClassifier.classify(task, dispatched)
+            ?.takeIf { it.labelIndex == bestIndex }
+            ?: return FinalFallback
 
         if (skill != null && route.tool !in skill.allowedTools) {
             return """{"final":"Local model route is not allowed by the active skill."}"""
         }
 
-        return route.toJson()
-    }
-
-    private fun extract(pattern: Regex, task: String): String? {
-        return pattern.find(task.trim().lowercase())
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-    }
-
-    private data class LocalRoute(
-        val tool: String,
-        val args: Map<String, String> = emptyMap()
-    ) {
-        fun toJson(): String {
-            val argsJson = args.entries.joinToString(separator = ",") { (key, value) ->
-                """"$key":"${escapeJson(value)}""""
-            }
-            return """{"tool":"$tool","args":{$argsJson}}"""
-        }
-
-        private fun escapeJson(value: String): String {
-            return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-        }
+        return CommandRouteClassifier.toCommandJson(route)
     }
 
     private companion object {
@@ -256,15 +209,7 @@ class LiteRtCommandModelRuntime(
         const val ManifestAsset = "models/command_router/manifest.json"
         const val DefaultModelAsset = "models/command_router/model.tflite"
         const val FinalFallback = """{"final":"Local model could not route this task safely."}"""
-        const val RouteIndexBack = 0
-        const val RouteIndexHome = 1
-        const val RouteIndexScrollUp = 2
-        const val RouteIndexScrollDown = 3
-        const val RouteIndexOpenApp = 4
-        const val RouteIndexTapText = 5
-        val RouteLabels = listOf("back", "home", "scroll_up", "scroll_down", "open_app", "tap_text")
-        val OpenPattern = Regex("(?:open|launch)\\s+([\\w .-]+)")
-        val TapPattern = Regex("(?:tap|press)\\s+([\\w .-]+)")
+        val RouteLabels = CommandRouteClassifier.RouteLabels
     }
 }
 

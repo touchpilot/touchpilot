@@ -37,6 +37,11 @@ The current committed fixture sets live at:
 - `app/src/test/resources/target-ranking/fixtures.json`
 - `app/src/test/resources/command-routing/fixtures.json`
 
+The command-routing eval exercises the shared `CommandRouteClassifier`
+baseline that feeds the LiteRT router. It covers supported commands
+(`press_back`, `press_home`, `scroll`, `open_app`, `tap`), paraphrase handling,
+word-boundary regressions, and dispatched-tool skips.
+
 ### ExecuTorch
 
 ExecuTorch is the strongest fit for a future Android-native LLM path. It
@@ -127,7 +132,7 @@ assets.
   "runtime": "LiteRT",
   "model_asset": "models/command_router/model.tflite",
   "tokenizer_asset": null,
-  "version": "tiny-router-1",
+  "version": "tiny-router-2",
   "contract_version": 1
 }
 ```
@@ -149,7 +154,7 @@ that fails validation (blank required field, or an unsupported `contract_version
 makes the local model report as unavailable and the runtime falls back to the
 deterministic router. `LocalModelManifestTest` validates the bundled manifest.
 
-The bundled `tiny-router-1` model accepts compact task features and emits route
+The bundled `tiny-router-2` model accepts compact task features and emits route
 logits for these commands:
 
 - `press_back`
@@ -159,9 +164,12 @@ logits for these commands:
 - `open_app`
 - `tap`
 
-This first model intentionally keeps argument extraction in Kotlin. Larger
-trained command-routing models can replace `model.tflite` behind the same JSON
-command contract.
+`tiny-router-2` improves the Kotlin feature classifier that feeds the model:
+IntentGate-aligned priority for open/tap vs navigation words, word-boundary
+checks for back/home/scroll, and paraphrase support such as `click`,
+`swipe up/down`, `start`, and `navigate back`. Argument extraction remains in
+Kotlin. Larger trained command-routing models can replace `model.tflite` behind
+the same JSON command contract.
 
 The model runtime must emit the existing command-provider JSON contract:
 
@@ -222,7 +230,7 @@ The live test logs a PR-friendly summary like:
 
 ```text
 Local model benchmark summary
-runtime=LiteRT version=tiny-router-1 asset=models/command_router/model.tflite available=true
+runtime=LiteRT version=tiny-router-2 asset=models/command_router/model.tflite available=true
 load_ms=12.34 load_heap_delta_kb=256
 iterations_per_scenario=5
 - open_settings: avg_ms=0.42 min_ms=0.39 max_ms=0.51 avg_heap_delta_kb=0 sample={"tool":"open_app","args":{"target":"settings"}}

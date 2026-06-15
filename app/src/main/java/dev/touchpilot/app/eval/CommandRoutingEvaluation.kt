@@ -1,8 +1,6 @@
 package dev.touchpilot.app.eval
 
-import dev.touchpilot.app.agent.AgentCommandParser
-import dev.touchpilot.app.agent.LocalRouterCommandProvider
-import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.localinference.CommandRouteClassifier
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -10,16 +8,18 @@ data class CommandRoutingEvalCase(
     val id: String,
     val description: String,
     val task: String,
+    val context: String = "",
     val expectedTool: String? = null,
     val expectedArgs: Map<String, String> = emptyMap(),
-    val expectedFinalContains: String? = null,
-    val skill: Skill? = null,
+    val expectNoRoute: Boolean = false,
 ) {
     init {
         require(id.isNotBlank()) { "id must not be blank" }
         require(task.isNotBlank()) { "task must not be blank" }
-        require(expectedTool != null || expectedFinalContains != null) {
-            "case must expect either a tool or a final answer fragment"
+        if (expectNoRoute) {
+            require(expectedTool == null) { "expectNoRoute cases must not set expectedTool" }
+        } else {
+            require(!expectedTool.isNullOrBlank()) { "expectedTool must be set unless expectNoRoute is true" }
         }
     }
 }
@@ -30,36 +30,25 @@ data class CommandRoutingEvalResult(
     val task: String,
     val expectedTool: String?,
     val expectedArgs: Map<String, String>,
-    val expectedFinalContains: String?,
+    val expectNoRoute: Boolean,
     val actualTool: String?,
     val actualArgs: Map<String, String>,
-    val actualFinal: String?,
-    val rawOutput: String,
     val passed: Boolean,
 ) {
     fun summaryLine(): String {
         val status = if (passed) "PASS" else "FAIL"
-        return when {
-            expectedTool != null -> {
-                val actualArgsText = actualArgs.entries.joinToString(",") { "${it.key}=${it.value}" }
-                val expectedArgsText = expectedArgs.entries.joinToString(",") { "${it.key}=${it.value}" }
-                "$status $caseId expected_tool=$expectedTool args={$expectedArgsText} " +
-                    "actual_tool=${actualTool ?: "none"} args={$actualArgsText}"
-            }
-            else -> {
-                "$status $caseId expected_final_contains=${expectedFinalContains ?: ""} " +
-                    "actual_final=${actualFinal ?: "none"}"
-            }
+        val expected = if (expectNoRoute) {
+            "no_route"
+        } else {
+            "tool=$expectedTool args=$expectedArgs"
         }
+        val actual = actualTool?.let { tool -> "tool=$tool args=$actualArgs" } ?: "no_route"
+        return "$status $caseId expected=$expected actual=$actual"
     }
 
     fun failureDetail(): String? {
         if (passed) return null
-        return buildString {
-            append(summaryLine())
-            append(" raw=")
-            append(rawOutput)
-        }
+        return summaryLine()
     }
 }
 
@@ -82,40 +71,37 @@ data class CommandRoutingEvalReport(
 
 class CommandRoutingEvaluator {
     fun evaluateCase(case: CommandRoutingEvalCase): CommandRoutingEvalResult {
-        val provider = LocalRouterCommandProvider(case.task, case.skill)
-        val rawOutput = provider.complete(systemPrompt = "", context = "")
-        val parsed = runCatching { AgentCommandParser.parse(rawOutput) }.getOrNull()
-
-        val actualTool = parsed?.tool
-        val actualArgs = parsed?.args.orEmpty()
-        val actualFinal = parsed?.finalAnswer
-
-        val passed = when {
-            case.expectedTool != null -> {
-                actualTool == case.expectedTool && actualArgs == case.expectedArgs
-            }
-            else -> {
-                actualFinal?.contains(case.expectedFinalContains.orEmpty()) == true
-            }
+        val dispatched = extractDispatchedTools(case.context)
+        val route = CommandRouteClassifier.classify(case.task, dispatched)
+        val actualTool = route?.tool
+        val actualArgs = route?.args.orEmpty()
+        val passed = if (case.expectNoRoute) {
+            route == null
+        } else {
+            actualTool == case.expectedTool && actualArgs == case.expectedArgs
         }
-
         return CommandRoutingEvalResult(
             caseId = case.id,
             description = case.description,
             task = case.task,
             expectedTool = case.expectedTool,
             expectedArgs = case.expectedArgs,
-            expectedFinalContains = case.expectedFinalContains,
+            expectNoRoute = case.expectNoRoute,
             actualTool = actualTool,
             actualArgs = actualArgs,
-            actualFinal = actualFinal,
-            rawOutput = rawOutput,
             passed = passed,
         )
     }
 
     fun evaluate(cases: List<CommandRoutingEvalCase>): CommandRoutingEvalReport {
         return CommandRoutingEvalReport(results = cases.map(::evaluateCase))
+    }
+
+    private fun extractDispatchedTools(context: String): Set<String> {
+        return Regex(""""tool"\s*:\s*"([^"]+)"""")
+            .findAll(context)
+            .map { it.groupValues[1] }
+            .toSet()
     }
 }
 
@@ -133,45 +119,24 @@ object CommandRoutingEvalFixtureParser {
     }
 
     private fun parseCase(json: JSONObject): CommandRoutingEvalCase {
-        val expectation = json.getJSONObject("expectation")
-        val expectedTool = expectation.optNullableString("tool")
-        val expectedArgs = parseArgs(expectation.optJSONObject("args"))
-        val expectedFinalContains = expectation.optNullableString("final_contains")
+        val expectNoRoute = json.optBoolean("expect_no_route", false)
         return CommandRoutingEvalCase(
             id = json.getString("id"),
             description = json.optString("description", ""),
             task = json.getString("task"),
-            expectedTool = expectedTool,
-            expectedArgs = expectedArgs,
-            expectedFinalContains = expectedFinalContains,
-            skill = json.optJSONObject("skill")?.let(::parseSkill),
-        )
-    }
-
-    private fun parseSkill(json: JSONObject): Skill {
-        val allowedTools = json.optJSONArray("allowed_tools") ?: JSONArray()
-        return Skill(
-            id = json.optString("id", "eval-skill"),
-            title = json.optString("title", "Eval skill"),
-            markdown = json.optString("markdown", ""),
-            allowedTools = buildSet {
-                for (index in 0 until allowedTools.length()) {
-                    add(allowedTools.getString(index))
-                }
-            }
+            context = json.optString("context", ""),
+            expectedTool = if (expectNoRoute) null else json.getString("expected_tool"),
+            expectedArgs = parseArgs(json.optJSONObject("expected_args")),
+            expectNoRoute = expectNoRoute,
         )
     }
 
     private fun parseArgs(json: JSONObject?): Map<String, String> {
         if (json == null) return emptyMap()
         return buildMap {
-            for (key in json.keys()) {
+            json.keys().forEach { key ->
                 put(key, json.getString(key))
             }
         }
-    }
-
-    private fun JSONObject.optNullableString(key: String): String? {
-        return if (has(key) && !isNull(key)) getString(key) else null
     }
 }

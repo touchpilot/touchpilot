@@ -1,6 +1,6 @@
 package dev.touchpilot.app.eval
 
-import dev.touchpilot.app.memory.Skill
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -22,75 +22,31 @@ class CommandRoutingEvaluatorTest {
     }
 
     @Test
-    fun returnsFinalWhenRouteDoesNotMatch() {
-        val result = CommandRoutingEvaluator().evaluateCase(
-            CommandRoutingEvalCase(
-                id = "unmatched",
-                description = "",
-                task = "Find the Wi-Fi toggle",
-                expectedFinalContains = "Local router completed",
-            )
-        )
-
-        assertTrue(result.passed)
-        assertEquals(null, result.actualTool)
-    }
-
-    @Test
-    fun skillAllowlistBlocksDisallowedTool() {
-        val result = CommandRoutingEvaluator().evaluateCase(
-            CommandRoutingEvalCase(
-                id = "blocked",
-                description = "",
-                task = "go back",
-                expectedFinalContains = "Local router completed",
-                skill = Skill(
-                    id = "tap_only",
-                    title = "Tap only",
-                    markdown = "",
-                    allowedTools = setOf("tap"),
-                ),
-            )
-        )
-
-        assertTrue(result.passed)
-    }
-
-    @Test
     fun parsesCommittedFixtures() {
-        val json = """
-            {
-              "version": 1,
-              "cases": [
-                {
-                  "id": "go_back",
-                  "task": "Go back",
-                  "expectation": { "tool": "press_back" }
-                }
-              ]
-            }
-        """.trimIndent()
+        val cases = loadFixtureCases()
 
-        val cases = CommandRoutingEvalFixtureParser.parse(json)
-
-        assertEquals(1, cases.size)
-        assertEquals("press_back", cases.first().expectedTool)
+        assertTrue(cases.isNotEmpty())
+        assertEquals("go_back", cases.first().id)
     }
 
     @Test
-    fun committedFixturesMatchLocalRouterOutput() {
-        val file = listOf(
-            java.io.File("src/test/resources/command-routing/fixtures.json"),
-            java.io.File("app/src/test/resources/command-routing/fixtures.json"),
-        ).firstOrNull { it.isFile }
-            ?: error("Missing command-routing fixtures.json")
-
-        val report = CommandRoutingEvaluator().evaluate(
-            CommandRoutingEvalFixtureParser.parse(file.readText())
-        )
+    fun committedFixturesPassDeterministicRoutingEval() {
+        val report = CommandRoutingEvaluator().evaluate(loadFixtureCases())
 
         println(report.formatSummary())
 
+        assertEquals(25, report.totalCases)
         assertEquals(0, report.failedCases, report.formatSummary())
+        assertTrue(report.results.all { it.passed }, report.formatSummary())
+    }
+
+    private fun loadFixtureCases(): List<CommandRoutingEvalCase> {
+        val candidates = listOf(
+            File("src/test/resources/command-routing/fixtures.json"),
+            File("app/src/test/resources/command-routing/fixtures.json")
+        )
+        val file = candidates.firstOrNull { it.isFile }
+            ?: error("Missing command-routing fixtures.json")
+        return CommandRoutingEvalFixtureParser.parse(file.readText())
     }
 }
