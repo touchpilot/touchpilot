@@ -161,6 +161,11 @@ override fun run(
             is IntentDecision.ScreenInquiry -> error("handled above")
         }
 
+        val skillScopeEvent = effectiveCtx.skill?.let { skill ->
+            skillScopeEvent(skill, intent)
+        }
+        skillScopeEvent?.let(::forward)
+
         val result = invocation.invoke(
             task = task,
             context = effectiveCtx,
@@ -169,7 +174,26 @@ override fun run(
             cancellationSignal = cancellationSignal
         )
         result.events.forEach(::forward)
-        return result
+        return if (skillScopeEvent != null) {
+            result.copy(events = listOf(skillScopeEvent) + result.events)
+        } else {
+            result
+        }
+    }
+
+    private fun skillScopeEvent(skill: Skill, intent: IntentDecision): AgentEvent.SkillActive {
+        val (source, reason) = when (intent) {
+            is IntentDecision.KnownSkill -> SkillActivationSource.MATCHED to intent.reason
+            else -> SkillActivationSource.MANUAL to "Active skill selected in Settings"
+        }
+        return AgentEvent.SkillActive(
+            skillId = skill.id,
+            title = skill.title,
+            risk = skill.risk,
+            allowedTools = skill.allowedTools,
+            activationSource = source,
+            reason = reason
+        )
     }
 
     private fun blockUnsafe(

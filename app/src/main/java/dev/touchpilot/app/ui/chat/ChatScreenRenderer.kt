@@ -38,6 +38,7 @@ class ChatScreenRenderer(
     private val skillTitle: () -> String,
     private val cancelAgentRun: () -> Unit,
     private val openRunDetail: (String) -> Unit,
+    private val openSkillDetail: (String) -> Unit,
     private val refreshChatScreen: () -> Unit,
 ) {
     fun render() {
@@ -97,6 +98,10 @@ class ChatScreenRenderer(
             is ChatEvent.StepTimeline -> stepTimelineCard(event)
             is ChatEvent.CompletionSummary -> completionSummaryCard(event.summary, event.runId)
             is ChatEvent.ToolCall -> ToolCallCardRenderer(activity).render(event.card)
+            is ChatEvent.SkillUse -> SkillUseCardRenderer(
+                activity = activity,
+                openSkillDetail = openSkillDetail,
+            ).render(event.card)
             is ChatEvent.ApprovalPrompt -> ChatDecisionCardRenderer(
                 activity = activity,
                 refreshChatScreen = refreshChatScreen

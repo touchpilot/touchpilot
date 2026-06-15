@@ -14,6 +14,7 @@ import dev.touchpilot.app.agent.AgentStepStopReason
 import dev.touchpilot.app.agent.AgentStepTimelineBuilder
 import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.LocalReasoningCore
+import dev.touchpilot.app.agent.SkillUseCardModel
 import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -101,11 +102,24 @@ class AgentRunController(
 
         Thread {
             val timelineBuilder = AgentStepTimelineBuilder()
+            var skillCardAdded = false
             val runOutcome = runCatching {
                 reasoningCore.run(
                     task = agentTask,
                     timeline = timelineBuilder,
-                    listener = AgentEventListener {
+                    listener = AgentEventListener { event ->
+                        if (event is AgentEvent.SkillActive && !skillCardAdded) {
+                            skillCardAdded = true
+                            runOnUiThread {
+                                val insertIndex = conversation.indexOfFirst { it is ChatEvent.User }
+                                    .let { if (it >= 0) it + 1 else conversation.size }
+                                conversation.add(
+                                    insertIndex,
+                                    ChatEvent.SkillUse(SkillUseCardModel.from(event))
+                                )
+                                showChat()
+                            }
+                        }
                         runOnUiThread {
                             refreshStepTimeline(stepTimeline, timelineBuilder.snapshot, false)
                         }

@@ -357,6 +357,71 @@ class LocalReasoningCoreTest {
     }
 
     @Test
+    fun manualSessionSkillEmitsSkillActiveEvent() {
+        val sessionSkill = Skill(
+            id = "observe-only",
+            title = "Observe Only",
+            markdown = "",
+            allowedTools = setOf("observe_screen"),
+            risk = dev.touchpilot.app.memory.SkillRisk.LOW
+        )
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _, _, _, _ ->
+                AgentRunResult(transcript = "", finalAnswer = "ok", events = emptyList())
+            },
+            sessionContext = { defaultContext.copy(skill = sessionSkill) }
+        )
+
+        val result = core.run("open Settings") { collected += it }
+
+        val skillEvent = assertIs<AgentEvent.SkillActive>(collected.first { it is AgentEvent.SkillActive })
+        assertEquals("observe-only", skillEvent.skillId)
+        assertEquals(SkillActivationSource.MANUAL, skillEvent.activationSource)
+        assertEquals(skillEvent, result.events.first())
+    }
+
+    @Test
+    fun matchedSkillEmitsSkillActiveEventWithMatchReason() {
+        val matchedSkill = Skill(
+            id = "settings",
+            title = "Settings",
+            markdown = "",
+            allowedTools = setOf("open_app", "tap")
+        )
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _, _, _, _ ->
+                AgentRunResult(transcript = "", finalAnswer = "ok", events = emptyList())
+            },
+            sessionContext = { defaultContext },
+            availableSkills = { listOf(matchedSkill) }
+        )
+
+        core.run("help me with settings") { collected += it }
+
+        val skillEvent = assertIs<AgentEvent.SkillActive>(collected.first { it is AgentEvent.SkillActive })
+        assertEquals("settings", skillEvent.skillId)
+        assertEquals(SkillActivationSource.MATCHED, skillEvent.activationSource)
+        assertTrue(skillEvent.reason.isNotBlank())
+    }
+
+    @Test
+    fun noSkillSelectedDoesNotEmitSkillActiveEvent() {
+        val collected = mutableListOf<AgentEvent>()
+        val core = DefaultLocalReasoningCore(
+            invocation = { _, _, _, _, _ ->
+                AgentRunResult(transcript = "", finalAnswer = "ok", events = emptyList())
+            },
+            sessionContext = { defaultContext }
+        )
+
+        core.run("open Settings") { collected += it }
+
+        assertTrue(collected.none { it is AgentEvent.SkillActive })
+    }
+
+    @Test
     fun unresolvedKnownSkillAsksForClarification() {
         var invoked = false
         val collected = mutableListOf<AgentEvent>()

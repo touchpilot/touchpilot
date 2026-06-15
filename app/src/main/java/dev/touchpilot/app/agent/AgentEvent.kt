@@ -1,5 +1,6 @@
 package dev.touchpilot.app.agent
 
+import dev.touchpilot.app.memory.SkillRisk
 import dev.touchpilot.app.security.PolicyDecision
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolApprovalRequest
@@ -220,6 +221,34 @@ sealed class AgentEvent(
         }
     }
 
+    /**
+     * Emitted when an agent run scopes tools to an active or matched skill.
+     * Display-only metadata for chat/run UI; does not change skill selection.
+     */
+    data class SkillActive(
+        val skillId: String,
+        val title: String,
+        val risk: SkillRisk,
+        val allowedTools: Set<String>,
+        val activationSource: SkillActivationSource,
+        val reason: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.SKILL_ACTIVE
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "skill_id" to skillId,
+                "title" to title.redacted(redactSensitive),
+                "risk" to risk.name.lowercase(),
+                "allowed_tools" to allowedTools.sorted(),
+                "activation_source" to activationSource.wireName,
+                "reason" to reason.redacted(redactSensitive)
+            )
+        }
+    }
+
     companion object {
         private var sequence = 0L
 
@@ -309,5 +338,6 @@ enum class AgentEventType(val wireName: String) {
     POLICY_BLOCKED("policy_blocked"),
     CLARIFICATION("clarification"),
     FINAL_ANSWER("final_answer"),
-    RUN_CANCELLED("run_cancelled")
+    RUN_CANCELLED("run_cancelled"),
+    SKILL_ACTIVE("skill_active")
 }

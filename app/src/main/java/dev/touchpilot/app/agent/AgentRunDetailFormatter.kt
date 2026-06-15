@@ -418,6 +418,7 @@ object AgentRunDetailFormatter {
             is AgentEvent.Clarification -> AgentRunStepStatus.WAITING
             is AgentEvent.FinalAnswer -> AgentRunStepStatus.COMPLETE
             is AgentEvent.RunCancelled -> AgentRunStepStatus.BLOCKED
+            is AgentEvent.SkillActive -> AgentRunStepStatus.INFO
         }
     }
 
@@ -437,6 +438,7 @@ object AgentRunDetailFormatter {
             is AgentEvent.Clarification -> "Clarification needed"
             is AgentEvent.FinalAnswer -> "Final answer"
             is AgentEvent.RunCancelled -> "Run cancelled"
+            is AgentEvent.SkillActive -> "Skill scope: ${event.title}"
         }
     }
 
@@ -461,6 +463,11 @@ object AgentRunDetailFormatter {
             is AgentEvent.Clarification -> formatClarification(payload)
             is AgentEvent.FinalAnswer -> payload.getString("text")
             is AgentEvent.RunCancelled -> payload.getString("reason")
+            is AgentEvent.SkillActive -> buildString {
+                appendLine("source: ${payload.getString("activation_source")}")
+                appendLine("risk: ${payload.getString("risk")}")
+                append("reason: ${payload.getString("reason")}")
+            }
         }
     }
 
