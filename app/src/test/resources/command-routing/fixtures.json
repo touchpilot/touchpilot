@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "go_back",
+      "description": "Simple back navigation should route to press_back.",
+      "task": "Go back",
+      "expectation": {
+        "tool": "press_back",
+        "args": {}
+      }
+    },
+    {
+      "id": "go_home",
+      "description": "Home navigation should route to press_home.",
+      "task": "go home",
+      "expectation": {
+        "tool": "press_home",
+        "args": {}
+      }
+    },
+    {
+      "id": "scroll_up",
+      "description": "Scroll up should route to a backward scroll.",
+      "task": "scroll up",
+      "expectation": {
+        "tool": "scroll",
+        "args": {
+          "direction": "backward"
+        }
+      }
+    },
+    {
+      "id": "scroll_down",
+      "description": "Scroll down should route to a forward scroll.",
+      "task": "scroll down",
+      "expectation": {
+        "tool": "scroll",
+        "args": {
+          "direction": "forward"
+        }
+      }
+    },
+    {
+      "id": "open_settings",
+      "description": "Open Settings should route to open_app with a normalized target.",
+      "task": "Open Settings",
+      "expectation": {
+        "tool": "open_app",
+        "args": {
+          "target": "settings"
+        }
+      }
+    },
+    {
+      "id": "open_wifi_settings_panel",
+      "description": "Wi-Fi settings phrases should route to the settings panel tool.",
+      "task": "Open Wi-Fi settings",
+      "expectation": {
+        "tool": "open_settings_panel",
+        "args": {
+          "panel": "wifi"
+        }
+      }
+    },
+    {
+      "id": "launch_maps",
+      "description": "Launch phrases should route to open_app.",
+      "task": "launch maps",
+      "expectation": {
+        "tool": "open_app",
+        "args": {
+          "target": "maps"
+        }
+      }
+    },
+    {
+      "id": "tap_ok",
+      "description": "Tap phrases should route to tap with normalized text.",
+      "task": "tap OK",
+      "expectation": {
+        "tool": "tap",
+        "args": {
+          "text": "ok"
+        }
+      }
+    },
+    {
+      "id": "long_press_app_info",
+      "description": "Long-press phrases should route to long_press.",
+      "task": "long-press App info",
+      "expectation": {
+        "tool": "long_press",
+        "args": {
+          "text": "app info"
+        }
+      }
+    },
+    {
+      "id": "unmatched_task_returns_final",
+      "description": "Unmatched tasks should return a final answer instead of a tool.",
+      "task": "Find the Wi-Fi toggle",
+      "expectation": {
+        "final_contains": "Local router completed"
+      }
+    },
+    {
+      "id": "skill_blocks_disallowed_tool",
+      "description": "Skill allowlists should block otherwise valid routes.",
+      "task": "go back",
+      "skill": {
+        "id": "tap_only",
+        "title": "Tap only",
+        "allowed_tools": [
+          "tap"
+        ]
+      },
+      "expectation": {
+        "final_contains": "Local router completed"
+      }
+    }
+  ]
+}

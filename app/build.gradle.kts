@@ -47,3 +47,16 @@ kotlin {
         jvmTarget.set(JvmTarget.JVM_17)
     }
 }
+
+tasks.register<Test>("localModelEval") {
+    group = "verification"
+    description = "Runs the committed local model evaluation fixture suite."
+
+    val debugUnitTest = tasks.named<Test>("testDebugUnitTest").get()
+    classpath = debugUnitTest.classpath
+    testClassesDirs = debugUnitTest.testClassesDirs
+    filter {
+        includeTestsMatching("dev.touchpilot.app.eval.LocalModelEvalRunnerTest")
+    }
+    dependsOn("compileDebugUnitTestKotlin", "processDebugUnitTestJavaRes")
+}
