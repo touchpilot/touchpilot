@@ -40,7 +40,10 @@ import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.AppShellRenderer
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.RuntimeIndicator
 import dev.touchpilot.app.ui.label
+import dev.touchpilot.app.ui.welcomeDetail
+import dev.touchpilot.app.ui.workingDetail
 import dev.touchpilot.app.ui.chat.ChatEvent
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
@@ -116,12 +119,13 @@ class MainActivity : Activity() {
             refreshExecutionLog = ::refreshExecutionLog,
             refreshStatus = ::refreshStatus,
             refreshStepTimeline = ::refreshStepTimeline,
+            runtimeWorkingDetail = { currentRuntimeIndicator().workingDetail() },
         )
 
         if (conversation.isEmpty()) {
             conversation += ChatEvent.Agent(
                 "What would you like me to do?",
-                "Local router is ready for simple Android actions."
+                currentRuntimeIndicator().welcomeDetail()
             )
         }
 
@@ -219,7 +223,7 @@ class MainActivity : Activity() {
             contentRoot = contentRoot,
             conversation = conversation,
             agentRunState = { agentRunController.runState },
-            runtimeLabel = { currentProviderMode().label() },
+            runtimeIndicator = ::currentRuntimeIndicator,
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
@@ -421,6 +425,10 @@ class MainActivity : Activity() {
             AgentProviderMode.LOCAL_MODEL.name -> AgentProviderMode.LOCAL_MODEL
             else -> AgentProviderMode.LOCAL_ROUTER
         }
+    }
+
+    private fun currentRuntimeIndicator(): RuntimeIndicator {
+        return RuntimeIndicator(currentProviderMode(), localModelRuntime.status())
     }
 
     private fun selectedSkill(): Skill? {

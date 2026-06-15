@@ -22,7 +22,9 @@ import dev.touchpilot.app.agent.timelineChipAccent
 import dev.touchpilot.app.agent.timelineChipLabel
 import dev.touchpilot.app.agent.timelineDetail
 import dev.touchpilot.app.agent.timelineLabel
+import dev.touchpilot.app.ui.RuntimeIndicator
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.chatContextStrip
 import dev.touchpilot.app.ui.rounded
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.timelineCard
@@ -34,7 +36,7 @@ class ChatScreenRenderer(
     private val contentRoot: LinearLayout,
     private val conversation: List<ChatEvent>,
     private val agentRunState: () -> AgentRunState,
-    private val runtimeLabel: () -> String,
+    private val runtimeIndicator: () -> RuntimeIndicator,
     private val skillTitle: () -> String,
     private val cancelAgentRun: () -> Unit,
     private val openRunDetail: (String) -> Unit,
@@ -274,7 +276,7 @@ class ChatScreenRenderer(
 
     private fun chatContextStrip(): View {
         return TextView(activity).apply {
-            text = "Runtime: ${runtimeLabel()}   ·   Skill: ${skillTitle()}"
+            text = runtimeIndicator().chatContextStrip(skillTitle())
             textSize = 11.5f
             setTextColor(Theme.MutedText)
             setLineSpacing(3f, 1f)

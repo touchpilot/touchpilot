@@ -21,7 +21,6 @@ import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.chat.ApprovalState
 import dev.touchpilot.app.ui.chat.ChatEvent
-import dev.touchpilot.app.ui.label
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -30,6 +29,7 @@ class AgentRunController(
     private val reasoningCore: LocalReasoningCore,
     private val conversation: MutableList<ChatEvent>,
     private val currentProviderMode: () -> AgentProviderMode,
+    private val runtimeWorkingDetail: () -> String,
     private val runOnUiThread: (() -> Unit) -> Unit,
     private val showChat: () -> Unit,
     private val refreshExecutionLog: () -> Unit,
@@ -78,7 +78,7 @@ class AgentRunController(
         val workingIndex = conversation.size
         cancellationSignal.set(false)
         setRunState(AgentRunState.RUNNING)
-        conversation += ChatEvent.Working("Working on it.", "Runtime: ${currentProviderMode().label()}")
+        conversation += ChatEvent.Working("Working on it.", runtimeWorkingDetail())
         val stepTimeline = ChatEvent.StepTimeline()
         conversation += stepTimeline
         showChat()
