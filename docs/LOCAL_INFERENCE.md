@@ -7,20 +7,35 @@ execution before larger trained routing models are added.
 
 ## Runtime Evaluation
 
-TouchPilot now includes a static target-ranking evaluation path for Milestone 8.
-It uses committed fixture screens plus expected node IDs to measure whether the
-existing deterministic ranking path keeps the right target at rank 1 or within
-an allowed top-N threshold, without executing any Android action.
+TouchPilot includes a local model evaluation runner for Milestone 8. It reads
+committed fixture sets, evaluates deterministic local routing and target
+ranking output only, and prints total cases, passed cases, failed cases, and
+failure details. The runner does not call network services or execute Android
+actions.
 
-Run it with:
+Run the full minimal eval set with one command:
+
+```bash
+./gradlew localModelEval
+```
+
+You can also run the unified test class directly:
+
+```bash
+./gradlew testDebugUnitTest --tests 'dev.touchpilot.app.eval.LocalModelEvalRunnerTest'
+```
+
+Focused suite tests remain available:
 
 ```bash
 ./gradlew testDebugUnitTest --tests 'dev.touchpilot.app.tools.targets.TargetRankingEvaluatorTest'
+./gradlew testDebugUnitTest --tests 'dev.touchpilot.app.eval.CommandRoutingEvaluatorTest'
 ```
 
-The current committed fixture set lives at:
+The current committed fixture sets live at:
 
 - `app/src/test/resources/target-ranking/fixtures.json`
+- `app/src/test/resources/command-routing/fixtures.json`
 
 ### ExecuTorch
 
