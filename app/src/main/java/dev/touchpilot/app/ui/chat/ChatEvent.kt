@@ -10,6 +10,7 @@ import dev.touchpilot.app.security.ToolApprovalRequest
 sealed class ChatEvent {
     data class User(val text: String) : ChatEvent()
     data class Agent(val text: String, val detail: String) : ChatEvent()
+    data class ScreenSummary(val summary: String, val suggestions: List<String>) : ChatEvent()
     data class Working(val text: String, val detail: String) : ChatEvent()
     data class Timeline(val title: String, val body: String, val runId: String? = null) : ChatEvent()
     data class CompletionSummary(

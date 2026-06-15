@@ -40,6 +40,7 @@ sealed class AgentEvent(
         val text: String,
         val detail: String = "",
         val choices: List<String> = emptyList(),
+        val suggestions: List<String> = emptyList(),
         override val id: String = nextId(),
         override val timestampMillis: Long = System.currentTimeMillis()
     ) : AgentEvent(id, timestampMillis) {

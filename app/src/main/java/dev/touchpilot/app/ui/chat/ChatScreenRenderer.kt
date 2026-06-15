@@ -87,6 +87,7 @@ class ChatScreenRenderer(
         return when (event) {
             is ChatEvent.User -> userBubble(event.text)
             is ChatEvent.Agent -> agentBubble(event.text, event.detail)
+            is ChatEvent.ScreenSummary -> screenSummaryCard(event.summary, event.suggestions)
             is ChatEvent.Working -> workingBubble(event.text, event.detail)
             is ChatEvent.Timeline -> activity.timelineCard(
                 title = event.title,
@@ -177,6 +178,90 @@ class ChatScreenRenderer(
             }
         )
         return column.withMargins(top = 6, bottom = 6)
+    }
+
+    /**
+     * Surfaces the local [dev.touchpilot.app.screen.ScreenSummary] as a product
+     * card: a one-line summary plus a small, capped, descriptive list of
+     * suggested actions. Suggestions are display-only — nothing runs until the
+     * user explicitly asks. An empty/weak screen shows a clear local fallback.
+     * The summarizer already produces redacted, display-safe text.
+     */
+    private fun screenSummaryCard(summary: String, suggestions: List<String>): View {
+        val column = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.START
+        }
+        column.addView(senderLabel("TouchPilot", alignEnd = false))
+
+        val bubble = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bubbleBackground(Theme.Card, Theme.StrokeDark, tailOnRight = false)
+            setPadding(20, 14, 20, 14)
+        }
+
+        bubble.addView(cardCaption("Screen understanding"))
+        bubble.addView(
+            TextView(activity).apply {
+                setText(summary)
+                textSize = 14.5f
+                setTextColor(Theme.BodyText)
+                setLineSpacing(4f, 1f)
+                setPadding(0, 4, 0, 0)
+                maxWidth = bubbleMaxWidth()
+            }
+        )
+
+        val capped = suggestions.take(MaxScreenSuggestions)
+        if (capped.isEmpty()) {
+            bubble.addView(
+                TextView(activity).apply {
+                    setText("No suggested actions for this screen.")
+                    textSize = 12f
+                    setTextColor(Theme.MutedText)
+                    setPadding(0, 8, 0, 0)
+                    maxWidth = bubbleMaxWidth()
+                }
+            )
+        } else {
+            bubble.addView(
+                cardCaption("Suggested actions").apply { setPadding(0, 10, 0, 0) }
+            )
+            capped.forEach { label ->
+                bubble.addView(
+                    TextView(activity).apply {
+                        setText("•  $label")
+                        textSize = 13.5f
+                        setTextColor(Theme.BodyText)
+                        setLineSpacing(3f, 1f)
+                        setPadding(0, 4, 0, 0)
+                        maxWidth = bubbleMaxWidth()
+                    }
+                )
+            }
+        }
+
+        column.addView(
+            bubble,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START
+            }
+        )
+        return column.withMargins(top = 6, bottom = 6)
+    }
+
+    private fun cardCaption(text: String): TextView {
+        return TextView(activity).apply {
+            setText(text)
+            textSize = 11f
+            isAllCaps = true
+            letterSpacing = 0.06f
+            setTextColor(Theme.MutedText)
+            maxWidth = bubbleMaxWidth()
+        }
     }
 
     private fun workingBubble(text: String, detail: String): View {
@@ -596,5 +681,9 @@ class ChatScreenRenderer(
                 floatArrayOf(large, large, large, large, large, large, tail, tail)
             }
         }
+    }
+
+    private companion object {
+        const val MaxScreenSuggestions = 6
     }
 }

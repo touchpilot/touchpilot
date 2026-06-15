@@ -231,7 +231,8 @@ override fun run(
         val suggestionBlock = renderSuggestions(summary)
         val assistant = AgentEvent.AssistantMessage(
             text = summary.sentence,
-            detail = suggestionBlock
+            detail = suggestionBlock,
+            suggestions = summary.suggestedActions.map { it.label }
         )
         val finalEvent = AgentEvent.FinalAnswer(summary.sentence)
         forward(userEvent)

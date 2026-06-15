@@ -273,7 +273,10 @@ class AgentRunController(
             result?.stopReason == AgentStepStopReason.COMPLETED &&
                 isInformationalAssistantRun(result) -> {
                 val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().last()
-                conversation += ChatEvent.Agent(assistant.text, assistant.detail)
+                conversation += ChatEvent.ScreenSummary(
+                    summary = assistant.text,
+                    suggestions = assistant.suggestions,
+                )
                 ToolExecutionLog.recordChat(
                     name = "assistant_message",
                     actor = "TouchPilot",

@@ -425,6 +425,10 @@ class LocalReasoningCoreTest {
         val assistant = assertIs<AgentEvent.AssistantMessage>(collected[1])
         assertTrue(assistant.text.startsWith("I see the Settings screen."))
         assertTrue(assistant.detail.contains("Suggested actions:"))
+        // Structured suggestions back the screen-understanding card, while the
+        // back/home pair stays available as safe navigation.
+        assertTrue(assistant.suggestions.isNotEmpty(), assistant.suggestions.toString())
+        assertTrue(assistant.suggestions.any { it.contains("Go back") }, assistant.suggestions.toString())
         val finalEvent = assertIs<AgentEvent.FinalAnswer>(collected[2])
         assertEquals(assistant.text, finalEvent.text)
         assertEquals(assistant.text, result.finalAnswer)
@@ -456,6 +460,8 @@ class LocalReasoningCoreTest {
             assistant.text.startsWith("I can see this screen, but the app exposes limited"),
             "expected weak-screen fallback, got: ${assistant.text}"
         )
+        // A weak screen offers no suggestions; the card renders its fallback note.
+        assertTrue(assistant.suggestions.isEmpty(), assistant.suggestions.toString())
         assertEquals(assistant.text, result.finalAnswer)
     }
 
