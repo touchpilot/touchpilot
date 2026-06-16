@@ -419,6 +419,7 @@ object AgentRunDetailFormatter {
             is AgentEvent.FinalAnswer -> AgentRunStepStatus.COMPLETE
             is AgentEvent.RunCancelled -> AgentRunStepStatus.BLOCKED
             is AgentEvent.SkillActive -> AgentRunStepStatus.INFO
+            is AgentEvent.TraceRecorded -> AgentRunStepStatus.INFO
         }
     }
 
@@ -439,6 +440,7 @@ object AgentRunDetailFormatter {
             is AgentEvent.FinalAnswer -> "Final answer"
             is AgentEvent.RunCancelled -> "Run cancelled"
             is AgentEvent.SkillActive -> "Skill scope: ${event.title}"
+            is AgentEvent.TraceRecorded -> "Workflow trace recorded"
         }
     }
 
@@ -468,6 +470,7 @@ object AgentRunDetailFormatter {
                 appendLine("risk: ${payload.getString("risk")}")
                 append("reason: ${payload.getString("reason")}")
             }
+            is AgentEvent.TraceRecorded -> "${payload.getInt("step_count")} step(s) captured"
         }
     }
 

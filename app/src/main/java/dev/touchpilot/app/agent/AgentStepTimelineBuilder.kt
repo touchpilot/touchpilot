@@ -43,6 +43,7 @@ class AgentStepTimelineBuilder {
             is AgentEvent.Clarification -> onClarification(event)
             is AgentEvent.RunCancelled -> onRunCancelled(event)
             is AgentEvent.SkillActive -> Unit
+            is AgentEvent.TraceRecorded -> Unit
         }
     }
 
