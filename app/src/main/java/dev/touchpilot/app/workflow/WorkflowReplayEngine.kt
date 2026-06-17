@@ -7,10 +7,12 @@ import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.AgentStepFactory
 import dev.touchpilot.app.agent.AgentStepStatus
 import dev.touchpilot.app.agent.AgentStepStopReason
-import dev.touchpilot.app.agent.userMessage
 import dev.touchpilot.app.agent.AgentStepVerification
 import dev.touchpilot.app.agent.LocalAgentLoopTools
 import dev.touchpilot.app.agent.StepVerificationCardModel
+import dev.touchpilot.app.agent.userMessage
+import dev.touchpilot.app.androidcontrol.AccessibilityBridge
+import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.security.ActionPolicy
 import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.PolicyDecision
@@ -19,7 +21,12 @@ import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolPolicyRequest
 import dev.touchpilot.app.security.ToolSource
+import dev.touchpilot.app.tools.AndroidToolCatalog
+import dev.touchpilot.app.tools.AndroidToolExecutor
+import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.tools.ToolResult
+import dev.touchpilot.app.tools.ToolSpec
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class WorkflowReplayResult(
     val workflowId: String,
@@ -40,20 +47,22 @@ class WorkflowReplayEngine(
     private val tools: LocalAgentLoopTools,
     private val approvalProvider: ToolApprovalProvider,
     private val verifier: WorkflowStepVerifier = WorkflowStateVerifier(),
-    private val source: ToolSource = ToolSource.LOCAL_ROUTER,
+    private val source: ToolSource = ToolSource.WORKFLOW_REPLAY,
     private val policy: ActionPolicy = DefaultActionPolicy(),
-    private val cancellationSignal: java.util.concurrent.atomic.AtomicBoolean =
-        java.util.concurrent.atomic.AtomicBoolean(false),
+    private val cancellationSignal: AtomicBoolean = AtomicBoolean(false),
 ) {
     fun replay(
         workflow: WorkflowDefinition,
+        parameters: Map<String, String> = emptyMap(),
         listener: AgentEventListener = AgentEventListener {},
         onStepsUpdated: ((List<AgentStep>) -> Unit)? = null,
     ): WorkflowReplayResult {
+        val resolvedParameters = WorkflowParameterSubstitutor.resolveParameters(workflow, parameters)
         val events = mutableListOf<AgentEvent>()
         val steps = mutableListOf<AgentStep>()
         val verificationCards = mutableListOf<StepVerificationCardModel>()
         var completedSteps = 0
+        val totalSteps = workflow.steps.size
 
         fun emit(event: AgentEvent) {
             events += event
@@ -84,31 +93,50 @@ class WorkflowReplayEngine(
                 steps += stop
                 emit(AgentEvent.RunCancelled(reason = "Cancelled by user"))
                 publishSteps()
-                return result(
+                return terminalFailure(
                     workflow = workflow,
-                    events = events,
-                    steps = steps,
+                    stepNumber = stepNumber,
+                    totalSteps = totalSteps,
+                    tool = step.tool,
+                    message = "Workflow \"${workflow.title}\" cancelled.",
                     stopReason = AgentStepStopReason.USER_CANCELLED,
                     completedStepCount = completedSteps,
+                    events = events,
+                    steps = steps,
                     verificationCards = verificationCards,
+                    emit = ::emit,
+                    emitStepCompleted = false,
                 )
             }
 
-            val command = AgentCommand(tool = step.tool, args = step.args, finalAnswer = null)
-            val redactedArgs = SensitiveTextRedactor.redact(step.args)
+            val resolvedArgs = WorkflowParameterSubstitutor.substitute(step.args, resolvedParameters)
+
+            emit(
+                AgentEvent.WorkflowStepStarted(
+                    workflowId = workflow.id,
+                    workflowTitle = workflow.title,
+                    stepIndex = stepNumber,
+                    totalSteps = totalSteps,
+                    tool = step.tool,
+                    args = resolvedArgs,
+                )
+            )
+
+            val command = AgentCommand(tool = step.tool, args = resolvedArgs, finalAnswer = null)
+            val redactedArgs = SensitiveTextRedactor.redact(resolvedArgs)
             steps += AgentStepFactory.act(
                 sequenceNumber = stepNumber,
                 tool = step.tool,
                 args = redactedArgs,
                 source = source.name.lowercase(),
-                inputSummary = "workflow step $stepNumber",
+                inputSummary = "workflow step $stepNumber of $totalSteps",
                 outputSummary = "Tool selected.",
                 status = AgentStepStatus.PENDING,
             )
             AgentEvent.toolRequested(command, source)?.let(::emit)
             publishSteps()
 
-            val validationError = tools.validate(step.tool, step.args)
+            val validationError = tools.validate(step.tool, resolvedArgs)
             val spec = tools.findTool(step.tool)
             if (validationError != null) {
                 steps.replaceLastAct(
@@ -117,17 +145,26 @@ class WorkflowReplayEngine(
                     stopReason = AgentStepStopReason.NO_VALID_ACTION,
                 )
                 publishSteps()
-                return result(
+                return terminalFailure(
                     workflow = workflow,
-                    events = events,
-                    steps = steps + stopStep(
-                        stepNumber = stepNumber + 1,
-                        reason = AgentStepStopReason.NO_VALID_ACTION,
-                        message = validationError,
-                    ),
+                    stepNumber = stepNumber,
+                    totalSteps = totalSteps,
+                    tool = step.tool,
+                    message = validationError,
                     stopReason = AgentStepStopReason.NO_VALID_ACTION,
                     completedStepCount = completedSteps,
+                    events = events,
+                    steps = steps,
                     verificationCards = verificationCards,
+                    emit = ::emit,
+                    publishSteps = ::publishSteps,
+                    extraSteps = listOf(
+                        stopStep(
+                            stepNumber = stepNumber + 1,
+                            reason = AgentStepStopReason.NO_VALID_ACTION,
+                            message = validationError,
+                        )
+                    ),
                 )
             }
 
@@ -135,7 +172,7 @@ class WorkflowReplayEngine(
                 val decision = policy.evaluate(
                     ToolPolicyRequest(
                         tool = spec,
-                        args = step.args,
+                        args = resolvedArgs,
                         source = source,
                         activeScreen = currentScreen,
                     )
@@ -143,7 +180,7 @@ class WorkflowReplayEngine(
                 when (decision) {
                     is PolicyDecision.Allow -> Unit
                     is PolicyDecision.RequireApproval -> {
-                        val approvalRequest = ToolApprovalRequest(spec, step.args, decision)
+                        val approvalRequest = ToolApprovalRequest(spec, resolvedArgs, decision)
                         emit(AgentEvent.approvalRequired(approvalRequest))
                         publishSteps()
                         if (!approvalProvider.approve(approvalRequest)) {
@@ -160,17 +197,26 @@ class WorkflowReplayEngine(
                                 stopReason = AgentStepStopReason.USER_CANCELLED,
                             )
                             publishSteps()
-                            return result(
+                            return terminalFailure(
                                 workflow = workflow,
-                                events = events,
-                                steps = steps + stopStep(
-                                    stepNumber = stepNumber + 1,
-                                    reason = AgentStepStopReason.USER_CANCELLED,
-                                    message = "Replay stopped because approval was denied.",
-                                ),
+                                stepNumber = stepNumber,
+                                totalSteps = totalSteps,
+                                tool = step.tool,
+                                message = "Replay stopped because approval was denied.",
                                 stopReason = AgentStepStopReason.USER_CANCELLED,
                                 completedStepCount = completedSteps,
+                                events = events,
+                                steps = steps,
                                 verificationCards = verificationCards,
+                                emit = ::emit,
+                                publishSteps = ::publishSteps,
+                                extraSteps = listOf(
+                                    stopStep(
+                                        stepNumber = stepNumber + 1,
+                                        reason = AgentStepStopReason.USER_CANCELLED,
+                                        message = "Replay stopped because approval was denied.",
+                                    )
+                                ),
                             )
                         }
                     }
@@ -182,17 +228,26 @@ class WorkflowReplayEngine(
                             stopReason = AgentStepStopReason.POLICY_BLOCKED,
                         )
                         publishSteps()
-                        return result(
+                        return terminalFailure(
                             workflow = workflow,
-                            events = events,
-                            steps = steps + stopStep(
-                                stepNumber = stepNumber + 1,
-                                reason = AgentStepStopReason.POLICY_BLOCKED,
-                                message = decision.userMessage,
-                            ),
+                            stepNumber = stepNumber,
+                            totalSteps = totalSteps,
+                            tool = step.tool,
+                            message = decision.userMessage,
                             stopReason = AgentStepStopReason.POLICY_BLOCKED,
                             completedStepCount = completedSteps,
+                            events = events,
+                            steps = steps,
                             verificationCards = verificationCards,
+                            emit = ::emit,
+                            publishSteps = ::publishSteps,
+                            extraSteps = listOf(
+                                stopStep(
+                                    stepNumber = stepNumber + 1,
+                                    reason = AgentStepStopReason.POLICY_BLOCKED,
+                                    message = decision.userMessage,
+                                )
+                            ),
                         )
                     }
                 }
@@ -202,8 +257,9 @@ class WorkflowReplayEngine(
             publishSteps()
             AgentEvent.toolRunning(command, source)?.let(::emit)
 
+            val foregroundApp = tools.foregroundApp()
             val result = runCatching {
-                tools.execute(step.tool, step.args, source)
+                tools.execute(step.tool, resolvedArgs, source, foregroundApp)
             }.getOrElse { error ->
                 val message = error.message ?: "Tool execution error"
                 emit(AgentEvent.ToolFailed(tool = step.tool, message = message))
@@ -213,17 +269,27 @@ class WorkflowReplayEngine(
                     stopReason = AgentStepStopReason.EXECUTOR_ERROR,
                 )
                 publishSteps()
-                return replayResult(
+                return terminalFailure(
                     workflow = workflow,
-                    events = events,
-                    steps = steps + stopStep(
-                        stepNumber = stepNumber + 1,
-                        reason = AgentStepStopReason.EXECUTOR_ERROR,
-                        message = message,
-                    ),
+                    stepNumber = stepNumber,
+                    totalSteps = totalSteps,
+                    tool = step.tool,
+                    message = message,
                     stopReason = AgentStepStopReason.EXECUTOR_ERROR,
                     completedStepCount = completedSteps,
+                    events = events,
+                    steps = steps,
                     verificationCards = verificationCards,
+                    emit = ::emit,
+                    publishSteps = ::publishSteps,
+                    alreadyEmittedToolFailure = true,
+                    extraSteps = listOf(
+                        stopStep(
+                            stepNumber = stepNumber + 1,
+                            reason = AgentStepStopReason.EXECUTOR_ERROR,
+                            message = message,
+                        )
+                    ),
                 )
             }
 
@@ -242,17 +308,27 @@ class WorkflowReplayEngine(
                     toolResult = result,
                 )
                 publishSteps()
-                return replayResult(
+                return terminalFailure(
                     workflow = workflow,
-                    events = events,
-                    steps = steps + stopStep(
-                        stepNumber = stepNumber + 1,
-                        reason = AgentStepStopReason.REPEATED_TOOL_FAILURE,
-                        message = result.message,
-                    ),
+                    stepNumber = stepNumber,
+                    totalSteps = totalSteps,
+                    tool = step.tool,
+                    message = result.message,
                     stopReason = AgentStepStopReason.REPEATED_TOOL_FAILURE,
                     completedStepCount = completedSteps,
+                    events = events,
+                    steps = steps,
                     verificationCards = verificationCards,
+                    emit = ::emit,
+                    publishSteps = ::publishSteps,
+                    alreadyEmittedToolFailure = true,
+                    extraSteps = listOf(
+                        stopStep(
+                            stepNumber = stepNumber + 1,
+                            reason = AgentStepStopReason.REPEATED_TOOL_FAILURE,
+                            message = result.message,
+                        )
+                    ),
                 )
             }
 
@@ -262,7 +338,6 @@ class WorkflowReplayEngine(
                 toolResult = result,
             )
             publishSteps()
-            completedSteps += 1
 
             val expectedState = step.expectedState?.toExpectedState()
             if (expectedState != null) {
@@ -300,6 +375,17 @@ class WorkflowReplayEngine(
                         outputSummary = verification.reason,
                     )
                     publishSteps()
+                    completedSteps += 1
+                    emit(
+                        AgentEvent.WorkflowStepCompleted(
+                            workflowId = workflow.id,
+                            stepIndex = stepNumber,
+                            totalSteps = totalSteps,
+                            tool = step.tool,
+                            success = true,
+                            message = result.message,
+                        )
+                    )
                 } else {
                     val failedEvent = AgentEvent.WorkflowStepVerificationFailed(
                         stepIndex = stepNumber,
@@ -329,20 +415,48 @@ class WorkflowReplayEngine(
                     )
                     steps += stop
                     publishSteps()
-                    return replayResult(
+                    return terminalFailure(
                         workflow = workflow,
-                        events = events,
-                        steps = steps,
+                        stepNumber = stepNumber,
+                        totalSteps = totalSteps,
+                        tool = step.tool,
+                        message = failedEvent.userMessage,
                         stopReason = AgentStepStopReason.VERIFICATION_FAILED,
                         completedStepCount = completedSteps,
+                        events = events,
+                        steps = steps,
                         verificationCards = verificationCards,
+                        emit = ::emit,
+                        publishSteps = ::publishSteps,
                         stopMessage = failedEvent.userMessage,
                     )
                 }
+            } else {
+                completedSteps += 1
+                emit(
+                    AgentEvent.WorkflowStepCompleted(
+                        workflowId = workflow.id,
+                        stepIndex = stepNumber,
+                        totalSteps = totalSteps,
+                        tool = step.tool,
+                        success = true,
+                        message = result.message,
+                    )
+                )
             }
         }
 
         val finalMessage = "Workflow \"${workflow.title}\" replayed successfully."
+        emit(
+            AgentEvent.WorkflowReplayDone(
+                workflowId = workflow.id,
+                title = workflow.title,
+                success = true,
+                completedSteps = completedSteps,
+                totalSteps = totalSteps,
+                message = finalMessage,
+            )
+        )
         emit(AgentEvent.FinalAnswer(finalMessage))
         steps += AgentStepFactory.stop(
             sequenceNumber = steps.size + 1,
@@ -373,6 +487,66 @@ class WorkflowReplayEngine(
         )
     }
 
+    private fun terminalFailure(
+        workflow: WorkflowDefinition,
+        stepNumber: Int,
+        totalSteps: Int,
+        tool: String,
+        message: String,
+        stopReason: AgentStepStopReason,
+        completedStepCount: Int,
+        events: MutableList<AgentEvent>,
+        steps: MutableList<AgentStep>,
+        verificationCards: List<StepVerificationCardModel>,
+        emit: (AgentEvent) -> Unit,
+        publishSteps: (() -> Unit)? = null,
+        alreadyEmittedToolFailure: Boolean = false,
+        emitStepCompleted: Boolean = true,
+        extraSteps: List<AgentStep> = emptyList(),
+        stopMessage: String = message,
+    ): WorkflowReplayResult {
+        if (!alreadyEmittedToolFailure) {
+            emit(AgentEvent.ToolFailed(tool = tool, message = message))
+        }
+        if (emitStepCompleted) {
+            emit(
+                AgentEvent.WorkflowStepCompleted(
+                    workflowId = workflow.id,
+                    stepIndex = stepNumber,
+                    totalSteps = totalSteps,
+                    tool = tool,
+                    success = false,
+                    message = message,
+                )
+            )
+        }
+        val failureMessage = when (stopReason) {
+            AgentStepStopReason.USER_CANCELLED -> message
+            else -> "Workflow \"${workflow.title}\" failed at step $stepNumber: $message"
+        }
+        emit(
+            AgentEvent.WorkflowReplayDone(
+                workflowId = workflow.id,
+                title = workflow.title,
+                success = false,
+                completedSteps = completedStepCount,
+                totalSteps = totalSteps,
+                message = failureMessage,
+            )
+        )
+        extraSteps.forEach { steps += it }
+        publishSteps?.invoke()
+        return replayResult(
+            workflow = workflow,
+            events = events,
+            steps = steps,
+            stopReason = stopReason,
+            completedStepCount = completedStepCount,
+            verificationCards = verificationCards,
+            stopMessage = stopMessage,
+        )
+    }
+
     private fun replayResult(
         workflow: WorkflowDefinition,
         events: List<AgentEvent>,
@@ -389,24 +563,6 @@ class WorkflowReplayEngine(
             steps = steps,
             stopReason = stopReason,
             stopMessage = stopMessage,
-            completedStepCount = completedStepCount,
-            verificationCards = verificationCards,
-        )
-    }
-
-    private fun result(
-        workflow: WorkflowDefinition,
-        events: List<AgentEvent>,
-        steps: List<AgentStep>,
-        stopReason: AgentStepStopReason,
-        completedStepCount: Int,
-        verificationCards: List<StepVerificationCardModel>,
-    ): WorkflowReplayResult {
-        return replayResult(
-            workflow = workflow,
-            events = events,
-            steps = steps,
-            stopReason = stopReason,
             completedStepCount = completedStepCount,
             verificationCards = verificationCards,
         )
@@ -447,5 +603,44 @@ class WorkflowReplayEngine(
                 endedAtMillis = System.currentTimeMillis(),
             )
         )
+    }
+}
+
+fun buildWorkflowReplayEngine(
+    toolExecutor: AndroidToolExecutor,
+    approvalProvider: ToolApprovalProvider,
+    cancellationSignal: AtomicBoolean = AtomicBoolean(false),
+): WorkflowReplayEngine {
+    return WorkflowReplayEngine(
+        tools = AndroidLoopTools(toolExecutor),
+        approvalProvider = approvalProvider,
+        cancellationSignal = cancellationSignal,
+    )
+}
+
+private class AndroidLoopTools(
+    private val toolExecutor: AndroidToolExecutor,
+) : LocalAgentLoopTools {
+    override fun observeScreen(): String = toolExecutor.observeScreen()
+
+    override fun foregroundApp(): ForegroundAppInfo = AccessibilityBridge.getForegroundApp()
+
+    override fun validate(name: String, args: Map<String, String>): String? {
+        return toolExecutor.validate(name, args)
+    }
+
+    override fun findTool(name: String): ToolSpec? = AndroidToolCatalog.find(name)
+
+    override fun execute(
+        name: String,
+        args: Map<String, String>,
+        source: ToolSource,
+        foregroundApp: ForegroundAppInfo,
+    ): ToolResult {
+        return toolExecutor.execute(name, args, source, foregroundApp)
+    }
+
+    override fun recordExecution(name: String, args: String, ok: Boolean, message: String) {
+        ToolExecutionLog.record(name, args, ok, message)
     }
 }

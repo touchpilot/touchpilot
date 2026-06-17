@@ -9,7 +9,8 @@ enum class ToolSource {
     LOCAL_MODEL,
     SKILL_SELECTED,
     DIRECT_DEBUG,
-    MCP
+    MCP,
+    WORKFLOW_REPLAY
 }
 
 data class ToolPolicyRequest(

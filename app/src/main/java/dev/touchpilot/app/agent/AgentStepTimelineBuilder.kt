@@ -46,6 +46,9 @@ class AgentStepTimelineBuilder {
             is AgentEvent.TraceRecorded -> Unit
             is AgentEvent.WorkflowStepVerificationPassed -> onWorkflowStepVerificationPassed(event)
             is AgentEvent.WorkflowStepVerificationFailed -> onWorkflowStepVerificationFailed(event)
+            is AgentEvent.WorkflowStepStarted -> Unit
+            is AgentEvent.WorkflowStepCompleted -> Unit
+            is AgentEvent.WorkflowReplayDone -> Unit
         }
     }
 

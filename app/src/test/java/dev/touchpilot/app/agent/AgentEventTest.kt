@@ -144,4 +144,38 @@ class AgentEventTest {
         assertEquals("Cancelled by user", json.getJSONObject("payload").getString("reason"))
         assertEquals(AgentEventType.RUN_CANCELLED, event.type)
     }
+
+    @Test
+    fun workflowReplayEventsSerializeCorrectly() {
+        val started = AgentEvent.WorkflowStepStarted(
+            workflowId = "wf-1",
+            workflowTitle = "Open Settings",
+            stepIndex = 1,
+            totalSteps = 2,
+            tool = "open_app",
+            args = mapOf("target" to "Settings"),
+        )
+        val completed = AgentEvent.WorkflowStepCompleted(
+            workflowId = "wf-1",
+            stepIndex = 1,
+            totalSteps = 2,
+            tool = "open_app",
+            success = true,
+            message = "opened",
+        )
+        val done = AgentEvent.WorkflowReplayDone(
+            workflowId = "wf-1",
+            title = "Open Settings",
+            success = true,
+            completedSteps = 2,
+            totalSteps = 2,
+            message = "completed",
+        )
+
+        assertEquals("workflow_step_started", started.toJson().getString("type"))
+        assertEquals("workflow_step_completed", completed.toJson().getString("type"))
+        assertEquals("workflow_replay_done", done.toJson().getString("type"))
+        assertEquals(1, started.toJson().getJSONObject("payload").getInt("step_index"))
+        assertTrue(completed.toJson().getJSONObject("payload").getBoolean("success"))
+    }
 }

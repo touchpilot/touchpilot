@@ -23,6 +23,7 @@ import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
+import dev.touchpilot.app.workflow.buildWorkflowReplayEngine
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.logging.DebugTraceExporter
@@ -109,6 +110,15 @@ class MainActivity : Activity() {
                 localModelRuntime = localModelRuntime
             ),
             sessionContext = { currentReasoningContext() },
+            workflowReplayEngineFactory = { cancellationSignal ->
+                buildWorkflowReplayEngine(
+                    toolExecutor = toolExecutor,
+                    approvalProvider = ToolApprovalProvider { request ->
+                        agentRunController.approveTool(request)
+                    },
+                    cancellationSignal = cancellationSignal,
+                )
+            },
             availableSkills = { skillRegistry.enabledSkills() },
             screenContextProvider = { AccessibilityBridge.observeScreenContext() }
         )
