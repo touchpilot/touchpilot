@@ -2,6 +2,7 @@ package dev.touchpilot.app.workflow
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import org.json.JSONObject
 
 class WorkflowModelsTest {
@@ -71,5 +72,30 @@ class WorkflowModelsTest {
             ),
             state,
         )
+    }
+
+    @Test
+    fun workflowDefinitionRequiresNonBlankIdAndTitle() {
+        assertFailsWith<IllegalArgumentException> {
+            WorkflowDefinition(
+                id = "",
+                title = "Test",
+                steps = listOf(WorkflowStep(id = "step-1", tool = "observe_screen")),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            WorkflowDefinition(
+                id = "wf-1",
+                title = "",
+                steps = listOf(WorkflowStep(id = "step-1", tool = "observe_screen")),
+            )
+        }
+    }
+
+    @Test
+    fun workflowDefinitionRequiresAtLeastOneStep() {
+        assertFailsWith<IllegalArgumentException> {
+            WorkflowDefinition(id = "wf-1", title = "Test", steps = emptyList())
+        }
     }
 }

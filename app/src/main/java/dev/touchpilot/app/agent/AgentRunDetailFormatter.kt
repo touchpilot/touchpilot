@@ -452,6 +452,17 @@ object AgentRunDetailFormatter {
             is AgentEvent.TraceRecorded -> AgentRunStepStatus.INFO
             is AgentEvent.WorkflowStepVerificationPassed -> AgentRunStepStatus.SUCCESS
             is AgentEvent.WorkflowStepVerificationFailed -> AgentRunStepStatus.FAILED
+            is AgentEvent.WorkflowStepStarted -> AgentRunStepStatus.RUNNING
+            is AgentEvent.WorkflowStepCompleted -> if (event.success) {
+                AgentRunStepStatus.SUCCESS
+            } else {
+                AgentRunStepStatus.FAILED
+            }
+            is AgentEvent.WorkflowReplayDone -> if (event.success) {
+                AgentRunStepStatus.COMPLETE
+            } else {
+                AgentRunStepStatus.FAILED
+            }
         }
     }
 
@@ -477,6 +488,9 @@ object AgentRunDetailFormatter {
                 "Step ${event.stepIndex} verification passed"
             is AgentEvent.WorkflowStepVerificationFailed ->
                 "Step ${event.stepIndex} verification failed"
+            is AgentEvent.WorkflowStepStarted -> "Workflow step ${event.stepIndex}/${event.totalSteps}: ${event.tool}"
+            is AgentEvent.WorkflowStepCompleted -> "Workflow step ${event.stepIndex} ${if (event.success) "completed" else "failed"}"
+            is AgentEvent.WorkflowReplayDone -> if (event.success) "Workflow replay done" else "Workflow replay failed"
         }
     }
 
@@ -515,6 +529,18 @@ object AgentRunDetailFormatter {
                 appendLine("expected: ${payload.getString("expected_summary")}")
                 appendLine("observed: ${payload.getString("observed_summary")}")
                 append("reason: ${payload.getString("reason")}")
+            }
+            is AgentEvent.WorkflowStepStarted -> buildString {
+                appendLine("workflow: ${payload.getString("workflow_title")}")
+                append(formatToolArgs(payload))
+            }
+            is AgentEvent.WorkflowStepCompleted -> buildString {
+                appendLine("success: ${payload.getBoolean("success")}")
+                append(payload.optString("message"))
+            }
+            is AgentEvent.WorkflowReplayDone -> buildString {
+                appendLine("completed: ${payload.getInt("completed_steps")}/${payload.getInt("total_steps")}")
+                append(payload.getString("message"))
             }
         }
     }
