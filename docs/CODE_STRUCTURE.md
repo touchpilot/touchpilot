@@ -28,6 +28,7 @@ app/src/main/java/dev/touchpilot/app/
   logging/          Developer log model and SQLite-backed log storage
   mcp/              HTTP JSON-RPC MCP client models and transport
   memory/           Packaged skill loading and skill metadata
+  workflow/         Workflow definition models, JSON parser, and trace serializer
   screen/           ScreenContext models, builders, summaries, and OCR fallback helpers
   security/         Action policy, approvals, redaction, and risk handling
   tools/            Tool catalog, validation, execution, retry, verification, and targets
