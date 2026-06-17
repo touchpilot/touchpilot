@@ -58,4 +58,6 @@ val AgentStepStopReason.userMessage: String
         AgentStepStopReason.PARSER_ERROR -> "TouchPilot could not parse the next local action."
         AgentStepStopReason.EXECUTOR_ERROR -> "TouchPilot stopped because the tool executor failed."
         AgentStepStopReason.NO_VALID_ACTION -> "TouchPilot could not find a valid next local action."
+        AgentStepStopReason.VERIFICATION_FAILED ->
+            "TouchPilot stopped because a workflow step did not reach the expected screen state."
     }

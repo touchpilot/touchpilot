@@ -233,7 +233,8 @@ object AgentRunDetailFormatter {
             AgentStepStopReason.REPEATED_TOOL_FAILURE,
             AgentStepStopReason.PARSER_ERROR,
             AgentStepStopReason.EXECUTOR_ERROR,
-            AgentStepStopReason.NO_VALID_ACTION -> AgentRunCompletionStatus.STOPPED
+            AgentStepStopReason.NO_VALID_ACTION,
+            AgentStepStopReason.VERIFICATION_FAILED -> AgentRunCompletionStatus.STOPPED
         }
     }
 
@@ -449,6 +450,8 @@ object AgentRunDetailFormatter {
             is AgentEvent.RunCancelled -> AgentRunStepStatus.BLOCKED
             is AgentEvent.SkillActive -> AgentRunStepStatus.INFO
             is AgentEvent.TraceRecorded -> AgentRunStepStatus.INFO
+            is AgentEvent.WorkflowStepVerificationPassed -> AgentRunStepStatus.SUCCESS
+            is AgentEvent.WorkflowStepVerificationFailed -> AgentRunStepStatus.FAILED
         }
     }
 
@@ -470,6 +473,10 @@ object AgentRunDetailFormatter {
             is AgentEvent.RunCancelled -> "Run cancelled"
             is AgentEvent.SkillActive -> "Skill scope: ${event.title}"
             is AgentEvent.TraceRecorded -> "Workflow trace recorded"
+            is AgentEvent.WorkflowStepVerificationPassed ->
+                "Step ${event.stepIndex} verification passed"
+            is AgentEvent.WorkflowStepVerificationFailed ->
+                "Step ${event.stepIndex} verification failed"
         }
     }
 
@@ -500,6 +507,15 @@ object AgentRunDetailFormatter {
                 append("reason: ${payload.getString("reason")}")
             }
             is AgentEvent.TraceRecorded -> "${payload.getInt("step_count")} step(s) captured"
+            is AgentEvent.WorkflowStepVerificationPassed -> buildString {
+                appendLine("expected: ${payload.getString("expected_summary")}")
+                append("observed: ${payload.getString("observed_summary")}")
+            }
+            is AgentEvent.WorkflowStepVerificationFailed -> buildString {
+                appendLine("expected: ${payload.getString("expected_summary")}")
+                appendLine("observed: ${payload.getString("observed_summary")}")
+                append("reason: ${payload.getString("reason")}")
+            }
         }
     }
 

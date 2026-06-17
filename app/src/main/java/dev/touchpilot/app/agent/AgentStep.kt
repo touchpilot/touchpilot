@@ -166,7 +166,8 @@ enum class AgentStepStopReason(val wireName: String) {
     CLARIFICATION_NEEDED("clarification_needed"),
     PARSER_ERROR("parser_error"),
     EXECUTOR_ERROR("executor_error"),
-    NO_VALID_ACTION("no_valid_action");
+    NO_VALID_ACTION("no_valid_action"),
+    VERIFICATION_FAILED("verification_failed");
 
     companion object {
         fun fromWire(value: String?): AgentStepStopReason? {

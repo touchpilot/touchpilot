@@ -65,9 +65,9 @@ data class WorkflowDefinition(
             }
 
             val steps = mutableListOf<WorkflowStep>()
-            val stepsArray = json.getJSONArray("steps")
+            val stepsArray = json.optJSONArray("steps") ?: JSONArray()
             for (i in 0 until stepsArray.length()) {
-                steps += WorkflowStep.fromJson(stepsArray.getJSONObject(i))
+                steps += WorkflowStep.fromJson(stepsArray.getJSONObject(i), fallbackId = "step-${i + 1}")
             }
 
             val skillScope = json.optJSONObject("skill_scope")?.let { WorkflowSkillScope.fromJson(it) }
@@ -153,10 +153,14 @@ data class WorkflowStep(
     val expectedState: WorkflowExpectedState? = null,
     val policy: WorkflowStepPolicy? = null,
     val description: String = "",
+    val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
 ) {
     init {
         require(id.isNotBlank()) { "workflow step id must not be blank" }
         require(tool.isNotBlank()) { "workflow step tool must not be blank" }
+        require(timeoutMs in MIN_TIMEOUT_MS..MAX_TIMEOUT_MS) {
+            "timeoutMs must be between $MIN_TIMEOUT_MS and $MAX_TIMEOUT_MS"
+        }
     }
 
     fun toJson(): JSONObject {
@@ -167,31 +171,50 @@ data class WorkflowStep(
             put("expected_state", expectedState?.toJson() ?: JSONObject.NULL)
             put("policy", policy?.toJson() ?: JSONObject.NULL)
             put("description", description)
+            put("timeout_ms", timeoutMs)
         }
     }
 
     companion object {
-        fun fromJson(json: JSONObject): WorkflowStep {
+        const val DEFAULT_TIMEOUT_MS = 5_000L
+        const val MIN_TIMEOUT_MS = 250L
+        const val MAX_TIMEOUT_MS = 30_000L
+
+        fun fromJson(json: JSONObject, fallbackId: String = "step"): WorkflowStep {
             val args = mutableMapOf<String, String>()
             json.optJSONObject("args")?.let { objectArgs ->
                 objectArgs.keys().forEach { key ->
                     args[key] = objectArgs.getString(key)
                 }
             }
+            val timeoutMs = if (json.has("timeout_ms") && !json.isNull("timeout_ms")) {
+                json.getLong("timeout_ms").coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
+            } else {
+                DEFAULT_TIMEOUT_MS
+            }
             return WorkflowStep(
-                id = json.getString("id"),
+                id = json.optString("id").takeIf { it.isNotBlank() } ?: fallbackId,
                 tool = json.getString("tool"),
                 args = args,
-                expectedState = json.optJSONObject("expected_state")?.let { WorkflowExpectedState.fromJson(it) },
+                expectedState = json.optJSONObject("expected_state")?.let { parseExpectedState(it) },
                 policy = json.optJSONObject("policy")?.let { WorkflowStepPolicy.fromJson(it) },
                 description = json.optString("description", ""),
+                timeoutMs = timeoutMs,
             )
+        }
+
+        private fun parseExpectedState(json: JSONObject): WorkflowExpectedState {
+            return if (json.has("type")) {
+                ExpectedState.fromJson(json).toWorkflowExpectedState()
+            } else {
+                WorkflowExpectedState.fromJson(json)
+            }
         }
     }
 }
 
 /**
- * Screen predicates the replay engine can evaluate after a step completes.
+ * Screen predicates stored in workflow files and produced by trace capture.
  */
 data class WorkflowExpectedState(
     val packageName: String? = null,
@@ -285,6 +308,151 @@ enum class WorkflowTextMatch(val wireName: String) {
     companion object {
         fun fromWire(value: String): WorkflowTextMatch? {
             return entries.firstOrNull { it.wireName.equals(value, ignoreCase = true) }
+        }
+    }
+}
+
+/**
+ * Exact screen-state predicates evaluated via on-device accessibility
+ * primitives during replay. Typed `expected_state` JSON uses this shape; file
+ * workflows may also use [WorkflowExpectedState], which converts to this form.
+ */
+sealed class ExpectedState {
+    abstract fun describe(): String
+    abstract fun toJson(): JSONObject
+
+    data class TextPresent(val text: String) : ExpectedState() {
+        init {
+            require(text.isNotBlank()) { "text_present requires non-blank text" }
+        }
+
+        override fun describe(): String = "Text \"$text\" is present on screen"
+
+        override fun toJson(): JSONObject {
+            return JSONObject().apply {
+                put("type", "text_present")
+                put("text", text)
+            }
+        }
+    }
+
+    data class KeyboardVisible(val visible: Boolean) : ExpectedState() {
+        override fun describe(): String =
+            if (visible) "Keyboard is visible" else "Keyboard is hidden"
+
+        override fun toJson(): JSONObject {
+            return JSONObject().apply {
+                put("type", if (visible) "keyboard_visible" else "keyboard_hidden")
+            }
+        }
+    }
+
+    data class ForegroundPackage(val packageName: String) : ExpectedState() {
+        init {
+            require(packageName.isNotBlank()) { "foreground_package requires non-blank package" }
+        }
+
+        override fun describe(): String = "Foreground package is \"$packageName\""
+
+        override fun toJson(): JSONObject {
+            return JSONObject().apply {
+                put("type", "foreground_package")
+                put("package", packageName)
+            }
+        }
+    }
+
+    data class ForegroundApp(val appLabel: String) : ExpectedState() {
+        init {
+            require(appLabel.isNotBlank()) { "foreground_app requires non-blank app label" }
+        }
+
+        override fun describe(): String = "Foreground app label is \"$appLabel\""
+
+        override fun toJson(): JSONObject {
+            return JSONObject().apply {
+                put("type", "foreground_app")
+                put("app", appLabel)
+            }
+        }
+    }
+
+    data class All(val conditions: List<ExpectedState>) : ExpectedState() {
+        init {
+            require(conditions.isNotEmpty()) { "all requires at least one condition" }
+        }
+
+        override fun describe(): String =
+            conditions.joinToString("; ") { it.describe() }
+
+        override fun toJson(): JSONObject {
+            return JSONObject().apply {
+                put("type", "all")
+                put("conditions", JSONArray().apply {
+                    conditions.forEach { put(it.toJson()) }
+                })
+            }
+        }
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): ExpectedState {
+            return when (json.getString("type")) {
+                "text_present" -> TextPresent(json.getString("text"))
+                "keyboard_visible" -> KeyboardVisible(visible = true)
+                "keyboard_hidden" -> KeyboardVisible(visible = false)
+                "foreground_package" -> ForegroundPackage(json.getString("package"))
+                "foreground_app" -> ForegroundApp(json.getString("app"))
+                "all" -> {
+                    val conditionsArray = json.optJSONArray("conditions") ?: JSONArray()
+                    val conditions = mutableListOf<ExpectedState>()
+                    for (i in 0 until conditionsArray.length()) {
+                        conditions += fromJson(conditionsArray.getJSONObject(i))
+                    }
+                    All(conditions)
+                }
+                else -> error("Unknown expected_state type: ${json.getString("type")}")
+            }
+        }
+    }
+}
+
+fun WorkflowExpectedState.toExpectedState(): ExpectedState? {
+    val conditions = mutableListOf<ExpectedState>()
+    packageName?.takeIf { it.isNotBlank() }?.let { conditions += ExpectedState.ForegroundPackage(it) }
+    screenTextContains.filter { it.isNotBlank() }.forEach { conditions += ExpectedState.TextPresent(it) }
+    elementPresent.forEach { predicate ->
+        predicate.text?.takeIf { it.isNotBlank() }?.let { conditions += ExpectedState.TextPresent(it) }
+        predicate.contentDescription?.takeIf { it.isNotBlank() }?.let {
+            conditions += ExpectedState.TextPresent(it)
+        }
+    }
+    return when (conditions.size) {
+        0 -> null
+        1 -> conditions.single()
+        else -> ExpectedState.All(conditions)
+    }
+}
+
+fun ExpectedState.toWorkflowExpectedState(): WorkflowExpectedState {
+    return when (this) {
+        is ExpectedState.TextPresent -> WorkflowExpectedState(screenTextContains = listOf(text))
+        is ExpectedState.ForegroundPackage -> WorkflowExpectedState(packageName = packageName)
+        is ExpectedState.ForegroundApp -> WorkflowExpectedState(screenTextContains = listOf(appLabel))
+        is ExpectedState.KeyboardVisible -> WorkflowExpectedState()
+        is ExpectedState.All -> {
+            val texts = mutableListOf<String>()
+            var pkg: String? = null
+            conditions.forEach { condition ->
+                when (condition) {
+                    is ExpectedState.TextPresent -> texts += condition.text
+                    is ExpectedState.ForegroundPackage -> pkg = condition.packageName
+                    is ExpectedState.ForegroundApp -> texts += condition.appLabel
+                    is ExpectedState.KeyboardVisible -> Unit
+                    is ExpectedState.All -> texts += condition.toWorkflowExpectedState().screenTextContains
+                }
+            }
+            WorkflowExpectedState(packageName = pkg, screenTextContains = texts.distinct())
         }
     }
 }

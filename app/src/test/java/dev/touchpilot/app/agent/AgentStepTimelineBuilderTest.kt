@@ -69,6 +69,31 @@ class AgentStepTimelineBuilderTest {
     }
 
     @Test
+    fun workflowVerificationFailedCreatesVerifyAndStopSteps() {
+        val builder = AgentStepTimelineBuilder()
+        val command = AgentCommand(tool = "tap", args = mapOf("text" to "Settings"), finalAnswer = null)
+        builder.onEvent(requireNotNull(AgentEvent.toolRequested(command, ToolSource.LOCAL_ROUTER)))
+        builder.onEvent(requireNotNull(AgentEvent.toolRunning(command, ToolSource.LOCAL_ROUTER)))
+        builder.onEvent(AgentEvent.ToolSucceeded(tool = "tap", message = "Tapped"))
+        builder.onEvent(
+            AgentEvent.WorkflowStepVerificationFailed(
+                stepIndex = 1,
+                tool = "tap",
+                expectedSummary = "Text \"Network\" is present on screen",
+                observedSummary = "visible text includes \"Home\"",
+                reason = "Expected state was not reached within 5000ms.",
+            )
+        )
+
+        val steps = builder.snapshot
+        assertEquals(listOf(AgentStepType.ACT, AgentStepType.VERIFY, AgentStepType.STOP), steps.map { it.type })
+        assertEquals(AgentStepStatus.FAILED, steps[1].status)
+        assertEquals(AgentStepStopReason.VERIFICATION_FAILED, steps.last().stopReason)
+        assertTrue(steps[1].outputSummary.contains("Expected"))
+        assertTrue(steps[1].outputSummary.contains("Observed"))
+    }
+
+    @Test
     fun policyBlockedMarksActStepBlockedWhenToolWasActive() {
         val builder = AgentStepTimelineBuilder()
         val command = AgentCommand(tool = "type_text", args = mapOf("text" to "secret"), finalAnswer = null)

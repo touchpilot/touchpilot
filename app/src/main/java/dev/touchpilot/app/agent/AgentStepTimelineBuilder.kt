@@ -44,6 +44,8 @@ class AgentStepTimelineBuilder {
             is AgentEvent.RunCancelled -> onRunCancelled(event)
             is AgentEvent.SkillActive -> Unit
             is AgentEvent.TraceRecorded -> Unit
+            is AgentEvent.WorkflowStepVerificationPassed -> onWorkflowStepVerificationPassed(event)
+            is AgentEvent.WorkflowStepVerificationFailed -> onWorkflowStepVerificationFailed(event)
         }
     }
 
@@ -253,6 +255,44 @@ class AgentStepTimelineBuilder {
                 reason = AgentStepStopReason.COMPLETED,
                 outputSummary = event.text,
             )
+        )
+    }
+
+    private fun onWorkflowStepVerificationPassed(event: AgentEvent.WorkflowStepVerificationPassed) {
+        if (activeVerifySeq == null) {
+            startVerify()
+        }
+        completeVerify("Step ${event.stepIndex} verified: ${event.expectedSummary}")
+    }
+
+    private fun onWorkflowStepVerificationFailed(event: AgentEvent.WorkflowStepVerificationFailed) {
+        if (activeVerifySeq == null) {
+            startVerify()
+        }
+        val seq = activeVerifySeq ?: return
+        val index = steps.indexOfFirst { it.sequenceNumber == seq }
+        if (index >= 0) {
+            steps[index] = steps[index].copy(
+                status = AgentStepStatus.FAILED,
+                outputSummary = SensitiveTextRedactor.redact(event.userMessage),
+                verification = AgentStepVerification(
+                    status = "failed",
+                    reason = SensitiveTextRedactor.redact(event.reason),
+                    data = mapOf(
+                        "expected" to SensitiveTextRedactor.redact(event.expectedSummary),
+                        "observed" to SensitiveTextRedactor.redact(event.observedSummary),
+                    ),
+                ),
+                endedAtMillis = System.currentTimeMillis(),
+            )
+        }
+        activeVerifySeq = null
+        append(
+            AgentStepFactory.stop(
+                sequenceNumber = nextSequence(),
+                reason = AgentStepStopReason.VERIFICATION_FAILED,
+                outputSummary = event.userMessage,
+            ).copy(status = AgentStepStatus.FAILED)
         )
     }
 

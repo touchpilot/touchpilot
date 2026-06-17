@@ -101,6 +101,7 @@ class ChatScreenRenderer(
             is ChatEvent.StepTimeline -> stepTimelineCard(event)
             is ChatEvent.CompletionSummary -> completionSummaryCard(event.summary, event.runId)
             is ChatEvent.ToolCall -> ToolCallCardRenderer(activity).render(event.card)
+            is ChatEvent.StepVerification -> StepVerificationCardRenderer(activity).render(event.card)
             is ChatEvent.SkillUse -> SkillUseCardRenderer(
                 activity = activity,
                 openSkillDetail = openSkillDetail,

@@ -271,6 +271,53 @@ sealed class AgentEvent(
         }
     }
 
+    data class WorkflowStepVerificationPassed(
+        val stepIndex: Int,
+        val tool: String,
+        val expectedSummary: String,
+        val observedSummary: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis(),
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.WORKFLOW_STEP_VERIFICATION_PASSED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "step_index" to stepIndex,
+                "tool" to tool,
+                "expected_summary" to expectedSummary.redacted(redactSensitive),
+                "observed_summary" to observedSummary.redacted(redactSensitive),
+            )
+        }
+    }
+
+    data class WorkflowStepVerificationFailed(
+        val stepIndex: Int,
+        val tool: String,
+        val expectedSummary: String,
+        val observedSummary: String,
+        val reason: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis(),
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.WORKFLOW_STEP_VERIFICATION_FAILED
+
+        val userMessage: String
+            get() = "Step $stepIndex verification failed after $tool. " +
+                "Expected: $expectedSummary. Observed: $observedSummary."
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "step_index" to stepIndex,
+                "tool" to tool,
+                "expected_summary" to expectedSummary.redacted(redactSensitive),
+                "observed_summary" to observedSummary.redacted(redactSensitive),
+                "reason" to reason.redacted(redactSensitive),
+                "user_message" to userMessage.redacted(redactSensitive),
+            )
+        }
+    }
+
     companion object {
         private var sequence = 0L
 
@@ -362,5 +409,7 @@ enum class AgentEventType(val wireName: String) {
     FINAL_ANSWER("final_answer"),
     RUN_CANCELLED("run_cancelled"),
     SKILL_ACTIVE("skill_active"),
-    TRACE_RECORDED("trace_recorded")
+    TRACE_RECORDED("trace_recorded"),
+    WORKFLOW_STEP_VERIFICATION_PASSED("workflow_step_verification_passed"),
+    WORKFLOW_STEP_VERIFICATION_FAILED("workflow_step_verification_failed"),
 }
