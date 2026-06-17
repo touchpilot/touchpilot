@@ -12,6 +12,9 @@ import dev.touchpilot.app.security.DefaultActionPolicy
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.AndroidToolExecutor
+import dev.touchpilot.app.workflow.WorkflowDefinition
+import dev.touchpilot.app.workflow.WorkflowReplayEngine
+import dev.touchpilot.app.workflow.buildWorkflowReplayEngine
 
 /**
  * Single entry point the UI uses to ask the local-first runtime to handle a
@@ -26,6 +29,14 @@ interface LocalReasoningCore {
         listener: AgentEventListener = AgentEventListener {},
         cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
     ): AgentRunResult
+
+    fun replayWorkflow(
+        definition: WorkflowDefinition,
+        parameters: Map<String, String> = emptyMap(),
+        timeline: AgentStepTimelineBuilder? = null,
+        listener: AgentEventListener = AgentEventListener {},
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(false)
+    ): AgentRunResult
 }
 
 /**
@@ -33,6 +44,20 @@ interface LocalReasoningCore {
  */
 fun LocalReasoningCore.run(task: String, listener: AgentEventListener = AgentEventListener {}): AgentRunResult {
     return run(task, timeline = null, listener, java.util.concurrent.atomic.AtomicBoolean(false))
+}
+
+fun LocalReasoningCore.replayWorkflow(
+    definition: WorkflowDefinition,
+    parameters: Map<String, String> = emptyMap(),
+    listener: AgentEventListener = AgentEventListener {},
+): AgentRunResult {
+    return replayWorkflow(
+        definition = definition,
+        parameters = parameters,
+        timeline = null,
+        listener = listener,
+        cancellationSignal = java.util.concurrent.atomic.AtomicBoolean(false)
+    )
 }
 
 fun interface AgentEventListener {
@@ -77,6 +102,9 @@ fun AgentRunInvocation.invoke(task: String, context: LocalReasoningContext): Age
 class DefaultLocalReasoningCore(
     private val invocation: AgentRunInvocation,
     private val sessionContext: () -> LocalReasoningContext,
+    private val workflowReplayEngineFactory: (java.util.concurrent.atomic.AtomicBoolean) -> WorkflowReplayEngine = {
+        error("Workflow replay is not configured")
+    },
     private val intents: ConversationalIntents = ConversationalGate,
     private val intentClassifier: IntentClassifier = IntentGate(),
     private val availableSkills: () -> List<Skill> = { emptyList() },
@@ -179,6 +207,31 @@ override fun run(
         } else {
             result
         }
+    }
+
+    override fun replayWorkflow(
+        definition: WorkflowDefinition,
+        parameters: Map<String, String>,
+        timeline: AgentStepTimelineBuilder?,
+        listener: AgentEventListener,
+        cancellationSignal: java.util.concurrent.atomic.AtomicBoolean
+    ): AgentRunResult {
+        val streamed = mutableSetOf<String>()
+        fun forward(event: AgentEvent) {
+            if (streamed.add(event.id)) {
+                listener.onEvent(event)
+                timeline?.onEvent(event)
+            }
+        }
+
+        val result = workflowReplayEngineFactory(cancellationSignal).replay(
+            definition = definition,
+            parameters = parameters,
+            listener = AgentEventListener(::forward),
+            onStepsUpdated = timeline?.let { builder -> { steps -> builder.replaceAll(steps) } }
+        )
+        result.events.forEach(::forward)
+        return result
     }
 
     private fun skillScopeEvent(skill: Skill, intent: IntentDecision): AgentEvent.SkillActive {
@@ -357,4 +410,17 @@ fun buildCommandProvider(
 private fun AgentProviderMode.toToolSource(): ToolSource = when (this) {
     AgentProviderMode.LOCAL_MODEL -> ToolSource.LOCAL_MODEL
     AgentProviderMode.LOCAL_ROUTER -> ToolSource.LOCAL_ROUTER
+}
+
+fun defaultWorkflowReplayEngineFactory(
+    toolExecutor: AndroidToolExecutor,
+    approvalProvider: ToolApprovalProvider,
+    policy: ActionPolicy = DefaultActionPolicy(),
+): (java.util.concurrent.atomic.AtomicBoolean) -> WorkflowReplayEngine = { cancellationSignal ->
+    buildWorkflowReplayEngine(
+        toolExecutor = toolExecutor,
+        approvalProvider = approvalProvider,
+        policy = policy,
+        cancellationSignal = cancellationSignal,
+    )
 }

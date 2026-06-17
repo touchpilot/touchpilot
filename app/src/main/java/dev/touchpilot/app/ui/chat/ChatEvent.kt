@@ -9,6 +9,9 @@ import dev.touchpilot.app.agent.StepVerificationCardModel
 import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.security.ToolApprovalRequest
 
+import dev.touchpilot.app.workflow.WorkflowStepPolicyOutcome
+import dev.touchpilot.app.workflow.WorkflowStepPolicyPreview
+
 sealed class ChatEvent {
     data class User(val text: String) : ChatEvent()
     data class Agent(val text: String, val detail: String) : ChatEvent()
@@ -35,6 +38,11 @@ sealed class ChatEvent {
     data class ToolCall(val card: ToolCallCardModel) : ChatEvent()
     data class StepVerification(val card: StepVerificationCardModel) : ChatEvent()
     data class SkillUse(val card: SkillUseCardModel) : ChatEvent()
+    data class WorkflowPolicyPreview(
+        val workflowTitle: String,
+        val summary: String,
+        val steps: List<WorkflowStepPolicyPreview>,
+    ) : ChatEvent()
     class ApprovalPrompt(
         val request: ToolApprovalRequest,
         val onDecision: (Boolean) -> Unit

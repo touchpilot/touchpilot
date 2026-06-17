@@ -32,10 +32,10 @@ class WorkflowReplayRunner(
             policy = policy,
             cancellationSignal = cancellationSignal,
         ).replay(
-            workflow = workflow,
+            definition = workflow,
             listener = listener,
             onStepsUpdated = timeline?.let { builder -> { steps -> builder.replaceAll(steps) } },
-        )
+        ).toWorkflowReplayResult(workflow)
     }
 
     private class AndroidLoopTools(

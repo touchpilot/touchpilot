@@ -24,6 +24,7 @@ import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.ui.chat.ApprovalState
 import dev.touchpilot.app.ui.chat.ChatEvent
+import dev.touchpilot.app.workflow.WorkflowDefinition
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -189,6 +190,99 @@ class AgentRunController(
                     runOutcome = runOutcome,
                     workingIndex = workingIndex,
                     resumeOriginalTask = originalTask,
+                    timelineSteps = steps,
+                )
+            }
+        }.start()
+    }
+
+    fun replayWorkflow(definition: WorkflowDefinition, parameters: Map<String, String> = emptyMap()) {
+        val label = "Replay workflow: ${definition.title}"
+        conversation += ChatEvent.User(label)
+        ToolExecutionLog.recordChat(name = "workflow_replay_started", actor = "User", message = label)
+
+        val workingIndex = conversation.size
+        cancellationSignal.set(false)
+        setRunState(AgentRunState.RUNNING)
+        conversation += ChatEvent.Working("Replaying workflow.", runtimeWorkingDetail())
+        val stepTimeline = ChatEvent.StepTimeline()
+        conversation += stepTimeline
+        showChat()
+
+        val runId = AgentRunIds.next()
+        val startedAtMillis = System.currentTimeMillis()
+
+        Thread {
+            val timelineBuilder = AgentStepTimelineBuilder()
+            var policyPreviewAdded = false
+            val runOutcome = runCatching {
+                reasoningCore.replayWorkflow(
+                    definition = definition,
+                    parameters = parameters,
+                    timeline = timelineBuilder,
+                    listener = AgentEventListener { event ->
+                        if (event is AgentEvent.WorkflowPolicyPreview && !policyPreviewAdded) {
+                            policyPreviewAdded = true
+                            runOnUiThread {
+                                conversation += ChatEvent.WorkflowPolicyPreview(
+                                    workflowTitle = event.workflowTitle,
+                                    summary = event.summary,
+                                    steps = event.steps,
+                                )
+                                showChat()
+                            }
+                        }
+                        runOnUiThread {
+                            refreshStepTimeline(stepTimeline, timelineBuilder.snapshot, false)
+                        }
+                    },
+                    cancellationSignal = cancellationSignal,
+                )
+            }
+            val completedAtMillis = System.currentTimeMillis()
+            val record = if (runOutcome.isSuccess) {
+                AgentRunRecord(
+                    id = runId,
+                    task = label,
+                    startedAtMillis = startedAtMillis,
+                    completedAtMillis = completedAtMillis,
+                    result = runOutcome.getOrThrow(),
+                )
+            } else {
+                AgentRunRecord(
+                    id = runId,
+                    task = label,
+                    startedAtMillis = startedAtMillis,
+                    completedAtMillis = completedAtMillis,
+                    result = null,
+                    errorMessage = runOutcome.exceptionOrNull()?.message ?: "Unknown workflow replay error",
+                )
+            }
+
+            runOnUiThread {
+                val steps = if (runOutcome.isFailure) {
+                    timelineBuilder.snapshot + timelineBuilder.failureStop(
+                        "Workflow replay failed: ${runOutcome.exceptionOrNull()?.message.orEmpty()}"
+                    )
+                } else {
+                    timelineBuilder.snapshot
+                }
+                if (cancellationSignal.get()) {
+                    setRunState(AgentRunState.CANCELLED)
+                } else if (runOutcome.isFailure ||
+                    (record.result?.events?.any { it is AgentEvent.ToolFailed || it is AgentEvent.PolicyBlocked } == true)
+                ) {
+                    setRunState(AgentRunState.FAILED)
+                    rejectPendingApprovals()
+                } else {
+                    setRunState(AgentRunState.COMPLETED)
+                }
+                refreshStepTimeline(stepTimeline, steps, true)
+                finishAgentChatRun(
+                    record = record,
+                    runOutcome = runOutcome,
+                    workingIndex = workingIndex,
+                    resumeOriginalTask = null,
                     timelineSteps = steps,
                 )
             }

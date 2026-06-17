@@ -6,6 +6,7 @@ import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.ToolResult
+import dev.touchpilot.app.workflow.WorkflowStepPolicyPreview
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -318,6 +319,129 @@ sealed class AgentEvent(
         }
     }
 
+    data class WorkflowStepStarted(
+        val workflowId: String,
+        val workflowTitle: String,
+        val stepIndex: Int,
+        val totalSteps: Int,
+        val tool: String,
+        val args: Map<String, String>,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.WORKFLOW_STEP_STARTED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "workflow_id" to workflowId,
+                "workflow_title" to workflowTitle.redacted(redactSensitive),
+                "step_index" to stepIndex,
+                "total_steps" to totalSteps,
+                "tool" to tool,
+                "args" to args.redacted(redactSensitive)
+            )
+        }
+    }
+
+    data class WorkflowStepCompleted(
+        val workflowId: String,
+        val stepIndex: Int,
+        val totalSteps: Int,
+        val tool: String,
+        val success: Boolean,
+        val message: String = "",
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.WORKFLOW_STEP_COMPLETED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "workflow_id" to workflowId,
+                "step_index" to stepIndex,
+                "total_steps" to totalSteps,
+                "tool" to tool,
+                "success" to success,
+                "message" to message.redacted(redactSensitive)
+            )
+        }
+    }
+
+    data class WorkflowReplayDone(
+        val workflowId: String,
+        val title: String,
+        val success: Boolean,
+        val completedSteps: Int,
+        val totalSteps: Int,
+        val message: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.WORKFLOW_REPLAY_DONE
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "workflow_id" to workflowId,
+                "title" to title.redacted(redactSensitive),
+                "success" to success,
+                "completed_steps" to completedSteps,
+                "total_steps" to totalSteps,
+                "message" to message.redacted(redactSensitive)
+            )
+        }
+    }
+
+    data class WorkflowPreflightWarning(
+        val workflowId: String,
+        val expectedPackage: String,
+        val expectedLabel: String?,
+        val currentPackage: String?,
+        val currentLabel: String?,
+        val userMessage: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.WORKFLOW_PREFLIGHT_WARNING
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "workflow_id" to workflowId,
+                "expected_package" to expectedPackage,
+                "expected_label" to expectedLabel?.redacted(redactSensitive),
+                "current_package" to currentPackage,
+                "current_label" to currentLabel?.redacted(redactSensitive),
+                "user_message" to userMessage.redacted(redactSensitive)
+            )
+        }
+    }
+
+    data class WorkflowPolicyPreview(
+        val workflowId: String,
+        val workflowTitle: String,
+        val summary: String,
+        val steps: List<WorkflowStepPolicyPreview>,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.WORKFLOW_POLICY_PREVIEW
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "workflow_id" to workflowId,
+                "workflow_title" to workflowTitle.redacted(redactSensitive),
+                "summary" to summary.redacted(redactSensitive),
+                "steps" to steps.map { step ->
+                    mapOf(
+                        "step_index" to step.stepIndex,
+                        "tool" to step.tool,
+                        "outcome" to step.outcome.name.lowercase(),
+                        "note" to step.note.redacted(redactSensitive),
+                    )
+                }
+            )
+        }
+    }
+
     companion object {
         private var sequence = 0L
 
@@ -412,4 +536,9 @@ enum class AgentEventType(val wireName: String) {
     TRACE_RECORDED("trace_recorded"),
     WORKFLOW_STEP_VERIFICATION_PASSED("workflow_step_verification_passed"),
     WORKFLOW_STEP_VERIFICATION_FAILED("workflow_step_verification_failed"),
+    WORKFLOW_STEP_STARTED("workflow_step_started"),
+    WORKFLOW_STEP_COMPLETED("workflow_step_completed"),
+    WORKFLOW_REPLAY_DONE("workflow_replay_done"),
+    WORKFLOW_PREFLIGHT_WARNING("workflow_preflight_warning"),
+    WORKFLOW_POLICY_PREVIEW("workflow_policy_preview")
 }

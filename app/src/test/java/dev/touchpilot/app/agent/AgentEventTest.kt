@@ -144,4 +144,59 @@ class AgentEventTest {
         assertEquals("Cancelled by user", json.getJSONObject("payload").getString("reason"))
         assertEquals(AgentEventType.RUN_CANCELLED, event.type)
     }
+
+    @Test
+    fun workflowReplayEventsSerializeCorrectly() {
+        val started = AgentEvent.WorkflowStepStarted(
+            workflowId = "wf-1",
+            workflowTitle = "Open Settings",
+            stepIndex = 1,
+            totalSteps = 2,
+            tool = "open_app",
+            args = mapOf("target" to "Settings"),
+        )
+        val completed = AgentEvent.WorkflowStepCompleted(
+            workflowId = "wf-1",
+            stepIndex = 1,
+            totalSteps = 2,
+            tool = "open_app",
+            success = true,
+            message = "opened",
+        )
+        val done = AgentEvent.WorkflowReplayDone(
+            workflowId = "wf-1",
+            title = "Open Settings",
+            success = true,
+            completedSteps = 2,
+            totalSteps = 2,
+            message = "completed",
+        )
+
+        assertEquals("workflow_step_started", started.toJson().getString("type"))
+        assertEquals("workflow_step_completed", completed.toJson().getString("type"))
+        assertEquals("workflow_replay_done", done.toJson().getString("type"))
+        assertEquals(1, started.toJson().getJSONObject("payload").getInt("step_index"))
+        assertTrue(completed.toJson().getJSONObject("payload").getBoolean("success"))
+    }
+
+    @Test
+    fun workflowPolicyPreviewEventSerializesCorrectly() {
+        val event = AgentEvent.WorkflowPolicyPreview(
+            workflowId = "wf-1",
+            workflowTitle = "Send message",
+            summary = "1 of 2 steps will ask for approval during replay.",
+            steps = listOf(
+                dev.touchpilot.app.workflow.WorkflowStepPolicyPreview(
+                    stepIndex = 1,
+                    tool = "tap",
+                    outcome = dev.touchpilot.app.workflow.WorkflowStepPolicyOutcome.NEEDS_APPROVAL,
+                    note = "Approval required",
+                )
+            ),
+        )
+
+        val json = event.toJson()
+        assertEquals("workflow_policy_preview", json.getString("type"))
+        assertEquals("Send message", json.getJSONObject("payload").getString("workflow_title"))
+    }
 }

@@ -519,6 +519,25 @@ object WorkflowParameters {
             placeholderName(value)?.let { values[it] } ?: value
         }
     }
+
+    fun resolveValues(definition: WorkflowDefinition, supplied: Map<String, String>): Map<String, String> {
+        val resolved = linkedMapOf<String, String>()
+        for (parameter in definition.parameters) {
+            val value = supplied[parameter.name] ?: parameter.default
+            if (value == null && parameter.required) {
+                error("Missing required workflow parameter: ${parameter.name}")
+            }
+            if (value != null) {
+                resolved[parameter.name] = value
+            }
+        }
+        supplied.forEach { (name, value) ->
+            if (name !in resolved) {
+                resolved[name] = value
+            }
+        }
+        return resolved
+    }
 }
 
 /** Result of parsing a workflow JSON document. */

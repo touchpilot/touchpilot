@@ -106,6 +106,7 @@ class ChatScreenRenderer(
                 activity = activity,
                 openSkillDetail = openSkillDetail,
             ).render(event.card)
+            is ChatEvent.WorkflowPolicyPreview -> WorkflowStepPreviewRenderer(activity).render(event)
             is ChatEvent.ApprovalPrompt -> ChatDecisionCardRenderer(
                 activity = activity,
                 refreshChatScreen = refreshChatScreen

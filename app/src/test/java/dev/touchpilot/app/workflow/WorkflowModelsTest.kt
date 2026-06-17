@@ -2,6 +2,7 @@ package dev.touchpilot.app.workflow
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import org.json.JSONObject
 
 class WorkflowModelsTest {
@@ -72,4 +73,53 @@ class WorkflowModelsTest {
             state,
         )
     }
+
+    @Test
+    fun workflowDefinitionRequiresNonBlankIdAndTitle() {
+        assertFailsWith<IllegalArgumentException> {
+            WorkflowDefinition(
+                id = "",
+                title = "Test",
+                steps = listOf(step("observe_screen")),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            WorkflowDefinition(
+                id = "wf-1",
+                title = "",
+                steps = listOf(step("observe_screen")),
+            )
+        }
+    }
+
+    @Test
+    fun workflowDefinitionRequiresAtLeastOneStep() {
+        assertFailsWith<IllegalArgumentException> {
+            WorkflowDefinition(id = "wf-1", title = "Test", steps = emptyList())
+        }
+    }
+
+    @Test
+    fun workflowParametersResolveValuesWithDefaultsAndSupplied() {
+        val definition = WorkflowDefinition(
+            id = "wf-1",
+            title = "Test",
+            parameters = listOf(
+                WorkflowParameter(name = "app_name", default = "Settings"),
+                WorkflowParameter(name = "user_name", required = true),
+            ),
+            steps = listOf(step("open_app")),
+        )
+
+        val resolved = WorkflowParameters.resolveValues(
+            definition,
+            mapOf("user_name" to "Alex", "extra" to "bonus"),
+        )
+
+        assertEquals("Settings", resolved["app_name"])
+        assertEquals("Alex", resolved["user_name"])
+        assertEquals("bonus", resolved["extra"])
+    }
+
+    private fun step(tool: String, id: String = "step-1") = WorkflowStep(id = id, tool = tool)
 }
