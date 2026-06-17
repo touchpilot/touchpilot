@@ -27,6 +27,7 @@ import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.memory.SharedPreferencesSkillStore
 import dev.touchpilot.app.memory.SkillRegistry
 import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.navigation.AppSection
@@ -87,13 +88,11 @@ class MainActivity : Activity() {
             observeScreen = { toolExecutor.observeScreen() }
         )
         localModelRuntime = LiteRtCommandModelRuntime(this)
-        selectedSkillId = preferences.getString("active_skill", null)
         skillRegistry = SkillRegistry(
-            installedSkills = skills,
-            disabledSkillIds = loadDisabledSkillIds(),
-            activeSkillId = selectedSkillId
+            skills = skills,
+            preferences = SharedPreferencesSkillStore(preferences)
         )
-        persistSkillRegistry()
+        selectedSkillId = skillRegistry.activeSkill()?.id
 
         reasoningCore = DefaultLocalReasoningCore(
             invocation = defaultAgentRunInvocation(
@@ -104,7 +103,7 @@ class MainActivity : Activity() {
                 localModelRuntime = localModelRuntime
             ),
             sessionContext = { currentReasoningContext() },
-            availableSkills = { skillRegistry.enabledSkills },
+            availableSkills = { skillRegistry.enabledSkills() },
             screenContextProvider = { AccessibilityBridge.observeScreenContext() }
         )
         agentRunController = AgentRunController(
@@ -202,7 +201,6 @@ class MainActivity : Activity() {
             scrollView = scrollView,
             contentRoot = contentRoot,
             conversation = conversation,
-            statusPill = ::statusPill,
             agentRunState = { agentRunController.runState },
             runtimeLabel = { currentProviderMode().label() },
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
@@ -247,24 +245,22 @@ class MainActivity : Activity() {
     }
 
     private fun commitSelectedSkill(id: String?) {
-        skillRegistry = skillRegistry.select(id)
-        selectedSkillId = skillRegistry.activeSkillId
+        skillRegistry.setActiveSkill(id)
+        selectedSkillId = skillRegistry.activeSkill()?.id
         expandedSkillReferenceId = when {
             selectedSkillId == null -> null
             expandedSkillReferenceId == selectedSkillId -> null
             else -> selectedSkillId
         }
-        persistSkillRegistry()
         showSection(AppSection.SETTINGS)
     }
 
     private fun setSkillEnabled(id: String, enabled: Boolean) {
-        skillRegistry = skillRegistry.setEnabled(id, enabled)
-        selectedSkillId = skillRegistry.activeSkillId
+        skillRegistry.setEnabled(id, enabled)
+        selectedSkillId = skillRegistry.activeSkill()?.id
         if (!skillRegistry.isEnabled(id) && expandedSkillReferenceId == id) {
             expandedSkillReferenceId = null
         }
-        persistSkillRegistry()
         showSection(AppSection.SETTINGS)
     }
 
@@ -273,9 +269,7 @@ class MainActivity : Activity() {
             activity = this,
             contentRoot = contentRoot,
             toolExecutionController = toolExecutionController(),
-            statusPill = ::statusPill,
             openAccessibilitySettings = ::openAccessibilitySettings,
-            toolsResult = sectionResults::forTools,
             refreshToolsScreen = { showSection(AppSection.TOOLS) },
             hideKeyboard = ::hideKeyboard,
             bindKeyboardScrollSpacer = ::bindKeyboardScrollSpacer,
@@ -291,10 +285,6 @@ class MainActivity : Activity() {
             activity = this,
             toolExecutor = toolExecutor,
             callbacks = object : ToolExecutionCallbacks {
-                override fun recordToolsResult(message: String) {
-                    sectionResults.recordToolsResult(message)
-                }
-
                 override fun refreshDeveloperLogs() {
                     refreshExecutionLog()
                 }
@@ -379,10 +369,7 @@ class MainActivity : Activity() {
         return LogsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
-            latestResult = sectionResults::forLogs,
-            exportDebugTrace = ::exportDebugTrace,
-            recordLogsResult = sectionResults::recordLogsResult,
-            refreshLogsScreen = { showSection(AppSection.LOGS) }
+            exportDebugTrace = ::exportDebugTrace
         )
     }
 
@@ -405,20 +392,7 @@ class MainActivity : Activity() {
     }
 
     private fun selectedSkill(): Skill? {
-        return skillRegistry.activeSkill
-    }
-
-    private fun loadDisabledSkillIds(): Set<String> {
-        return preferences.getStringSet("disabled_skills", emptySet()).orEmpty()
-            .filter { id -> skills.any { skill -> skill.id == id } }
-            .toSet()
-    }
-
-    private fun persistSkillRegistry() {
-        preferences.edit()
-            .putString("active_skill", skillRegistry.activeSkillId)
-            .putStringSet("disabled_skills", skillRegistry.disabledSkillIds)
-            .apply()
+        return skillRegistry.activeSkill()
     }
 
     private fun statusPill(): View {
@@ -462,9 +436,7 @@ class MainActivity : Activity() {
             runId = navigationController.activeRunDetailId,
             findAgentRun = ::findAgentRun,
             closeRunDetail = ::closeRunDetail,
-            exportRunTrace = ::exportRunTrace,
-            recordLogsResult = sectionResults::recordLogsResult,
-            refreshCurrentSection = { showSection(navigationController.activeSection) }
+            exportRunTrace = ::exportRunTrace
         ).render()
     }
 

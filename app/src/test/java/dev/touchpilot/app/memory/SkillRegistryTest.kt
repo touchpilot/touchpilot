@@ -6,6 +6,19 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+private class FakeSkillPreferences(
+    disabledIds: Set<String> = emptySet(),
+    activeId: String? = null
+) : SkillPreferences {
+    private var disabled = disabledIds.toMutableSet()
+    private var active = activeId
+
+    override fun disabledSkillIds(): Set<String> = disabled.toSet()
+    override fun setDisabledSkillIds(ids: Set<String>) { disabled = ids.toMutableSet() }
+    override fun activeSkillId(): String? = active
+    override fun setActiveSkillId(id: String?) { active = id }
+}
+
 class SkillRegistryTest {
     private val settings = Skill(
         id = "settings",
@@ -22,9 +35,12 @@ class SkillRegistryTest {
 
     @Test
     fun allInstalledSkillsAreEnabledByDefault() {
-        val registry = SkillRegistry(installedSkills = listOf(settings, browser))
+        val registry = SkillRegistry(
+            skills = listOf(settings, browser),
+            preferences = FakeSkillPreferences()
+        )
 
-        assertEquals(listOf(settings, browser), registry.enabledSkills)
+        assertEquals(listOf(settings, browser), registry.enabledSkills())
         assertTrue(registry.isEnabled("settings"))
         assertTrue(registry.isEnabled("browser"))
     }
@@ -32,46 +48,49 @@ class SkillRegistryTest {
     @Test
     fun disabledSkillsAreExcludedFromEnabledSkills() {
         val registry = SkillRegistry(
-            installedSkills = listOf(settings, browser),
-            disabledSkillIds = setOf("browser")
+            skills = listOf(settings, browser),
+            preferences = FakeSkillPreferences(disabledIds = setOf("browser"))
         )
 
-        assertEquals(listOf(settings), registry.enabledSkills)
+        assertEquals(listOf(settings), registry.enabledSkills())
         assertFalse(registry.isEnabled("browser"))
     }
 
     @Test
     fun disablingActiveSkillClearsActiveSelection() {
         val registry = SkillRegistry(
-            installedSkills = listOf(settings, browser),
-            activeSkillId = "browser"
-        ).setEnabled("browser", enabled = false)
+            skills = listOf(settings, browser),
+            preferences = FakeSkillPreferences(activeId = "browser")
+        )
+        registry.setEnabled("browser", enabled = false)
 
-        assertNull(registry.activeSkillId)
-        assertNull(registry.activeSkill)
+        assertNull(registry.activeSkill())
         assertFalse(registry.isEnabled("browser"))
     }
 
     @Test
     fun selectingDisabledSkillFailsClosed() {
         val registry = SkillRegistry(
-            installedSkills = listOf(settings, browser),
-            disabledSkillIds = setOf("browser"),
-            activeSkillId = "settings"
-        ).select("browser")
+            skills = listOf(settings, browser),
+            preferences = FakeSkillPreferences(
+                disabledIds = setOf("browser"),
+                activeId = "settings"
+            )
+        )
+        registry.setActiveSkill("browser")
 
-        assertNull(registry.activeSkillId)
-        assertNull(registry.activeSkill)
+        assertNull(registry.activeSkill())
     }
 
     @Test
     fun enablingSkillMakesItSelectableAgain() {
         val registry = SkillRegistry(
-            installedSkills = listOf(settings, browser),
-            disabledSkillIds = setOf("browser")
-        ).setEnabled("browser", enabled = true).select("browser")
+            skills = listOf(settings, browser),
+            preferences = FakeSkillPreferences(disabledIds = setOf("browser"))
+        )
+        registry.setEnabled("browser", enabled = true)
+        registry.setActiveSkill("browser")
 
-        assertEquals("browser", registry.activeSkillId)
-        assertEquals(browser, registry.activeSkill)
+        assertEquals(browser, registry.activeSkill())
     }
 }
