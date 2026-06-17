@@ -40,14 +40,18 @@ import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.AppShellRenderer
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.RuntimeIndicator
 import dev.touchpilot.app.ui.label
 import dev.touchpilot.app.ui.shortLine
 import dev.touchpilot.app.ui.timelineCard
+import dev.touchpilot.app.ui.welcomeDetail
+import dev.touchpilot.app.ui.workingDetail
 import dev.touchpilot.app.ui.chat.ChatEvent
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
 import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
+import dev.touchpilot.app.ui.settings.SkillDetailRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import java.io.File
 
@@ -115,12 +119,13 @@ class MainActivity : Activity() {
             refreshExecutionLog = ::refreshExecutionLog,
             refreshStatus = ::refreshStatus,
             refreshStepTimeline = ::refreshStepTimeline,
+            runtimeWorkingDetail = { currentRuntimeIndicator().workingDetail() },
         )
 
         if (conversation.isEmpty()) {
             conversation += ChatEvent.Agent(
                 "What would you like me to do?",
-                "Local router is ready for simple Android actions."
+                currentRuntimeIndicator().welcomeDetail()
             )
         }
 
@@ -202,10 +207,11 @@ class MainActivity : Activity() {
             contentRoot = contentRoot,
             conversation = conversation,
             agentRunState = { agentRunController.runState },
-            runtimeLabel = { currentProviderMode().label() },
+            runtimeIndicator = ::currentRuntimeIndicator,
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
+            openSkillDetail = ::openSkillDetail,
             refreshChatScreen = { showSection(AppSection.CHAT) },
         )
     }
@@ -334,6 +340,11 @@ class MainActivity : Activity() {
     }
 
     private fun renderSettingsScreen() {
+        if (navigationController.activeSkillDetailId != null) {
+            renderSkillDetailScreen()
+            return
+        }
+
         SettingsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
@@ -358,6 +369,33 @@ class MainActivity : Activity() {
     }
 
     private val sectionResults = SectionResultStore()
+
+    private fun openSkillDetail(skillId: String) {
+        navigationController.openSkillDetail(skillId)
+        showSection(AppSection.SETTINGS)
+    }
+
+    private fun closeSkillDetail() {
+        navigationController.closeSkillDetail()
+        showSection(AppSection.SETTINGS)
+    }
+
+    private fun findSkill(skillId: String): Skill? {
+        return skillRegistry.allSkills().firstOrNull { it.id == skillId }
+    }
+
+    private fun renderSkillDetailScreen() {
+        SkillDetailRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            skillId = navigationController.activeSkillDetailId,
+            findSkill = ::findSkill,
+            selectedSkillId = { selectedSkillId },
+            closeSkillDetail = ::closeSkillDetail,
+            commitSelectedSkill = ::commitSelectedSkill,
+            refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
+        ).render()
+    }
 
     private fun refreshExecutionLog() {
         if (::executionLogList.isInitialized) {
@@ -389,6 +427,10 @@ class MainActivity : Activity() {
             AgentProviderMode.LOCAL_MODEL.name -> AgentProviderMode.LOCAL_MODEL
             else -> AgentProviderMode.LOCAL_ROUTER
         }
+    }
+
+    private fun currentRuntimeIndicator(): RuntimeIndicator {
+        return RuntimeIndicator(currentProviderMode(), localModelRuntime.status())
     }
 
     private fun selectedSkill(): Skill? {

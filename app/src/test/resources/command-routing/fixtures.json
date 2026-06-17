@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "go_back",
+      "description": "Canonical back navigation phrase.",
+      "task": "Go back",
+      "expected_tool": "press_back",
+      "expected_args": {}
+    },
+    {
+      "id": "navigate_back_paraphrase",
+      "description": "Back paraphrase should route to press_back.",
+      "task": "navigate back",
+      "expected_tool": "press_back",
+      "expected_args": {}
+    },
+    {
+      "id": "previous_screen_paraphrase",
+      "description": "Previous-screen paraphrase should route to press_back.",
+      "task": "go to the previous screen",
+      "expected_tool": "press_back",
+      "expected_args": {}
+    },
+    {
+      "id": "go_home",
+      "description": "Canonical home navigation phrase.",
+      "task": "go home",
+      "expected_tool": "press_home",
+      "expected_args": {}
+    },
+    {
+      "id": "home_screen_paraphrase",
+      "description": "Home-screen paraphrase should route to press_home.",
+      "task": "show home screen",
+      "expected_tool": "press_home",
+      "expected_args": {}
+    },
+    {
+      "id": "scroll_up",
+      "description": "Scroll up should route to backward scroll.",
+      "task": "scroll up",
+      "expected_tool": "scroll",
+      "expected_args": {
+        "direction": "backward"
+      }
+    },
+    {
+      "id": "swipe_up_paraphrase",
+      "description": "Swipe-up paraphrase should route to backward scroll.",
+      "task": "swipe up",
+      "expected_tool": "scroll",
+      "expected_args": {
+        "direction": "backward"
+      }
+    },
+    {
+      "id": "scroll_down",
+      "description": "Scroll down should route to forward scroll.",
+      "task": "scroll down",
+      "expected_tool": "scroll",
+      "expected_args": {
+        "direction": "forward"
+      }
+    },
+    {
+      "id": "scroll_back_matches_gate",
+      "description": "Scroll back should follow IntentGate and route to forward scroll.",
+      "task": "scroll back",
+      "expected_tool": "scroll",
+      "expected_args": {
+        "direction": "forward"
+      }
+    },
+    {
+      "id": "swipe_down_paraphrase",
+      "description": "Swipe-down paraphrase should route to forward scroll.",
+      "task": "swipe down",
+      "expected_tool": "scroll",
+      "expected_args": {
+        "direction": "forward"
+      }
+    },
+    {
+      "id": "open_settings",
+      "description": "Open-app phrase should extract the target.",
+      "task": "Open Settings",
+      "expected_tool": "open_app",
+      "expected_args": {
+        "target": "settings"
+      }
+    },
+    {
+      "id": "launch_maps",
+      "description": "Launch phrase should route to open_app.",
+      "task": "launch maps",
+      "expected_tool": "open_app",
+      "expected_args": {
+        "target": "maps"
+      }
+    },
+    {
+      "id": "start_chrome_paraphrase",
+      "description": "Start phrase should route to open_app.",
+      "task": "start chrome",
+      "expected_tool": "open_app",
+      "expected_args": {
+        "target": "chrome"
+      }
+    },
+    {
+      "id": "open_target_with_back_word",
+      "description": "Open-app targets containing back should not route to press_back.",
+      "task": "open back button",
+      "expected_tool": "open_app",
+      "expected_args": {
+        "target": "back button"
+      }
+    },
+    {
+      "id": "open_target_with_home_word",
+      "description": "Open-app targets containing home should not route to press_home.",
+      "task": "open home assistant",
+      "expected_tool": "open_app",
+      "expected_args": {
+        "target": "home assistant"
+      }
+    },
+    {
+      "id": "tap_ok",
+      "description": "Tap phrase should extract visible text.",
+      "task": "tap OK",
+      "expected_tool": "tap",
+      "expected_args": {
+        "text": "ok"
+      }
+    },
+    {
+      "id": "click_wifi_paraphrase",
+      "description": "Click paraphrase should route to tap.",
+      "task": "click Wi-Fi",
+      "expected_tool": "tap",
+      "expected_args": {
+        "text": "wi-fi"
+      }
+    },
+    {
+      "id": "tap_target_with_scroll_word",
+      "description": "Tap targets containing scroll should not route to scroll tool.",
+      "task": "tap scroll bar",
+      "expected_tool": "tap",
+      "expected_args": {
+        "text": "scroll bar"
+      }
+    },
+    {
+      "id": "tap_target_with_back_word",
+      "description": "Tap targets containing back should not route to press_back.",
+      "task": "tap back arrow",
+      "expected_tool": "tap",
+      "expected_args": {
+        "text": "back arrow"
+      }
+    },
+    {
+      "id": "feedback_not_back",
+      "description": "Substring back in feedback should not route.",
+      "task": "give feedback",
+      "expect_no_route": true
+    },
+    {
+      "id": "homemade_not_home",
+      "description": "Substring home in homemade should not route.",
+      "task": "buy homemade pizza",
+      "expect_no_route": true
+    },
+    {
+      "id": "scrollbar_not_scroll",
+      "description": "Substring scroll in scrollbar should not route.",
+      "task": "the scrollbar is broken",
+      "expect_no_route": true
+    },
+    {
+      "id": "ambiguous_wifi_toggle",
+      "description": "Unsupported ambiguous tasks should not route.",
+      "task": "Find the Wi-Fi toggle",
+      "expect_no_route": true
+    },
+    {
+      "id": "skip_dispatched_back",
+      "description": "Already-dispatched back should not route again.",
+      "task": "go back",
+      "context": "{\"tool\":\"press_back\",\"args\":{}}",
+      "expect_no_route": true
+    },
+    {
+      "id": "skip_dispatched_scroll",
+      "description": "Already-dispatched scroll should not route again.",
+      "task": "scroll down",
+      "context": "{\"tool\":\"scroll\",\"args\":{\"direction\":\"forward\"}}",
+      "expect_no_route": true
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "role": "tool_selection",
+  "description": "Given a user request and the current screen, choose the single Android tool to call next. Selectors and arguments are covered by the argument-extraction role.",
+  "cases": [
+    {
+      "id": "back",
+      "description": "Navigate back.",
+      "input": { "task": "go back" },
+      "expected": { "tool": "press_back" }
+    },
+    {
+      "id": "home",
+      "description": "Go to the home screen.",
+      "input": { "task": "go to the home screen" },
+      "expected": { "tool": "press_home" }
+    },
+    {
+      "id": "open_app",
+      "description": "Launch an app by name.",
+      "input": { "task": "open Settings" },
+      "expected": { "tool": "open_app" }
+    },
+    {
+      "id": "scroll",
+      "description": "Scroll the current list.",
+      "input": { "task": "scroll down" },
+      "expected": { "tool": "scroll" }
+    },
+    {
+      "id": "tap",
+      "description": "Tap a labelled control.",
+      "input": { "task": "tap Wi-Fi" },
+      "expected": { "tool": "tap" }
+    },
+    {
+      "id": "observe",
+      "description": "Inspect the current screen before deciding the next action.",
+      "input": { "task": "read what is on the screen" },
+      "expected": { "tool": "observe_screen_context" }
+    },
+    {
+      "id": "type",
+      "description": "Enter text into the focused field.",
+      "input": { "task": "type hello world in the search box" },
+      "expected": { "tool": "type_text" }
+    }
+  ]
+}

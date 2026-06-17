@@ -14,6 +14,7 @@ import dev.touchpilot.app.agent.AgentStepStopReason
 import dev.touchpilot.app.agent.AgentStepTimelineBuilder
 import dev.touchpilot.app.agent.ConversationalGate
 import dev.touchpilot.app.agent.LocalReasoningCore
+import dev.touchpilot.app.agent.SkillUseCardModel
 import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -21,7 +22,6 @@ import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.chat.ApprovalState
 import dev.touchpilot.app.ui.chat.ChatEvent
-import dev.touchpilot.app.ui.label
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -30,6 +30,7 @@ class AgentRunController(
     private val reasoningCore: LocalReasoningCore,
     private val conversation: MutableList<ChatEvent>,
     private val currentProviderMode: () -> AgentProviderMode,
+    private val runtimeWorkingDetail: () -> String,
     private val runOnUiThread: (() -> Unit) -> Unit,
     private val showChat: () -> Unit,
     private val refreshExecutionLog: () -> Unit,
@@ -78,7 +79,7 @@ class AgentRunController(
         val workingIndex = conversation.size
         cancellationSignal.set(false)
         setRunState(AgentRunState.RUNNING)
-        conversation += ChatEvent.Working("Working on it.", "Runtime: ${currentProviderMode().label()}")
+        conversation += ChatEvent.Working("Working on it.", runtimeWorkingDetail())
         val stepTimeline = ChatEvent.StepTimeline()
         conversation += stepTimeline
         showChat()
@@ -101,11 +102,24 @@ class AgentRunController(
 
         Thread {
             val timelineBuilder = AgentStepTimelineBuilder()
+            var skillCardAdded = false
             val runOutcome = runCatching {
                 reasoningCore.run(
                     task = agentTask,
                     timeline = timelineBuilder,
-                    listener = AgentEventListener {
+                    listener = AgentEventListener { event ->
+                        if (event is AgentEvent.SkillActive && !skillCardAdded) {
+                            skillCardAdded = true
+                            runOnUiThread {
+                                val insertIndex = conversation.indexOfFirst { it is ChatEvent.User }
+                                    .let { if (it >= 0) it + 1 else conversation.size }
+                                conversation.add(
+                                    insertIndex,
+                                    ChatEvent.SkillUse(SkillUseCardModel.from(event))
+                                )
+                                showChat()
+                            }
+                        }
                         runOnUiThread {
                             refreshStepTimeline(stepTimeline, timelineBuilder.snapshot, false)
                         }
@@ -273,7 +287,10 @@ class AgentRunController(
             result?.stopReason == AgentStepStopReason.COMPLETED &&
                 isInformationalAssistantRun(result) -> {
                 val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().last()
-                conversation += ChatEvent.Agent(assistant.text, assistant.detail)
+                conversation += ChatEvent.ScreenSummary(
+                    summary = assistant.text,
+                    suggestions = assistant.suggestions,
+                )
                 ToolExecutionLog.recordChat(
                     name = "assistant_message",
                     actor = "TouchPilot",

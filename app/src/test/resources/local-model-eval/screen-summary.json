@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "role": "screen_summary",
+  "description": "Given a normalized screen context, produce a one-line summary and a short list of safe suggested actions. Back and home are always offered while the screen has readable content; an empty screen returns the weak-screen message with no tap suggestions.",
+  "cases": [
+    {
+      "id": "settings_list",
+      "description": "A content screen names the app and offers tap targets plus safe navigation.",
+      "input": {
+        "screen": {
+          "app_label": "Settings",
+          "package_name": "com.android.settings",
+          "window_title": "Network & internet",
+          "nodes": [
+            { "node_id": "0.0", "role": "BUTTON", "text": "Wi-Fi", "bounds": "0,0,100,60", "clickable": true },
+            { "node_id": "0.1", "role": "BUTTON", "text": "Bluetooth", "bounds": "0,60,100,120", "clickable": true }
+          ]
+        }
+      },
+      "expected": {
+        "sentence_contains": ["Settings"],
+        "suggested_tools": ["tap", "press_back", "press_home"]
+      }
+    },
+    {
+      "id": "scrollable_list",
+      "description": "A scrollable screen also suggests scrolling.",
+      "input": {
+        "screen": {
+          "app_label": "Files",
+          "package_name": "com.android.documentsui",
+          "window_title": "Recent",
+          "nodes": [
+            { "node_id": "0.0", "role": "BUTTON", "text": "Downloads", "bounds": "0,0,100,60", "clickable": true },
+            { "node_id": "0.1", "role": "LIST", "text": "", "bounds": "0,60,100,600", "scrollable": true }
+          ]
+        }
+      },
+      "expected": {
+        "sentence_contains": ["Files"],
+        "suggested_tools": ["tap", "scroll", "press_back", "press_home"]
+      }
+    },
+    {
+      "id": "input_field",
+      "description": "A screen with an input field suggests typing into it.",
+      "input": {
+        "screen": {
+          "app_label": "Notes",
+          "package_name": "com.example.notes",
+          "window_title": "New note",
+          "nodes": [
+            { "node_id": "0.0", "role": "INPUT", "text": "Title", "bounds": "0,0,100,60", "input_field": true }
+          ]
+        }
+      },
+      "expected": {
+        "sentence_contains": ["input"],
+        "suggested_tools": ["type_text", "press_back", "press_home"]
+      }
+    },
+    {
+      "id": "empty_screen",
+      "description": "A screen with no readable nodes returns the weak-screen message and no tap suggestions.",
+      "input": {
+        "screen": { "app_label": null, "package_name": null, "window_title": null, "nodes": [] }
+      },
+      "expected": {
+        "weak_screen": true,
+        "suggested_tools": []
+      }
+    }
+  ]
+}

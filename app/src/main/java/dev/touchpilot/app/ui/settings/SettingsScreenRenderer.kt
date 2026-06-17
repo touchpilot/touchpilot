@@ -17,10 +17,14 @@ import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
+import dev.touchpilot.app.ui.RuntimeIndicator
 import dev.touchpilot.app.ui.description
 import dev.touchpilot.app.ui.editText
 import dev.touchpilot.app.ui.formLabel
 import dev.touchpilot.app.ui.label
+import dev.touchpilot.app.ui.settingsChipAccent
+import dev.touchpilot.app.ui.settingsChipText
+import dev.touchpilot.app.ui.settingsDetailBody
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rowButtonParams
 import dev.touchpilot.app.ui.secondaryButton
@@ -138,13 +142,19 @@ class SettingsScreenRenderer(
 
     private fun renderRuntimePanel() {
         val mode = currentProviderMode()
-        val localStatus = localModelRuntime.status()
+        val indicator = RuntimeIndicator(mode, localModelRuntime.status())
         contentRoot.addView(
             activity.summaryCard(
                 title = "Current runtime",
                 value = mode.label(),
-                chipText = if (localStatus.available) "model ready" else "fallback",
-                chipAccent = localStatus.available
+                chipText = indicator.settingsChipText(),
+                chipAccent = indicator.settingsChipAccent()
+            )
+        )
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Runtime status",
+                body = indicator.settingsDetailBody()
             )
         )
 

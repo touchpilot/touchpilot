@@ -42,6 +42,7 @@ class AgentStepTimelineBuilder {
             is AgentEvent.FinalAnswer -> onFinalAnswer(event)
             is AgentEvent.Clarification -> onClarification(event)
             is AgentEvent.RunCancelled -> onRunCancelled(event)
+            is AgentEvent.SkillActive -> Unit
         }
     }
 

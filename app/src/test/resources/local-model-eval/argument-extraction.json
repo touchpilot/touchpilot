@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "role": "argument_extraction",
+  "description": "Given a user request, produce the tool and the structured arguments it needs. Argument keys match the Android tool catalog (target, text, direction).",
+  "cases": [
+    {
+      "id": "open_app_target",
+      "description": "Extract the app/target name for open_app.",
+      "input": { "task": "open Settings" },
+      "expected": { "tool": "open_app", "args": { "target": "Settings" } }
+    },
+    {
+      "id": "tap_text",
+      "description": "Extract the visible label for tap.",
+      "input": { "task": "tap Wi-Fi" },
+      "expected": { "tool": "tap", "args": { "text": "Wi-Fi" } }
+    },
+    {
+      "id": "scroll_direction_down",
+      "description": "Map a 'down' request to a forward scroll.",
+      "input": { "task": "scroll down" },
+      "expected": { "tool": "scroll", "args": { "direction": "forward" } }
+    },
+    {
+      "id": "scroll_direction_up",
+      "description": "Map an 'up' request to a backward scroll.",
+      "input": { "task": "scroll up" },
+      "expected": { "tool": "scroll", "args": { "direction": "backward" } }
+    },
+    {
+      "id": "long_press_text",
+      "description": "Extract the target label for long_press.",
+      "input": { "task": "long press Photos" },
+      "expected": { "tool": "long_press", "args": { "text": "Photos" } }
+    },
+    {
+      "id": "type_value",
+      "description": "Extract the literal text to type.",
+      "input": { "task": "type hello world" },
+      "expected": { "tool": "type_text", "args": { "text": "hello world" } }
+    }
+  ]
+}

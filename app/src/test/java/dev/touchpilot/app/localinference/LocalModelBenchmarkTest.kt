@@ -13,7 +13,7 @@ class LocalModelBenchmarkTest {
                 available = true,
                 runtime = "LiteRT",
                 modelAsset = "models/command_router/model.tflite",
-                version = "tiny-router-1",
+                version = "tiny-router-2",
                 message = "loaded"
             ),
             outputs = listOf(
@@ -80,7 +80,7 @@ class LocalModelBenchmarkTest {
                         available = false,
                         runtime = "LiteRT",
                         modelAsset = "missing.tflite",
-                        version = "tiny-router-1",
+                        version = "tiny-router-2",
                         message = "LiteRT model asset is missing."
                     ),
                     outputs = emptyList()

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "role": "intent_classification",
+  "description": "Given a user request and any loaded skills, choose how the agent should route it before any tool runs: a deterministic command, a known skill, an unsafe request, a clarification, a screen question, or a request that needs the local model.",
+  "cases": [
+    {
+      "id": "exact_back",
+      "description": "A direct navigation phrase routes to a deterministic command.",
+      "input": { "task": "go back" },
+      "expected": { "intent": "exact_command", "tool": "press_back" }
+    },
+    {
+      "id": "exact_open_app",
+      "description": "An open/launch phrase routes to a deterministic command.",
+      "input": { "task": "open Chrome" },
+      "expected": { "intent": "exact_command", "tool": "open_app" }
+    },
+    {
+      "id": "screen_inquiry",
+      "description": "A question about the visible screen is answered from the local screen summary, not a tool run.",
+      "input": { "task": "what screen am I on?" },
+      "expected": { "intent": "screen_inquiry" }
+    },
+    {
+      "id": "unsafe_payment",
+      "description": "A payment workflow is refused before planning.",
+      "input": { "task": "pay my phone bill now" },
+      "expected": { "intent": "unsafe_request", "workflow": "payment" }
+    },
+    {
+      "id": "ambiguous_reference",
+      "description": "An ambiguous reference needs clarification before any action.",
+      "input": { "task": "do the thing" },
+      "expected": { "intent": "clarification_needed" }
+    },
+    {
+      "id": "known_skill",
+      "description": "A request whose wording matches a loaded skill title routes to that skill (execution is still gated by the skill allowlist and policy).",
+      "input": { "task": "use the messages skill to draft a note", "available_skills": ["Messages"] },
+      "expected": { "intent": "known_skill", "skill": "Messages" }
+    },
+    {
+      "id": "needs_local_model",
+      "description": "A multi-step request with no deterministic route defers to the local model.",
+      "input": { "task": "summarize the news articles on this page" },
+      "expected": { "intent": "local_model_needed" }
+    }
+  ]
+}
