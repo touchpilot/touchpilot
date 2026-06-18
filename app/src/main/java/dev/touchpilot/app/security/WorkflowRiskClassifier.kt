@@ -52,6 +52,12 @@ object WorkflowRiskClassifier {
             matched += PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY
         }
 
+        // Argument keys such as api_key or private_key are sensitive even when the
+        // value alone would not trip text heuristics (e.g. opaque sk- tokens).
+        if (hasSensitiveArgumentKey(args)) {
+            matched += PolicyWorkflowClass.UNKNOWN_SENSITIVE
+        }
+
         val haystack = haystackOf(toolName, args, screenText)
 
         // Sending a message needs both a send-like action and a messaging context.
@@ -90,6 +96,14 @@ object WorkflowRiskClassifier {
     private fun isSensitiveTextEntry(toolName: String, args: Map<String, String>): Boolean {
         if (toolName != TYPE_TEXT_TOOL) return false
         return SensitiveTextRedactor.containsSensitiveText(args["text"].orEmpty())
+    }
+
+    private val sensitiveArgumentKeyPattern = Regex(
+        "(?i)(?:password|passcode|secret|token|api[_-]?key|private[_-]?key|credential|auth|authorization)"
+    )
+
+    private fun hasSensitiveArgumentKey(args: Map<String, String>): Boolean {
+        return args.keys.any { sensitiveArgumentKeyPattern.containsMatchIn(it) }
     }
 
     private fun isMessageSend(toolName: String, args: Map<String, String>, haystack: String): Boolean {

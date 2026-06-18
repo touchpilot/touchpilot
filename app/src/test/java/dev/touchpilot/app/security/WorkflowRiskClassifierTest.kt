@@ -115,6 +115,30 @@ class WorkflowRiskClassifierTest {
     }
 
     @Test
+    fun classifiesSensitiveArgumentKeyWhenValueLooksBenign() {
+        assertEquals(
+            PolicyWorkflowClass.UNKNOWN_SENSITIVE,
+            classOf("tap", mapOf("api_key" to "sk-test"), screenText = "Neutral screen"),
+        )
+        assertEquals(
+            PolicyWorkflowClass.UNKNOWN_SENSITIVE,
+            classOf("observe_screen", mapOf("private-key" to "MIIE"), screenText = ""),
+        )
+        assertEquals(
+            PolicyWorkflowClass.UNKNOWN_SENSITIVE,
+            classOf("tap", mapOf("credential" to "json-secret"), screenText = "Form"),
+        )
+    }
+
+    @Test
+    fun benignArgumentKeysRemainGeneral() {
+        assertEquals(
+            PolicyWorkflowClass.GENERAL,
+            classOf("tap", mapOf("text" to "Settings", "target" to "OK"), screenText = "Home"),
+        )
+    }
+
+    @Test
     fun ambiguousSensitiveInputFallsBackToUnknownSensitive() {
         assertEquals(
             PolicyWorkflowClass.UNKNOWN_SENSITIVE,
