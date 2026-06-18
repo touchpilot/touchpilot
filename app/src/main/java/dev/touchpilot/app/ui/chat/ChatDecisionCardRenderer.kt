@@ -23,13 +23,15 @@ class ChatDecisionCardRenderer(
     fun approvalCard(event: ChatEvent.ApprovalPrompt): View {
         val request = event.request
         val tool = request.tool
+        val isPending = event.state == ApprovalState.PENDING
+        val strokeColor = when (event.state) {
+            ApprovalState.PENDING -> Theme.Accent
+            ApprovalState.APPROVED -> Theme.Accent
+            ApprovalState.REJECTED -> Theme.Danger
+        }
         val card = MaterialCardView(activity).apply {
             setCardBackgroundColor(Theme.Card)
-            strokeColor = when (event.state) {
-                ApprovalState.PENDING -> Theme.Accent
-                ApprovalState.APPROVED -> Theme.Accent
-                ApprovalState.REJECTED -> Theme.StrokeDark
-            }
+            this.strokeColor = strokeColor
             strokeWidth = 2
             radius = 8f
             cardElevation = 0f
@@ -40,7 +42,7 @@ class ChatDecisionCardRenderer(
         }
 
         val statusLabel = when (event.state) {
-            ApprovalState.PENDING -> "Approval requested"
+            ApprovalState.PENDING -> "Action requires approval"
             ApprovalState.APPROVED -> "Approved"
             ApprovalState.REJECTED -> "Rejected"
         }
@@ -49,19 +51,39 @@ class ChatDecisionCardRenderer(
                 text = request.policy.headline.ifBlank { "$statusLabel - ${tool.name}" }
                 textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
+                setTextColor(strokeColor)
             }
         )
+
+        content.addView(
+            TextView(activity).apply {
+                text = tool.name.replace("_", " ").replaceFirstChar { it.titlecase() }
+                textSize = 15f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 6, 0, 0)
+            }
+        )
+
         content.addView(
             TextView(activity).apply {
                 text = ChatToolTextFormatter.approvalMessage(event.request)
                 textSize = 12.5f
                 setTextColor(Theme.BodyText)
+                setLineSpacing(4f, 1f)
                 setPadding(0, 8, 0, 0)
             }
         )
 
-        if (event.state == ApprovalState.PENDING) {
+        if (isPending) {
+            content.addView(
+                TextView(activity).apply {
+                    text = "This action will run on your device only."
+                    textSize = 11.5f
+                    setTextColor(Theme.MutedText)
+                    setPadding(0, 10, 0, 0)
+                }
+            )
             val buttonRow = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, 14, 0, 0)
