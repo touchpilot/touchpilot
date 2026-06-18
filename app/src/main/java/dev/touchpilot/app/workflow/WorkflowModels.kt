@@ -1,7 +1,6 @@
 package dev.touchpilot.app.workflow
 
 import dev.touchpilot.app.security.PolicyWorkflowClass
-import dev.touchpilot.app.screen.ScreenContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -326,43 +325,6 @@ data class WorkflowStepPolicy(
             val normalized = value.trim().uppercase().replace('-', '_')
             return PolicyWorkflowClass.entries.firstOrNull { it.name == normalized }
         }
-    }
-}
-
-/**
- * Ephemeral recording of a successful agent run. A trace is the input to
- * [WorkflowTraceSerializer]; a [WorkflowDefinition] is the portable output.
- */
-data class WorkflowTrace(
-    val id: String,
-    val title: String,
-    val description: String = "",
-    val task: String = "",
-    val steps: List<WorkflowTraceStep>,
-    val skillId: String? = null,
-    val allowedTools: List<String> = emptyList(),
-    val startedAtMillis: Long = 0L,
-    val completedAtMillis: Long = 0L,
-) {
-    init {
-        require(id.isNotBlank()) { "workflow trace id must not be blank" }
-        require(title.isNotBlank()) { "workflow trace title must not be blank" }
-        require(steps.isNotEmpty()) { "workflow trace must contain at least one step" }
-    }
-}
-
-data class WorkflowTraceStep(
-    val sequenceNumber: Int,
-    val tool: String,
-    val args: Map<String, String> = emptyMap(),
-    val source: String = "",
-    val screenAfter: ScreenContext? = null,
-    val requiresApproval: Boolean? = null,
-    val workflowClass: PolicyWorkflowClass? = null,
-) {
-    init {
-        require(sequenceNumber >= 0) { "sequenceNumber must be non-negative" }
-        require(tool.isNotBlank()) { "workflow trace step tool must not be blank" }
     }
 }
 

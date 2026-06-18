@@ -206,13 +206,17 @@ are approval-sensitive or belong to a workflow risk class:
 
 ## Trace to Workflow Conversion
 
-A successful agent run can be summarized as a [WorkflowTrace] and converted
-into a [WorkflowDefinition] via `WorkflowTraceSerializer`:
+A captured [WorkflowTrace] from #295 (`WorkflowTrace.from(AgentRunRecord)`) is
+converted into a [WorkflowDefinition] via `WorkflowTraceSerializer.toDefinition()`:
 
-1. Each `ACT` agent step becomes a workflow step (`tool` + `args`).
-2. Post-step screen snapshots become `expected_state` predicates.
-3. Argument values that appear in the original user task become parameters.
+1. Each captured ACT step becomes a workflow step (`tool` + `args`).
+2. Verification reasons and tap targets become `expected_state` predicates.
+3. Argument values that appear in the redacted task string become parameters.
 4. Medium/high-risk tools get `policy.requires_approval = true`.
+
+Optional skill context can be attached to the trace with `.copy(skillId = …,
+allowedTools = …)` before serialization. Full screen text is not read from the
+trace — #295 stores only coarse screen signals for privacy.
 
 Developers can hand-edit the generated file to refine parameters, tighten
 expected states, or add policy requirements before replay.
@@ -233,7 +237,9 @@ Invalid files return `WorkflowParseResult.Invalid` with every validation error.
 
 ```text
 app/src/main/java/dev/touchpilot/app/workflow/
-  WorkflowModels.kt              data classes + JSON round-trip
+  WorkflowTrace.kt               captured run projection (#295 foundation)
+  WorkflowTraceStore.kt          session-scoped trace storage (#295)
+  WorkflowModels.kt              WorkflowDefinition schema + JSON round-trip
   WorkflowDefinitionParser.kt    JSON loader + validation
   WorkflowTraceSerializer.kt     WorkflowTrace → WorkflowDefinition
 ```

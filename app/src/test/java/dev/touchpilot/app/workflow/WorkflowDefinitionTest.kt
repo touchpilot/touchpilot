@@ -1,10 +1,5 @@
 package dev.touchpilot.app.workflow
 
-import dev.touchpilot.app.screen.NodeBounds
-import dev.touchpilot.app.screen.NodeRole
-import dev.touchpilot.app.screen.ScreenContext
-import dev.touchpilot.app.screen.ScreenNode
-import dev.touchpilot.app.screen.ScreenText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -146,75 +141,68 @@ class WorkflowDefinitionRoundTripTest {
 
 class WorkflowTraceSerializerTest {
   @Test
-  fun convertsTraceToDefinitionWithInferredParameters() {
+  fun convertsCapturedTraceToDefinition() {
     val trace = WorkflowTrace(
-      id = "run-1",
-      title = "Open Wi-Fi settings",
+      runId = "run-1",
       task = "open Wi-Fi settings",
+      capturedAtMillis = 2_000L,
       steps = listOf(
         WorkflowTraceStep(
-          sequenceNumber = 1,
+          index = 1,
           tool = "open_settings_panel",
           args = mapOf("panel" to "wifi"),
-          screenAfter = settingsScreen(),
+          source = "local_router",
+          succeeded = true,
+          verification = WorkflowTraceVerification(status = "passed", reason = "Wi-Fi visible"),
           requiresApproval = true,
         ),
       ),
+      screenSignals = emptyList(),
+      skillId = "settings",
+      allowedTools = listOf("open_settings_panel"),
     )
 
     val definition = WorkflowTraceSerializer.toDefinition(trace)
 
     assertEquals("open-wi-fi-settings", definition.id)
+    assertEquals("open Wi-Fi settings", definition.title)
     assertEquals(1, definition.steps.size)
     assertEquals("open_settings_panel", definition.steps.first().tool)
-    assertEquals("com.android.settings", definition.steps.first().expectedState?.packageName)
     assertEquals(true, definition.steps.first().policy?.requiresApproval)
+    assertEquals("settings", definition.skillScope?.skillId)
+    assertTrue(definition.steps.first().expectedState?.screenTextContains?.contains("Wi-Fi visible") == true)
   }
 
   @Test
   fun parameterizesArgsWhenValueAppearsInTask() {
     val trace = WorkflowTrace(
-      id = "run-2",
-      title = "Tap Bluetooth",
+      runId = "run-2",
       task = "tap Bluetooth settings",
+      capturedAtMillis = 2_000L,
       steps = listOf(
         WorkflowTraceStep(
-          sequenceNumber = 1,
+          index = 1,
           tool = "tap",
           args = mapOf("text" to "Bluetooth"),
-          screenAfter = settingsScreen(windowTitle = "Bluetooth"),
+          succeeded = true,
+          verification = null,
         ),
       ),
+      screenSignals = emptyList(),
     )
 
     val definition = WorkflowTraceSerializer.toDefinition(trace)
     assertEquals(1, definition.parameters.size)
     assertEquals("{bluetooth}", definition.steps.first().args["text"])
+    assertEquals(
+      listOf("Bluetooth"),
+      definition.steps.first().expectedState?.elementPresent?.map { it.text },
+    )
   }
 
   @Test
   fun slugifyNormalizesTitles() {
     assertEquals("open-wi-fi-settings", WorkflowTraceSerializer.slugify("Open Wi-Fi Settings!"))
-  }
-
-  private fun settingsScreen(windowTitle: String = "Wi-Fi"): ScreenContext {
-    return ScreenContext(
-      packageName = "com.android.settings",
-      windowTitle = windowTitle,
-      nodes = listOf(
-        ScreenNode(
-          role = NodeRole.TEXT,
-          text = ScreenText.of("Wi-Fi"),
-          bounds = NodeBounds(0, 0, 100, 40),
-        ),
-        ScreenNode(
-          role = NodeRole.BUTTON,
-          text = ScreenText.of("Network"),
-          clickable = true,
-          bounds = NodeBounds(0, 50, 100, 90),
-        ),
-      ),
-    )
   }
 }
 

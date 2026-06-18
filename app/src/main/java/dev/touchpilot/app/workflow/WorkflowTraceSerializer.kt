@@ -1,27 +1,22 @@
 package dev.touchpilot.app.workflow
 
-import dev.touchpilot.app.agent.AgentRunRecord
-import dev.touchpilot.app.agent.AgentScreenRecord
-import dev.touchpilot.app.agent.AgentStep
-import dev.touchpilot.app.agent.AgentStepType
-import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.ToolRisk
 
 /**
- * Converts a successful [WorkflowTrace] into a portable [WorkflowDefinition].
+ * Converts a captured [WorkflowTrace] (#295) into a portable [WorkflowDefinition].
  *
  * The serializer infers parameter slots when a tool argument value appears in
- * the original user task, replaces those literals with `{parameter}` placeholders,
- * and derives expected-state predicates from post-step screen snapshots.
+ * the redacted task string, replaces those literals with `{parameter}`
+ * placeholders, and derives expected-state predicates from step arguments and
+ * verification outcomes. Full screen text is intentionally not read from the
+ * trace — #295 stores only coarse screen signals for privacy.
  */
 object WorkflowTraceSerializer {
-    private const val MaxScreenTextSnippets = 5
-    private const val MaxElementPredicates = 3
-
     fun toDefinition(
         trace: WorkflowTrace,
-        workflowId: String = slugify(trace.title.ifBlank { trace.id }),
+        workflowId: String = slugify(trace.task),
+        title: String = trace.task,
     ): WorkflowDefinition {
         val inferredParameters = inferParameters(trace)
         val parameterNames = inferredParameters.map { it.name }.toSet()
@@ -32,7 +27,7 @@ object WorkflowTraceSerializer {
                 id = "step-${index + 1}",
                 tool = step.tool,
                 args = args,
-                expectedState = step.screenAfter?.let { expectedStateFromScreen(it, step) },
+                expectedState = expectedStateFromStep(step),
                 policy = policyFromTraceStep(step),
                 description = "Replay step ${index + 1}: ${step.tool}",
             )
@@ -49,74 +44,12 @@ object WorkflowTraceSerializer {
 
         return WorkflowDefinition(
             id = workflowId,
-            title = trace.title,
-            description = trace.description.ifBlank { trace.task },
+            title = title,
+            description = trace.task,
             parameters = inferredParameters,
             skillScope = skillScope,
             steps = steps,
-            expectedForegroundPackage = trace.steps.lastOrNull()?.screenAfter?.packageName,
         )
-    }
-
-    fun traceFromAgentRun(
-        record: AgentRunRecord,
-        steps: List<AgentStep>,
-        title: String = record.task,
-        workflowId: String = slugify(title),
-        skillId: String? = null,
-        allowedTools: List<String> = emptyList(),
-    ): WorkflowTrace {
-        val actSteps = steps.filter { it.type == AgentStepType.ACT && it.toolCall != null }
-        val screenBySequence = record.screenRecords.associateBy { it.sequenceNumber }
-
-        val traceSteps = actSteps.map { step ->
-            val toolCall = step.toolCall!!
-            val screenAfter = screenAfterActStep(step.sequenceNumber, screenBySequence)
-            WorkflowTraceStep(
-                sequenceNumber = step.sequenceNumber,
-                tool = toolCall.tool,
-                args = toolCall.args,
-                source = toolCall.source,
-                screenAfter = screenAfter,
-                requiresApproval = toolRequiresApproval(toolCall.tool),
-            )
-        }
-
-        return WorkflowTrace(
-            id = workflowId,
-            title = title,
-            description = record.task,
-            task = record.task,
-            steps = traceSteps,
-            skillId = skillId,
-            allowedTools = allowedTools,
-            startedAtMillis = record.startedAtMillis,
-            completedAtMillis = record.completedAtMillis,
-        )
-    }
-
-    private fun screenAfterActStep(
-        actSequence: Int,
-        screens: Map<Int, AgentScreenRecord>,
-    ): ScreenContext? {
-        val candidate = screens.entries
-            .filter { (sequence, record) ->
-                sequence > actSequence && record.phase.equals("after_tool", ignoreCase = true)
-            }
-            .minByOrNull { it.key }
-            ?: screens.entries
-                .filter { (sequence, _) -> sequence > actSequence }
-                .minByOrNull { it.key }
-
-        return candidate?.let { parseScreenRecord(it.value) }
-    }
-
-    private fun parseScreenRecord(record: AgentScreenRecord): ScreenContext? {
-        return try {
-            ScreenContext.fromJson(org.json.JSONObject(record.contextJson))
-        } catch (_: Exception) {
-            null
-        }
     }
 
     private fun inferParameters(trace: WorkflowTrace): List<WorkflowParameter> {
@@ -164,68 +97,36 @@ object WorkflowTraceSerializer {
         }
     }
 
-    private fun expectedStateFromScreen(
-        screen: ScreenContext,
-        step: WorkflowTraceStep,
-    ): WorkflowExpectedState {
+    private fun expectedStateFromStep(step: WorkflowTraceStep): WorkflowExpectedState? {
         val tappedText = step.args["text"]?.takeIf { it.isNotBlank() }
-        val elementPredicates = buildList {
-            tappedText?.let {
-                add(
-                    WorkflowElementPredicate(
-                        text = it,
-                        match = WorkflowTextMatch.CONTAINS,
-                    ),
-                )
-            }
-            screen.nodes
-                .asSequence()
-                .filter { node ->
-                    !node.sensitive &&
-                        !node.text.isSensitive &&
-                        node.text.displaySafe.isNotBlank()
-                }
-                .filter { node -> tappedText == null || node.text.displaySafe != tappedText }
-                .sortedByDescending { node ->
-                    when {
-                        node.clickable -> 3
-                        node.isInputField -> 2
-                        node.role.name == "TEXT" -> 1
-                        else -> 0
-                    }
-                }
-                .take(MaxElementPredicates - size)
-                .forEach { node ->
-                    add(
-                        WorkflowElementPredicate(
-                            text = node.text.displaySafe,
-                            match = WorkflowTextMatch.CONTAINS,
-                        ),
-                    )
-                }
-        }
+        val verificationReason = step.verification?.reason?.takeIf { it.isNotBlank() }
 
-        val screenText = screen.nodes
-            .asSequence()
-            .filter { node -> !node.sensitive && !node.text.isSensitive }
-            .map { it.text.displaySafe }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .take(MaxScreenTextSnippets)
-            .toList()
+        val elementPredicates = tappedText?.let {
+            listOf(
+                WorkflowElementPredicate(
+                    text = it,
+                    match = WorkflowTextMatch.CONTAINS,
+                ),
+            )
+        }.orEmpty()
+
+        val screenText = buildList {
+            tappedText?.let { add(it) }
+            verificationReason?.let { add(it) }
+        }.distinct()
+
+        if (elementPredicates.isEmpty() && screenText.isEmpty()) return null
 
         return WorkflowExpectedState(
-            packageName = screen.packageName,
-            windowTitle = screen.windowTitle,
             screenTextContains = screenText,
             elementPresent = elementPredicates,
         )
     }
 
     private fun policyFromTraceStep(step: WorkflowTraceStep): WorkflowStepPolicy? {
-        val requiresApproval = step.requiresApproval
+        val requiresApproval = step.requiresApproval ?: toolRequiresApproval(step.tool)
         val workflowClass = step.workflowClass
-        if (requiresApproval == null && workflowClass == null) return null
+        if (!requiresApproval && workflowClass == null) return null
         return WorkflowStepPolicy(
             requiresApproval = requiresApproval,
             workflowClass = workflowClass,

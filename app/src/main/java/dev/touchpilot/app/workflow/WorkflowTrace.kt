@@ -3,7 +3,10 @@ package dev.touchpilot.app.workflow
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentStepStopReason
 import dev.touchpilot.app.agent.AgentStepType
+import dev.touchpilot.app.security.PolicyWorkflowClass
 import dev.touchpilot.app.security.SensitiveTextRedactor
+import dev.touchpilot.app.tools.AndroidToolCatalog
+import dev.touchpilot.app.tools.ToolRisk
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -27,6 +30,8 @@ data class WorkflowTrace(
     val capturedAtMillis: Long,
     val steps: List<WorkflowTraceStep>,
     val screenSignals: List<WorkflowTraceScreenSignal>,
+    val skillId: String? = null,
+    val allowedTools: List<String> = emptyList(),
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -35,6 +40,8 @@ data class WorkflowTrace(
             put("captured_at_millis", capturedAtMillis)
             put("steps", JSONArray().apply { steps.forEach { put(it.toJson()) } })
             put("screen_signals", JSONArray().apply { screenSignals.forEach { put(it.toJson()) } })
+            put("skill_id", skillId ?: JSONObject.NULL)
+            put("allowed_tools", JSONArray().apply { allowedTools.forEach { put(it) } })
         }
     }
 
@@ -57,10 +64,12 @@ data class WorkflowTrace(
                         index = step.sequenceNumber,
                         tool = call.tool,
                         args = call.args,
+                        source = call.source,
                         succeeded = call.result?.ok ?: false,
                         verification = step.verification?.let {
                             WorkflowTraceVerification(status = it.status, reason = it.reason)
                         },
+                        requiresApproval = toolRequiresApproval(call.tool),
                     )
                 }
             if (steps.isEmpty()) return null
@@ -81,6 +90,11 @@ data class WorkflowTrace(
                 screenSignals = screenSignals,
             )
         }
+
+        private fun toolRequiresApproval(tool: String): Boolean {
+            val risk = AndroidToolCatalog.find(tool)?.risk ?: return false
+            return risk == ToolRisk.MEDIUM || risk == ToolRisk.HIGH
+        }
     }
 }
 
@@ -89,15 +103,24 @@ data class WorkflowTraceStep(
     val index: Int,
     val tool: String,
     val args: Map<String, String>,
+    val source: String = "",
     val succeeded: Boolean,
     val verification: WorkflowTraceVerification?,
+    val requiresApproval: Boolean? = null,
+    val workflowClass: PolicyWorkflowClass? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("index", index)
         put("tool", tool)
+        put("source", source)
         put("args", JSONObject(args))
         put("succeeded", succeeded)
         put("verification", verification?.toJson() ?: JSONObject.NULL)
+        put("requires_approval", requiresApproval ?: JSONObject.NULL)
+        put(
+            "workflow_class",
+            workflowClass?.name?.lowercase() ?: JSONObject.NULL,
+        )
     }
 }
 
