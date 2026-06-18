@@ -90,6 +90,63 @@ class SensitiveTextRedactorTest {
     }
 
     @Test
+    fun redactsPrivateKeyArgumentKeys() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf(
+                "private_key" to "MIIEvgIBADANBg",
+                "private-key" to "MIIEvgIBADANBg",
+                "PRIVATE_KEY" to "MIIEvgIBADANBg"
+            )
+        )
+
+        assertEquals("[REDACTED]", redacted["private_key"])
+        assertEquals("[REDACTED]", redacted["private-key"])
+        assertEquals("[REDACTED]", redacted["PRIVATE_KEY"])
+    }
+
+    @Test
+    fun redactsCredentialArgumentKeys() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf(
+                "credential" to "json-secret",
+                "credentials" to "json-secret",
+                "user_credential" to "json-secret"
+            )
+        )
+
+        assertEquals("[REDACTED]", redacted["credential"])
+        assertEquals("[REDACTED]", redacted["credentials"])
+        assertEquals("[REDACTED]", redacted["user_credential"])
+    }
+
+    @Test
+    fun redactsAuthArgumentKeys() {
+        val redacted = SensitiveTextRedactor.redact(
+            mapOf(
+                "auth" to "Bearer sk-test",
+                "authorization" to "Bearer sk-test",
+                "Authorization" to "Bearer sk-test"
+            )
+        )
+
+        assertEquals("[REDACTED]", redacted["auth"])
+        assertEquals("[REDACTED]", redacted["authorization"])
+        assertEquals("[REDACTED]", redacted["Authorization"])
+    }
+
+    @Test
+    fun redactsPrivateKeyAndCredentialInTextAssignments() {
+        val redacted = SensitiveTextRedactor.redact(
+            "tool({private_key=MIIEvgIBADANBg, credential=json-secret})"
+        )
+
+        assertEquals(
+            "tool({private_key=[REDACTED], credential=[REDACTED]})",
+            redacted
+        )
+    }
+
+    @Test
     fun doesNotRedactBenignKeyWithUnrelatedHyphen() {
         val redacted = SensitiveTextRedactor.redact(
             mapOf("user-language" to "en-US")

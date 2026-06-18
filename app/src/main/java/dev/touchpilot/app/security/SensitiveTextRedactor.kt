@@ -3,7 +3,9 @@ package dev.touchpilot.app.security
 object SensitiveTextRedactor {
     private val redactionRules: List<RedactionRule> = listOf(
         RedactionRule.KeyAssignment(
-            keyAlternation = "api[_-]?key|access[_-]?token|refresh[_-]?token|password|passcode|secret"
+            keyAlternation =
+                "api[_-]?key|access[_-]?token|refresh[_-]?token|password|passcode|secret|" +
+                    "private[_-]?key|credential|auth|authorization"
         ),
         RedactionRule.BearerHeader(),
         RedactionRule.LiteralValue(Regex("\\b\\d{13,19}\\b")),
@@ -39,12 +41,18 @@ object SensitiveTextRedactor {
     }
 
     private val apiKeyVariantPattern = Regex("(?i)api[_-]?key")
+    private val privateKeyPattern = Regex("(?i)private[_-]?key")
+    private val credentialPattern = Regex("(?i)credential")
+    private val authKeyPattern = Regex("(?i)^(auth|authorization)$")
 
     private fun isSensitiveKey(key: String): Boolean {
         return key.contains("password", ignoreCase = true) ||
             key.contains("passcode", ignoreCase = true) ||
             key.contains("token", ignoreCase = true) ||
             key.contains("secret", ignoreCase = true) ||
-            apiKeyVariantPattern.containsMatchIn(key)
+            apiKeyVariantPattern.containsMatchIn(key) ||
+            privateKeyPattern.containsMatchIn(key) ||
+            credentialPattern.containsMatchIn(key) ||
+            authKeyPattern.matches(key)
     }
 }
