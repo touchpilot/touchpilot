@@ -20,6 +20,8 @@ import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.tools.ToolExecutionLog
+import dev.touchpilot.app.workflow.WorkflowTrace
+import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.ui.chat.ApprovalState
 import dev.touchpilot.app.ui.chat.ChatEvent
 import java.util.concurrent.CountDownLatch
@@ -40,12 +42,17 @@ class AgentRunController(
     private var pendingClarification: PendingClarification? = null
     private var cancellationSignal: AtomicBoolean = AtomicBoolean(false)
     private val mutableRunHistory = mutableListOf<AgentRunRecord>()
+    private val workflowTraceStore = WorkflowTraceStore()
 
     var runState: AgentRunState = AgentRunState.IDLE
         private set
 
     val runHistory: List<AgentRunRecord>
         get() = mutableRunHistory
+
+    /** Workflow traces captured from successful runs this session (issue #289). */
+    val workflowTraces: List<WorkflowTrace>
+        get() = workflowTraceStore.all()
 
     fun startFromChat(task: String) {
         val pending = pendingClarification
@@ -325,6 +332,7 @@ class AgentRunController(
                     message = doneDetail,
                     status = "complete"
                 )
+                captureWorkflowTrace(record)
             }
             else -> {
                 conversation += ChatEvent.Agent(
@@ -340,6 +348,28 @@ class AgentRunController(
             }
         }
         showChat()
+    }
+
+    /**
+     * Captures a successful run as a reusable [WorkflowTrace] (issue #289).
+     * Non-successful runs (errors, blocks, no tool actions) yield no trace, so
+     * this is a no-op for them. The trace stays in-memory for the session.
+     */
+    private fun captureWorkflowTrace(record: AgentRunRecord) {
+        val trace = WorkflowTrace.from(record) ?: return
+        workflowTraceStore.record(trace)
+        val recorded = AgentEvent.TraceRecorded(runId = trace.runId, stepCount = trace.steps.size)
+        ToolExecutionLog.recordAction(
+            name = "workflow_trace_recorded",
+            result = "Captured a ${trace.steps.size}-step workflow trace.",
+            status = "complete",
+            source = currentProviderMode().toLogSource(),
+            details = recorded.toJson(redactSensitive = true).toString(),
+        )
+        conversation += ChatEvent.Agent(
+            "Workflow captured.",
+            "${trace.steps.size} step(s) recorded — this run can be saved as a workflow.",
+        )
     }
 
     private fun setRunState(state: AgentRunState) {

@@ -1,5 +1,6 @@
 package dev.touchpilot.app.agent
 
+import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.AndroidToolCatalog
@@ -139,7 +140,12 @@ class BoundedLocalAgentLoopTest {
 
         override fun findTool(name: String): ToolSpec? = AndroidToolCatalog.find(name)
 
-        override fun execute(name: String, args: Map<String, String>, source: ToolSource): ToolResult {
+        override fun execute(
+            name: String,
+            args: Map<String, String>,
+            source: ToolSource,
+            foregroundApp: ForegroundAppInfo
+        ): ToolResult {
             return resultQueue.removeFirst()
         }
     }
