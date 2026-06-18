@@ -354,6 +354,16 @@ class AgentRunDetailFormatterTest {
         assertEquals("Error: Agent failed: timeout", AgentRunDetailFormatter.deriveStopReason(record))
     }
 
+    @Test
+    fun formatsTraceRecordedEvent() {
+        val record = sampleRecord(events = listOf(AgentEvent.TraceRecorded(runId = "run-1", stepCount = 3)))
+
+        val step = AgentRunDetailFormatter.formatSteps(record).single { it.title == "Workflow trace recorded" }
+
+        assertEquals(AgentRunStepStatus.INFO, step.status)
+        assertContains(step.detail, "3 step(s) captured")
+    }
+
     private fun sampleRecord(
         events: List<AgentEvent> = emptyList(),
         steps: List<AgentStep> = emptyList(),

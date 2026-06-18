@@ -1,5 +1,6 @@
 package dev.touchpilot.app.agent
 
+import dev.touchpilot.app.androidcontrol.ForegroundAppInfo
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.tools.AndroidToolCatalog
@@ -190,7 +191,12 @@ class AgentRunCancellationTest {
         override fun validate(name: String, args: Map<String, String>): String? =
             AndroidToolCatalog.validate(name, args)
         override fun findTool(name: String): ToolSpec? = AndroidToolCatalog.find(name)
-        override fun execute(name: String, args: Map<String, String>, source: ToolSource): ToolResult =
+        override fun execute(
+            name: String,
+            args: Map<String, String>,
+            source: ToolSource,
+            foregroundApp: ForegroundAppInfo
+        ): ToolResult =
             q.removeFirst()
     }
 
@@ -199,7 +205,12 @@ class AgentRunCancellationTest {
         override fun validate(name: String, args: Map<String, String>): String? =
             AndroidToolCatalog.validate(name, args)
         override fun findTool(name: String): ToolSpec? = AndroidToolCatalog.find(name)
-        override fun execute(name: String, args: Map<String, String>, source: ToolSource): ToolResult {
+        override fun execute(
+            name: String,
+            args: Map<String, String>,
+            source: ToolSource,
+            foregroundApp: ForegroundAppInfo
+        ): ToolResult {
             executed += name
             return ToolResult(ok = true, message = "ok")
         }

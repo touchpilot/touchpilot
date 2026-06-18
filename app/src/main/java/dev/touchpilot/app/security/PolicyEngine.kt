@@ -8,9 +8,10 @@ import dev.touchpilot.app.tools.ToolRisk
  * Every command producer — direct tool execution, local model output, local
  * router output, skills, and MCP — resolves its safety decision here, so
  * behavior cannot drift between callers. Decisions come only from local,
- * testable signals (tool risk, sensitive workflow class, and source) expressed
- * as [PolicyRule]s over the Safety/Policy v2 model ([PolicyV2Model]) and the
- * [WorkflowRiskClassifier]. The model never decides approval.
+ * testable signals (tool risk, sensitive workflow class, app context, and
+ * source) expressed as [PolicyRule]s over the Safety/Policy v2 model
+ * ([PolicyV2Model]) and the [WorkflowRiskClassifier]. The model never decides
+ * approval.
  *
  * Decision precedence is strictest-wins (block > deny > ask > allow), so a
  * sensitive signal can only raise caution, never lower it, and an unknown
@@ -21,21 +22,24 @@ import dev.touchpilot.app.tools.ToolRisk
  *   cannot escalate them);
  * - sensitive-workflow and secret-entry actions block;
  * - message sends and medium/high-risk actions ask for approval;
- * - MCP tools ask before crossing the external trust boundary.
+ * - MCP tools ask before crossing the external trust boundary;
+ * - app-aware rules only ask and never lower a block.
  */
 class PolicyEngine {
-
-    data class Decision(
-        val kind: PolicyDecisionKind,
-        /** The rule that determined the decision; used for user-facing copy. */
-        val primary: PolicyRule,
-        val rules: List<PolicyRule>,
-    )
-
-    fun decide(request: ToolPolicyRequest): Decision {
+    fun evaluate(request: ToolPolicyRequest): PolicyEvaluation {
         val rules = rulesFor(request)
-        val kind = PolicyDecisionKind.strictest(rules.map { it.decision })
-        return Decision(kind = kind, primary = primaryRule(rules, kind), rules = rules)
+        if (request.tool.risk == ToolRisk.LOW) {
+            return PolicyEvaluation(
+                decision = PolicyDecisionKind.ALLOW,
+                rules = rules,
+                userMessage = "low risk action"
+            )
+        }
+        return PolicyEvaluation.fromRules(rules)
+    }
+
+    fun decide(request: ToolPolicyRequest): PolicyDecision {
+        return toRuntimeDecision(request, evaluate(request))
     }
 
     private fun rulesFor(request: ToolPolicyRequest): List<PolicyRule> {
@@ -78,22 +82,67 @@ class PolicyEngine {
             )
         }
 
+        rules += AppContextClassifier.rules(request)
+
         return rules
     }
 
-    /**
-     * The deciding rule for the chosen decision. Among rules that share the
-     * strictest decision, the most specific reason wins: a named workflow, then
-     * source, then the tool itself.
-     */
-    private fun primaryRule(rules: List<PolicyRule>, kind: PolicyDecisionKind): PolicyRule {
-        val deciding = rules.filter { it.decision == kind }
-        return deciding.minByOrNull { copyPriority(it) } ?: rules.first()
+    private fun toRuntimeDecision(
+        request: ToolPolicyRequest,
+        evaluation: PolicyEvaluation
+    ): PolicyDecision {
+        return when (evaluation.decision) {
+            PolicyDecisionKind.ALLOW -> PolicyDecision.Allow(
+                reason = evaluation.userMessage.ifBlank { "low risk action" }
+            )
+            PolicyDecisionKind.ASK -> ApprovalCopyBuilder.build(request, evaluation)
+            PolicyDecisionKind.DENY -> PolicyDecision.Deny(
+                reason = evaluation.userMessage,
+                userMessage = evaluation.userMessage
+            )
+            PolicyDecisionKind.BLOCK -> blockDecision(request, evaluation)
+        }
     }
 
-    private fun copyPriority(rule: PolicyRule): Int = when {
-        rule.subject == PolicySubject.WORKFLOW && rule.workflowClass != PolicyWorkflowClass.GENERAL -> 0
-        rule.subject == PolicySubject.SOURCE -> 1
-        else -> 2
+    private fun blockDecision(
+        request: ToolPolicyRequest,
+        evaluation: PolicyEvaluation
+    ): PolicyDecision.Block {
+        val blockRules = evaluation.rules.filter { it.decision == PolicyDecisionKind.BLOCK }
+        val primary = blockRules.firstOrNull { it.workflowClass == PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY }
+            ?: blockRules.firstOrNull { it.subject == PolicySubject.WORKFLOW }
+            ?: blockRules.firstOrNull { it.subject == PolicySubject.TOOL }
+            ?: blockRules.first()
+
+        val reason = when (primary.workflowClass) {
+            PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY -> "password or secret entry is blocked"
+            PolicyWorkflowClass.GENERAL ->
+                if (primary.subject == PolicySubject.TOOL && request.tool.risk == ToolRisk.BLOCKED) {
+                    "tool is marked blocked"
+                } else {
+                    primary.reason
+                }
+            else -> blockedPhrase(primary.workflowClass)
+        }
+        val userMessage = when {
+            primary.workflowClass == PolicyWorkflowClass.SENSITIVE_TEXT_ENTRY ->
+                "TouchPilot will not enter passwords, recovery codes, API keys, or other secrets."
+            primary.subject == PolicySubject.TOOL && request.tool.risk == ToolRisk.BLOCKED ->
+                "${request.tool.name} is blocked by policy."
+            else -> "TouchPilot blocked this request because $reason."
+        }
+        return PolicyDecision.Block(reason = reason, userMessage = userMessage)
+    }
+
+    private fun blockedPhrase(workflowClass: PolicyWorkflowClass): String = when (workflowClass) {
+        PolicyWorkflowClass.PAYMENT -> "payments are blocked"
+        PolicyWorkflowClass.PURCHASE -> "purchases are blocked"
+        PolicyWorkflowClass.DELETION -> "destructive changes are blocked"
+        PolicyWorkflowClass.ACCOUNT_CHANGE -> "account changes are blocked"
+        PolicyWorkflowClass.ACCOUNT_RECOVERY -> "account recovery workflows are blocked"
+        PolicyWorkflowClass.PERMISSION_CHANGE -> "permission changes are blocked"
+        PolicyWorkflowClass.SECURITY_SETTINGS -> "security settings changes are blocked"
+        PolicyWorkflowClass.UNKNOWN_SENSITIVE -> "this looks like a sensitive workflow"
+        else -> "this workflow is blocked"
     }
 }

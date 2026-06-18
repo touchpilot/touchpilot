@@ -14,7 +14,9 @@ import dev.touchpilot.app.R
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunRecord
+import dev.touchpilot.app.agent.AgentRunStepSeverity
 import dev.touchpilot.app.agent.AgentRunStepStatus
+import dev.touchpilot.app.agent.severity
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.primaryButton
@@ -173,15 +175,17 @@ class AgentRunDetailRenderer(
     }
 
     private fun stepStatusColor(status: AgentRunStepStatus): Int {
-        return when (status) {
-            AgentRunStepStatus.SUCCESS,
-            AgentRunStepStatus.COMPLETE -> Theme.Accent
-            AgentRunStepStatus.FAILED,
-            AgentRunStepStatus.BLOCKED -> Theme.StrokeDark
-            AgentRunStepStatus.RUNNING,
-            AgentRunStepStatus.WAITING,
-            AgentRunStepStatus.PENDING -> Color.rgb(255, 196, 86)
-            AgentRunStepStatus.INFO -> Theme.StrokeDark
+        return when (status.severity) {
+            AgentRunStepSeverity.POSITIVE -> Theme.Accent
+            AgentRunStepSeverity.NEGATIVE -> Theme.Danger
+            AgentRunStepSeverity.CAUTION -> Theme.Warning
+            AgentRunStepSeverity.IN_PROGRESS -> InProgressColor
+            AgentRunStepSeverity.NEUTRAL -> Theme.StrokeDark
         }
+    }
+
+    private companion object {
+        // Calm "in progress" blue, kept distinct from the amber caution color.
+        val InProgressColor: Int = Color.rgb(86, 156, 255)
     }
 }

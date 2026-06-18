@@ -2,6 +2,7 @@ package dev.touchpilot.app.agent
 
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.tools.SettingsPanelIntent
+import java.util.Locale
 
 /**
  * Classifies a user task before the local reasoning core decides what to do
@@ -28,7 +29,8 @@ sealed class IntentDecision {
     data class KnownSkill(
         val skillId: String,
         val skillTitle: String,
-        override val reason: String
+        override val reason: String,
+        val confidence: Double = 1.0
     ) : IntentDecision()
 
     /**
@@ -78,7 +80,7 @@ class IntentGate : IntentClassifier {
     fun classify(task: String): IntentDecision = classify(task, emptyList())
 
     override fun classify(task: String, skills: List<Skill>): IntentDecision {
-        val normalized = task.trim().lowercase()
+        val normalized = task.trim().lowercase(Locale.US)
         if (normalized.isBlank()) {
             return IntentDecision.ClarificationNeeded(
                 reason = "empty task",
@@ -175,15 +177,163 @@ class IntentGate : IntentClassifier {
 
     private fun detectKnownSkill(normalized: String, skills: List<Skill>): IntentDecision.KnownSkill? {
         if (skills.isEmpty()) return null
-        val match = skills.firstOrNull { skill ->
-            val title = skill.title.lowercase()
-            title.isNotBlank() && title in normalized
-        } ?: return null
+        val request = skillMatchRequest(normalized)
+        val match = skills.asSequence()
+            .mapNotNull { skill -> bestSkillMatch(skill, request) }
+            .filter { skillMatch -> skillMatch.confidence >= SkillMatchThreshold }
+            .sortedWith(
+                compareByDescending<SkillMatch> { skillMatch -> skillMatch.confidence }
+                    .thenBy { skillMatch -> skillMatch.skill.id }
+            )
+            .firstOrNull()
+            ?: return null
+
         return IntentDecision.KnownSkill(
-            skillId = match.id,
-            skillTitle = match.title,
-            reason = "skill '${match.title}' title matched"
+            skillId = match.skill.id,
+            skillTitle = match.skill.title,
+            reason = "skill '${match.skill.title}' ${match.reason} " +
+                "(confidence=${match.confidence.formatConfidence()})",
+            confidence = match.confidence
         )
+    }
+
+    private fun skillMatchRequest(task: String): SkillMatchRequest {
+        val normalized = normalizeMatchText(task)
+        return SkillMatchRequest(
+            normalized = normalized,
+            compact = compactMatchText(normalized),
+            keywords = keywordsFrom(normalized)
+        )
+    }
+
+    private fun bestSkillMatch(skill: Skill, request: SkillMatchRequest): SkillMatch? {
+        return skillCandidates(skill)
+            .asSequence()
+            .mapNotNull { candidate -> matchCandidate(skill, candidate, request) }
+            .sortedWith(
+                compareByDescending<SkillMatch> { skillMatch -> skillMatch.confidence }
+                    .thenBy { skillMatch -> skillMatch.candidateText }
+            )
+            .firstOrNull()
+    }
+
+    private fun skillCandidates(skill: Skill): List<SkillCandidate> {
+        val candidates = mutableListOf<SkillCandidate>()
+        fun add(source: String, text: String) {
+            if (text.isNotBlank()) {
+                candidates += SkillCandidate(source = source, text = text)
+            }
+        }
+
+        add("title", skill.title)
+        add("title", SkillSuffixPattern.replace(skill.title, "").trim())
+        skill.aliases.forEach { alias -> add("alias", alias) }
+        skill.examples.forEach { example -> add("example", example) }
+
+        return candidates.distinctBy { candidate ->
+            candidate.source to normalizeMatchText(candidate.text)
+        }
+    }
+
+    private fun matchCandidate(
+        skill: Skill,
+        candidate: SkillCandidate,
+        request: SkillMatchRequest
+    ): SkillMatch? {
+        val phrase = normalizeMatchText(candidate.text)
+        val phraseKeywords = keywordsFrom(phrase)
+        val compactPhrase = compactMatchText(phrase)
+        if (!isUsefulSkillPhrase(phrase, compactPhrase, phraseKeywords)) return null
+
+        if (phraseMatchesRequest(phrase, compactPhrase, request)) {
+            val confidence = (candidate.phraseConfidence() + if (request.normalized == phrase) 0.04 else 0.0)
+                .coerceAtMost(0.98)
+            return SkillMatch(
+                skill = skill,
+                candidateText = candidate.text,
+                confidence = confidence,
+                reason = "matched ${candidate.source} '${candidate.text}'"
+            )
+        }
+
+        val commonKeywords = phraseKeywords.intersect(request.keywords)
+        if (commonKeywords.size < MinKeywordOverlap) return null
+
+        val coverage = commonKeywords.size.toDouble() / minOf(phraseKeywords.size, request.keywords.size)
+        if (coverage < KeywordCoverageThreshold) return null
+
+        val confidence = (candidate.keywordConfidence() + (coverage * KeywordCoverageBonus))
+            .coerceAtMost(candidate.phraseConfidence() - 0.03)
+        return SkillMatch(
+            skill = skill,
+            candidateText = candidate.text,
+            confidence = confidence,
+            reason = "matched ${candidate.source} keywords ${commonKeywords.sorted().joinToString()}"
+        )
+    }
+
+    private fun normalizeMatchText(value: String): String {
+        return NonAlphanumericPattern
+            .replace(value.lowercase(Locale.US), " ")
+            .trim()
+            .replace(WhitespacePattern, " ")
+    }
+
+    private fun compactMatchText(value: String): String {
+        return value.filter { char -> char in 'a'..'z' || char in '0'..'9' }
+    }
+
+    private fun keywordsFrom(normalized: String): Set<String> {
+        return normalized
+            .split(" ")
+            .asSequence()
+            .map { token -> token.trim() }
+            .filter { token -> token.length >= MinSingleTokenLength }
+            .filter { token -> token !in StopWords }
+            .toSet()
+    }
+
+    private fun isUsefulSkillPhrase(
+        phrase: String,
+        compactPhrase: String,
+        phraseKeywords: Set<String>
+    ): Boolean {
+        if (phrase.isBlank()) return false
+        if (phraseKeywords.isEmpty()) return compactPhrase.length >= MinCompactPhraseLength
+        if (phraseKeywords.size > 1) return true
+        val onlyKeyword = phraseKeywords.single()
+        return onlyKeyword !in ReservedExactCommandWords
+    }
+
+    private fun phraseMatchesRequest(
+        phrase: String,
+        compactPhrase: String,
+        request: SkillMatchRequest
+    ): Boolean {
+        val paddedRequest = " ${request.normalized} "
+        val paddedPhrase = " $phrase "
+        return paddedPhrase in paddedRequest ||
+            (compactPhrase.length >= MinCompactPhraseLength && compactPhrase in request.compact)
+    }
+
+    private fun SkillCandidate.phraseConfidence(): Double {
+        return when (source) {
+            "alias" -> 0.92
+            "example" -> 0.86
+            else -> 0.82
+        }
+    }
+
+    private fun SkillCandidate.keywordConfidence(): Double {
+        return when (source) {
+            "alias" -> 0.76
+            "example" -> 0.72
+            else -> 0.68
+        }
+    }
+
+    private fun Double.formatConfidence(): String {
+        return String.format(Locale.US, "%.2f", this)
     }
 
     private fun detectAmbiguousReference(normalized: String): IntentDecision.ClarificationNeeded? {
@@ -193,6 +343,24 @@ class IntentGate : IntentClassifier {
             clarification = "Can you describe what you would like me to do more specifically?"
         )
     }
+
+    private data class SkillMatchRequest(
+        val normalized: String,
+        val compact: String,
+        val keywords: Set<String>
+    )
+
+    private data class SkillCandidate(
+        val source: String,
+        val text: String
+    )
+
+    private data class SkillMatch(
+        val skill: Skill,
+        val candidateText: String,
+        val confidence: Double,
+        val reason: String
+    )
 
     private companion object {
         // Mirrors DefaultActionPolicy.blockedWorkflow so the gate refuses early
@@ -246,5 +414,56 @@ class IntentGate : IntentClassifier {
         val ScrollPattern: Regex = Regex("\\bscroll\\b")
         val BackPattern: Regex = Regex("\\bback\\b")
         val HomePattern: Regex = Regex("\\bhome\\b")
+
+        const val SkillMatchThreshold = 0.65
+        const val MinKeywordOverlap = 2
+        const val KeywordCoverageThreshold = 0.5
+        const val KeywordCoverageBonus = 0.12
+        const val MinSingleTokenLength = 3
+        const val MinCompactPhraseLength = 4
+
+        val SkillSuffixPattern: Regex = Regex("\\s+skill\\s*$", RegexOption.IGNORE_CASE)
+        val NonAlphanumericPattern: Regex = Regex("[^a-z0-9]+")
+        val WhitespacePattern: Regex = Regex("\\s+")
+        val StopWords: Set<String> = setOf(
+            "a",
+            "an",
+            "and",
+            "android",
+            "app",
+            "do",
+            "for",
+            "go",
+            "help",
+            "i",
+            "in",
+            "me",
+            "my",
+            "of",
+            "on",
+            "or",
+            "please",
+            "show",
+            "skill",
+            "task",
+            "that",
+            "the",
+            "this",
+            "to",
+            "use",
+            "with",
+            "you"
+        )
+        val ReservedExactCommandWords: Set<String> = setOf(
+            "back",
+            "home",
+            "launch",
+            "open",
+            "press",
+            "scroll",
+            "swipe",
+            "tap",
+            "type"
+        )
     }
 }

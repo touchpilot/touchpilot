@@ -250,6 +250,27 @@ sealed class AgentEvent(
         }
     }
 
+    /**
+     * Signals that a successful run was captured as a reusable workflow trace
+     * (issue #289). It carries no sensitive payload — only the run id and the
+     * number of captured steps.
+     */
+    data class TraceRecorded(
+        val runId: String,
+        val stepCount: Int,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis()
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.TRACE_RECORDED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "run_id" to runId,
+                "step_count" to stepCount
+            )
+        }
+    }
+
     companion object {
         private var sequence = 0L
 
@@ -340,5 +361,6 @@ enum class AgentEventType(val wireName: String) {
     CLARIFICATION("clarification"),
     FINAL_ANSWER("final_answer"),
     RUN_CANCELLED("run_cancelled"),
-    SKILL_ACTIVE("skill_active")
+    SKILL_ACTIVE("skill_active"),
+    TRACE_RECORDED("trace_recorded")
 }
