@@ -114,6 +114,7 @@ class BoundedLocalAgentLoop(
                         candidates = clarification.candidates,
                         tool = command.tool
                     )
+                    val clarifyAtMillis = System.currentTimeMillis()
                     steps += AgentStepFactory.clarify(
                         sequenceNumber = stepIndex,
                         clarification = AgentStepClarification(
@@ -123,7 +124,8 @@ class BoundedLocalAgentLoop(
                             candidateLabels = clarification.candidates.map { it.displayLabel }
                         ),
                         inputSummary = "agent paused before dispatching the next action",
-                        endedAtMillis = System.currentTimeMillis()
+                        startedAtMillis = clarifyAtMillis,
+                        endedAtMillis = clarifyAtMillis,
                     )
                     return AgentRunResult(
                         transcript = transcript.toString(),

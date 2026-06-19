@@ -94,19 +94,29 @@ class BoundedLocalAgentLoopTest {
 
     @Test
     fun asksForClarificationAfterAmbiguousToolResult() {
+        val ambiguous = ToolResult(
+            ok = false,
+            message = "Ambiguous input target: 2 candidates",
+            data = ClarificationFromToolResult.dataFromCandidateLabels(
+                listOf("Settings", "Wi-Fi Settings"),
+            ),
+        )
         val result = loop(
             commands = listOf(
                 """{"tool":"tap","args":{"text":"Settings"}}""",
                 """{"tool":"tap","args":{"text":"Settings"}}"""
             ),
             results = listOf(
-                ToolResult(ok = false, message = "Ambiguous input target: 2 candidates")
+                ambiguous,
+                ToolResult(ok = false, message = "unexpected second tool call"),
             )
         ).run("tap Settings", AgentRunLimits(maxSteps = 3, maxConsecutiveFailures = 2))
 
         assertEquals(AgentStepStopReason.CLARIFICATION_NEEDED, result.stopReason)
         assertEquals(listOf(AgentStepStatus.FAILED, AgentStepStatus.CLARIFIED), result.steps.map { it.status })
-        assertEquals(ClarificationReason.MULTIPLE_TARGETS, assertIs<AgentEvent.Clarification>(result.events.last()).reason)
+        val clarification = assertIs<AgentEvent.Clarification>(result.events.last())
+        assertEquals(ClarificationReason.MULTIPLE_TARGETS, clarification.reason)
+        assertEquals(2, clarification.candidates.size)
     }
 
     private fun loop(
@@ -146,7 +156,8 @@ class BoundedLocalAgentLoopTest {
             source: ToolSource,
             foregroundApp: ForegroundAppInfo
         ): ToolResult {
-            return resultQueue.removeFirst()
+            return resultQueue.removeFirstOrNull()
+                ?: ToolResult(ok = false, message = "No queued tool result for $name")
         }
     }
 }
