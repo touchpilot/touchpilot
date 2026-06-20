@@ -12,26 +12,106 @@ import kotlin.test.assertTrue
 
 class WorkflowTraceRepositoryTest {
     private fun mockContext(): Context {
-        return object : Context() {
-            private val testDir = File(System.getProperty("java.io.tmpdir"), "workflow-trace-test-${System.currentTimeMillis()}")
-            
-            override fun getFilesDir(): File {
-                return testDir.apply { mkdirs() }
-            }
+        val testDir = File(System.getProperty("java.io.tmpdir"), "workflow-trace-test-${System.currentTimeMillis()}")
+        return TestContext(testDir)
+    }
 
-            // Minimal Context implementation - other methods throw by default
-            override fun getApplicationContext(): Context = this
-            override fun getPackageName(): String = "dev.touchpilot.app.test"
-            override fun getApplicationInfo() = throw UnsupportedOperationException()
-            override fun getResources() = throw UnsupportedOperationException()
-            override fun getPackageManager() = throw UnsupportedOperationException()
-            override fun getContentResolver() = throw UnsupportedOperationException()
-            override fun getMainLooper() = throw UnsupportedOperationException()
-            override fun getAssets() = throw UnsupportedOperationException()
-            override fun getClassLoader() = throw UnsupportedOperationException()
-            override fun getTheme() = throw UnsupportedOperationException()
-            override fun setTheme(resid: Int) = throw UnsupportedOperationException()
+    private class TestContext(private val testFilesDir: File) : Context() {
+        init {
+            testFilesDir.mkdirs()
         }
+
+        override fun getFilesDir(): File = testFilesDir
+        override fun getApplicationContext(): Context = this
+        override fun getPackageName(): String = "dev.touchpilot.app.test"
+
+        // Minimal implementations for abstract methods (throw UnsupportedOperationException for unused)
+        override fun getAssets() = throw UnsupportedOperationException()
+        override fun getResources() = throw UnsupportedOperationException()
+        override fun getPackageManager() = throw UnsupportedOperationException()
+        override fun getContentResolver() = throw UnsupportedOperationException()
+        override fun getMainLooper() = throw UnsupportedOperationException()
+        override fun getApplicationInfo() = throw UnsupportedOperationException()
+        override fun getTheme() = throw UnsupportedOperationException()
+        override fun setTheme(resid: Int) = throw UnsupportedOperationException()
+        override fun getClassLoader() = throw UnsupportedOperationException()
+        override fun getPackageResourcePath() = throw UnsupportedOperationException()
+        override fun getPackageCodePath() = throw UnsupportedOperationException()
+        override fun getSharedPreferences(name: String?, mode: Int) = throw UnsupportedOperationException()
+        override fun openFileInput(name: String?) = throw UnsupportedOperationException()
+        override fun openFileOutput(name: String?, mode: Int) = throw UnsupportedOperationException()
+        override fun deleteFile(name: String?) = throw UnsupportedOperationException()
+        override fun getFileStreamPath(name: String?) = throw UnsupportedOperationException()
+        override fun fileList() = throw UnsupportedOperationException()
+        override fun getDataDir() = throw UnsupportedOperationException()
+        override fun getDir(name: String?, mode: Int) = throw UnsupportedOperationException()
+        override fun getDatabasePath(name: String?) = throw UnsupportedOperationException()
+        override fun databaseList() = throw UnsupportedOperationException()
+        override fun getWallpaper() = throw UnsupportedOperationException()
+        override fun peekWallpaper() = throw UnsupportedOperationException()
+        override fun getWallpaperDesiredMinimumWidth() = throw UnsupportedOperationException()
+        override fun getWallpaperDesiredMinimumHeight() = throw UnsupportedOperationException()
+        override fun setWallpaper(bitmap: android.graphics.Bitmap?) = throw UnsupportedOperationException()
+        override fun setWallpaper(data: java.io.InputStream?) = throw UnsupportedOperationException()
+        override fun clearWallpaper() = throw UnsupportedOperationException()
+        override fun startActivity(intent: android.content.Intent?) = throw UnsupportedOperationException()
+        override fun startActivity(intent: android.content.Intent?, options: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun startActivities(intents: Array<out android.content.Intent>?) = throw UnsupportedOperationException()
+        override fun startActivities(intents: Array<out android.content.Intent>?, options: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun startIntentSender(intent: android.content.IntentSender?, fillInIntent: android.content.Intent?, flagsMask: Int, flagsValues: Int, extraFlags: Int) = throw UnsupportedOperationException()
+        override fun startIntentSender(intent: android.content.IntentSender?, fillInIntent: android.content.Intent?, flagsMask: Int, flagsValues: Int, extraFlags: Int, options: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun sendBroadcast(intent: android.content.Intent?) = throw UnsupportedOperationException()
+        override fun sendBroadcast(intent: android.content.Intent?, receiverPermission: String?) = throw UnsupportedOperationException()
+        override fun sendOrderedBroadcast(intent: android.content.Intent?, receiverPermission: String?) = throw UnsupportedOperationException()
+        override fun sendOrderedBroadcast(intent: android.content.Intent, receiverPermission: String?, resultReceiver: android.content.BroadcastReceiver?, scheduler: android.os.Handler?, initialCode: Int, initialData: String?, initialExtras: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun sendBroadcastAsUser(intent: android.content.Intent?, user: android.os.UserHandle?) = throw UnsupportedOperationException()
+        override fun sendBroadcastAsUser(intent: android.content.Intent?, user: android.os.UserHandle?, receiverPermission: String?) = throw UnsupportedOperationException()
+        override fun sendOrderedBroadcastAsUser(intent: android.content.Intent?, user: android.os.UserHandle?, receiverPermission: String?, resultReceiver: android.content.BroadcastReceiver?, scheduler: android.os.Handler?, initialCode: Int, initialData: String?, initialExtras: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun sendStickyBroadcast(intent: android.content.Intent?) = throw UnsupportedOperationException()
+        override fun sendStickyOrderedBroadcast(intent: android.content.Intent?, resultReceiver: android.content.BroadcastReceiver?, scheduler: android.os.Handler?, initialCode: Int, initialData: String?, initialExtras: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun removeStickyBroadcast(intent: android.content.Intent?) = throw UnsupportedOperationException()
+        override fun sendStickyBroadcastAsUser(intent: android.content.Intent?, user: android.os.UserHandle?) = throw UnsupportedOperationException()
+        override fun sendStickyOrderedBroadcastAsUser(intent: android.content.Intent?, user: android.os.UserHandle?, resultReceiver: android.content.BroadcastReceiver?, scheduler: android.os.Handler?, initialCode: Int, initialData: String?, initialExtras: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun removeStickyBroadcastAsUser(intent: android.content.Intent?, user: android.os.UserHandle?) = throw UnsupportedOperationException()
+        override fun registerReceiver(receiver: android.content.BroadcastReceiver?, filter: android.content.IntentFilter?) = throw UnsupportedOperationException()
+        override fun registerReceiver(receiver: android.content.BroadcastReceiver?, filter: android.content.IntentFilter?, flags: Int) = throw UnsupportedOperationException()
+        override fun registerReceiver(receiver: android.content.BroadcastReceiver?, filter: android.content.IntentFilter?, broadcastPermission: String?, scheduler: android.os.Handler?) = throw UnsupportedOperationException()
+        override fun registerReceiver(receiver: android.content.BroadcastReceiver?, filter: android.content.IntentFilter?, broadcastPermission: String?, scheduler: android.os.Handler?, flags: Int) = throw UnsupportedOperationException()
+        override fun unregisterReceiver(receiver: android.content.BroadcastReceiver?) = throw UnsupportedOperationException()
+        override fun startService(service: android.content.Intent?) = throw UnsupportedOperationException()
+        override fun stopService(service: android.content.Intent?) = throw UnsupportedOperationException()
+        override fun bindService(service: android.content.Intent, conn: android.content.ServiceConnection, flags: Int) = throw UnsupportedOperationException()
+        override fun bindService(service: android.content.Intent, conn: android.content.ServiceConnection, flags: android.content.Context.BindServiceFlags) = throw UnsupportedOperationException()
+        override fun bindService(service: android.content.Intent, flags: Int, executor: java.util.concurrent.Executor, conn: android.content.ServiceConnection) = throw UnsupportedOperationException()
+        override fun bindService(service: android.content.Intent, flags: android.content.Context.BindServiceFlags, executor: java.util.concurrent.Executor, conn: android.content.ServiceConnection) = throw UnsupportedOperationException()
+        override fun unbindService(conn: android.content.ServiceConnection) = throw UnsupportedOperationException()
+        override fun startInstrumentation(className: android.content.ComponentName, profileFile: String?, arguments: android.os.Bundle?) = throw UnsupportedOperationException()
+        override fun getSystemService(name: String) = throw UnsupportedOperationException()
+        override fun getSystemServiceName(serviceClass: Class<*>) = throw UnsupportedOperationException()
+        override fun checkPermission(permission: String, pid: Int, uid: Int) = throw UnsupportedOperationException()
+        override fun checkCallingPermission(permission: String) = throw UnsupportedOperationException()
+        override fun checkCallingOrSelfPermission(permission: String) = throw UnsupportedOperationException()
+        override fun checkSelfPermission(permission: String) = throw UnsupportedOperationException()
+        override fun enforcePermission(permission: String, pid: Int, uid: Int, message: String?) = throw UnsupportedOperationException()
+        override fun enforceCallingPermission(permission: String, message: String?) = throw UnsupportedOperationException()
+        override fun enforceCallingOrSelfPermission(permission: String, message: String?) = throw UnsupportedOperationException()
+        override fun grantUriPermission(toPackage: String?, uri: android.net.Uri?, modeFlags: Int) = throw UnsupportedOperationException()
+        override fun revokeUriPermission(uri: android.net.Uri?, modeFlags: Int) = throw UnsupportedOperationException()
+        override fun revokeUriPermission(toPackage: String?, uri: android.net.Uri?, modeFlags: Int) = throw UnsupportedOperationException()
+        override fun checkUriPermission(uri: android.net.Uri?, pid: Int, uid: Int, modeFlags: Int) = throw UnsupportedOperationException()
+        override fun checkUriPermission(uri: android.net.Uri?, readPermission: String?, writePermission: String?, pid: Int, uid: Int, modeFlags: Int) = throw UnsupportedOperationException()
+        override fun checkCallingUriPermission(uri: android.net.Uri?, modeFlags: Int) = throw UnsupportedOperationException()
+        override fun checkCallingOrSelfUriPermission(uri: android.net.Uri?, modeFlags: Int) = throw UnsupportedOperationException()
+        override fun enforceUriPermission(uri: android.net.Uri?, pid: Int, uid: Int, modeFlags: Int, message: String?) = throw UnsupportedOperationException()
+        override fun enforceUriPermission(uri: android.net.Uri?, readPermission: String?, writePermission: String?, pid: Int, uid: Int, modeFlags: Int, message: String?) = throw UnsupportedOperationException()
+        override fun enforceCallingUriPermission(uri: android.net.Uri?, modeFlags: Int, message: String?) = throw UnsupportedOperationException()
+        override fun enforceCallingOrSelfUriPermission(uri: android.net.Uri?, modeFlags: Int, message: String?) = throw UnsupportedOperationException()
+        override fun createPackageContext(packageName: String?, flags: Int) = throw UnsupportedOperationException()
+        override fun createContextForSplit(splitName: String?) = throw UnsupportedOperationException()
+        override fun createConfigurationContext(overrideConfiguration: android.content.res.Configuration) = throw UnsupportedOperationException()
+        override fun createDisplayContext(display: android.view.Display) = throw UnsupportedOperationException()
+        override fun createDeviceProtectedStorageContext() = throw UnsupportedOperationException()
+        override fun isDeviceProtectedStorage() = throw UnsupportedOperationException()
     }
 
     private fun trace(runId: String, task: String = "test task", capturedAt: Long = 1000L) = WorkflowTrace(

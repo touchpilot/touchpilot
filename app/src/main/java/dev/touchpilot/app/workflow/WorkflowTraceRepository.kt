@@ -20,9 +20,12 @@ import java.io.File
  * - **delete**: Remove a trace file by run ID
  * - **deleteAll**: Clear all stored traces
  */
-class WorkflowTraceRepository(private val context: Context) {
-    private val traceDirectory: File
-        get() = File(context.filesDir, TRACE_DIR).apply { mkdirs() }
+class WorkflowTraceRepository(private val traceDirectory: File) {
+    init {
+        traceDirectory.mkdirs()
+    }
+
+    constructor(context: Context) : this(File(context.filesDir, TRACE_DIR))
 
     /**
      * Persists a [WorkflowTrace] to disk as a JSON file. If a trace with the
@@ -50,10 +53,9 @@ class WorkflowTraceRepository(private val context: Context) {
      * Corrupted or unparseable files are silently skipped.
      */
     fun loadAll(): List<WorkflowTrace> {
-        val dir = traceDirectory
-        if (!dir.exists()) return emptyList()
+        if (!traceDirectory.exists()) return emptyList()
 
-        return dir.listFiles()
+        return traceDirectory.listFiles()
             ?.filter { it.isFile && it.name.endsWith(TRACE_EXTENSION) }
             ?.mapNotNull { file ->
                 runCatching {
@@ -78,10 +80,9 @@ class WorkflowTraceRepository(private val context: Context) {
      * Deletes all stored trace files. Returns the count of deleted files.
      */
     fun deleteAll(): Int {
-        val dir = traceDirectory
-        if (!dir.exists()) return 0
+        if (!traceDirectory.exists()) return 0
 
-        return dir.listFiles()
+        return traceDirectory.listFiles()
             ?.filter { it.isFile && it.name.endsWith(TRACE_EXTENSION) }
             ?.count { it.delete() }
             ?: 0
@@ -100,9 +101,8 @@ class WorkflowTraceRepository(private val context: Context) {
      * Returns the number of stored trace files.
      */
     fun count(): Int {
-        val dir = traceDirectory
-        if (!dir.exists()) return 0
-        return dir.listFiles()
+        if (!traceDirectory.exists()) return 0
+        return traceDirectory.listFiles()
             ?.count { it.isFile && it.name.endsWith(TRACE_EXTENSION) }
             ?: 0
     }
