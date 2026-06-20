@@ -1,5 +1,6 @@
 package dev.touchpilot.app.runtime
 
+import android.content.Context
 import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
@@ -29,6 +30,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class AgentRunController(
+    context: Context,
     private val reasoningCore: LocalReasoningCore,
     private val conversation: MutableList<ChatEvent>,
     private val currentProviderMode: () -> AgentProviderMode,
@@ -42,7 +44,7 @@ class AgentRunController(
     private var pendingClarification: PendingClarification? = null
     private var cancellationSignal: AtomicBoolean = AtomicBoolean(false)
     private val mutableRunHistory = mutableListOf<AgentRunRecord>()
-    private val workflowTraceStore = WorkflowTraceStore()
+    private val workflowTraceStore = WorkflowTraceStore(context)
 
     var runState: AgentRunState = AgentRunState.IDLE
         private set

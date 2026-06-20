@@ -5,27 +5,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class WorkflowTraceStoreTest {
-    private fun trace(runId: String, steps: Int = 1) = WorkflowTrace(
+    private fun trace(runId: String, steps: Int = 1, capturedAt: Long = System.currentTimeMillis()) = WorkflowTrace(
         runId = runId,
         task = "task",
-        capturedAtMillis = 0L,
+        capturedAtMillis = capturedAt,
         steps = (1..steps).map { WorkflowTraceStep(it, "tap", emptyMap(), succeeded = true, verification = null) },
         screenSignals = emptyList(),
     )
 
     @Test
     fun recordsAndListsInOrder() {
-        val store = WorkflowTraceStore()
-        store.record(trace("run-1"))
-        store.record(trace("run-2"))
+        val store = WorkflowTraceStore(context = null)
+        store.record(trace("run-1", capturedAt = 1000L))
+        store.record(trace("run-2", capturedAt = 2000L))
 
         assertEquals(2, store.size)
-        assertEquals(listOf("run-1", "run-2"), store.all().map { it.runId })
+        // Traces should be sorted by capture time (newest first)
+        assertEquals(listOf("run-2", "run-1"), store.all().map { it.runId })
     }
 
     @Test
     fun recordingSameRunReplacesPriorTrace() {
-        val store = WorkflowTraceStore()
+        val store = WorkflowTraceStore(context = null)
         store.record(trace("run-1", steps = 1))
         store.record(trace("run-1", steps = 3))
 
@@ -35,6 +36,41 @@ class WorkflowTraceStoreTest {
 
     @Test
     fun forRunReturnsNullWhenAbsent() {
-        assertNull(WorkflowTraceStore().forRun("missing"))
+        assertNull(WorkflowTraceStore(context = null).forRun("missing"))
+    }
+
+    @Test
+    fun deleteRemovesTraceFromMemory() {
+        val store = WorkflowTraceStore(context = null)
+        store.record(trace("run-1"))
+        store.record(trace("run-2"))
+
+        val deleted = store.delete("run-1")
+
+        assertEquals(true, deleted)
+        assertEquals(1, store.size)
+        assertNull(store.forRun("run-1"))
+        assertEquals("run-2", store.forRun("run-2")?.runId)
+    }
+
+    @Test
+    fun deleteReturnsFalseWhenTraceNotFound() {
+        val store = WorkflowTraceStore(context = null)
+        val deleted = store.delete("missing")
+        assertEquals(false, deleted)
+    }
+
+    @Test
+    fun deleteAllClearsAllTraces() {
+        val store = WorkflowTraceStore(context = null)
+        store.record(trace("run-1"))
+        store.record(trace("run-2"))
+        store.record(trace("run-3"))
+
+        val count = store.deleteAll()
+
+        assertEquals(3, count)
+        assertEquals(0, store.size)
+        assertEquals(emptyList(), store.all())
     }
 }

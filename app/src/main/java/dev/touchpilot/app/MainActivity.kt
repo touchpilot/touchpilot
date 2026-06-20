@@ -111,6 +111,7 @@ class MainActivity : Activity() {
             screenContextProvider = { AccessibilityBridge.observeScreenContext() }
         )
         agentRunController = AgentRunController(
+            context = this,
             reasoningCore = reasoningCore,
             conversation = conversation,
             currentProviderMode = ::currentProviderMode,
