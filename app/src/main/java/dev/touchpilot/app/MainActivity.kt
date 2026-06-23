@@ -386,6 +386,7 @@ class MainActivity : Activity() {
             setFocusSelectorIndex = { focusSelectorIndex = it },
             getLastFocusInputArgs = { lastFocusInputArgs },
             setLastFocusInputArgs = { lastFocusInputArgs = it },
+            toolExecutionController = toolExecutionController(),
             recordMcpResult = mcpResultStore::recordMcpResult,
             mcpResult = mcpResultStore::forMcp,
             refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
