@@ -19,6 +19,8 @@ import dev.touchpilot.app.agent.ToolCallCardModel
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.security.ToolApprovalRequest
+import dev.touchpilot.app.demonstration.DemonstrationSessionManager
+import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.workflow.WorkflowTraceStore
@@ -38,6 +40,7 @@ class AgentRunController(
     private val refreshExecutionLog: () -> Unit,
     private val refreshStatus: () -> Unit,
     private val refreshStepTimeline: (ChatEvent.StepTimeline, List<AgentStep>, Boolean) -> Unit,
+    private val demonstrationManager: DemonstrationSessionManager? = null,
 ) {
     private var pendingClarification: PendingClarification? = null
     private var cancellationSignal: AtomicBoolean = AtomicBoolean(false)
@@ -53,6 +56,13 @@ class AgentRunController(
     /** Workflow traces captured from successful runs this session (issue #289). */
     val workflowTraces: List<WorkflowTrace>
         get() = workflowTraceStore.all()
+
+    /** Demonstration sessions captured when recording mode is enabled (issue #302). */
+    val demonstrationSessions
+        get() = demonstrationManager?.sessions.orEmpty()
+
+    val isDemonstrationRecording: Boolean
+        get() = demonstrationManager?.isRecording == true
 
     fun startFromChat(task: String) {
         val pending = pendingClarification
@@ -107,6 +117,12 @@ class AgentRunController(
             context = AccessibilityBridge.observeScreenContext()
         )
 
+        val demoStarted = demonstrationManager?.beginRun(
+            runId = runId,
+            task = taskForRecord,
+            providerMode = currentProviderMode().name.lowercase(),
+        )
+
         Thread {
             val timelineBuilder = AgentStepTimelineBuilder()
             var skillCardAdded = false
@@ -115,6 +131,7 @@ class AgentRunController(
                     task = agentTask,
                     timeline = timelineBuilder,
                     listener = AgentEventListener { event ->
+                        demonstrationManager?.onAgentEvent(event)
                         if (event is AgentEvent.SkillActive && !skillCardAdded) {
                             skillCardAdded = true
                             runOnUiThread {
@@ -173,6 +190,11 @@ class AgentRunController(
                 } else {
                     timelineBuilder.snapshot
                 }
+                val stopReason = record.result?.stopReason
+                val demoCompletion = demonstrationManager?.completeRun(
+                    stopReason = stopReason,
+                    errorMessage = record.errorMessage,
+                )
                 if (cancellationSignal.get()) {
                     setRunState(AgentRunState.CANCELLED)
                 } else if (runOutcome.isFailure ||
@@ -190,13 +212,25 @@ class AgentRunController(
                     workingIndex = workingIndex,
                     resumeOriginalTask = originalTask,
                     timelineSteps = steps,
+                    demoCompletion = demoCompletion,
                 )
             }
         }.start()
+
+        if (demoStarted != null) {
+            runOnUiThread {
+                conversation += ChatEvent.DemonstrationRecording(
+                    sessionId = demoStarted.sessionId,
+                    active = true,
+                )
+                showChat()
+            }
+        }
     }
 
     fun cancelRun() {
         cancellationSignal.set(true)
+        demonstrationManager?.cancelRun()
         setRunState(AgentRunState.CANCELLED)
         rejectPendingApprovals()
         conversation += ChatEvent.Agent("Run cancelled.", "Stopped by user request.")
@@ -232,6 +266,7 @@ class AgentRunController(
         workingIndex: Int,
         resumeOriginalTask: String?,
         timelineSteps: List<AgentStep> = emptyList(),
+        demoCompletion: DemonstrationSessionManager.DemonstrationCompletion? = null,
     ) {
         removeWorkingIndicator(workingIndex)
         mutableRunHistory += record
@@ -333,8 +368,10 @@ class AgentRunController(
                     status = "complete"
                 )
                 captureWorkflowTrace(record)
+                captureDemonstration(demoCompletion, record.id)
             }
             else -> {
+                captureDemonstration(demoCompletion, record.id)
                 conversation += ChatEvent.Agent(
                     "Run failed.",
                     record.errorMessage ?: "Unknown agent error"
@@ -369,6 +406,32 @@ class AgentRunController(
         conversation += ChatEvent.Agent(
             "Workflow captured.",
             "${trace.steps.size} step(s) recorded — this run can be saved as a workflow.",
+        )
+    }
+
+    private fun captureDemonstration(
+        completion: DemonstrationSessionManager.DemonstrationCompletion?,
+        runId: String,
+    ) {
+        val session = completion?.session ?: return
+        if (session.steps.isEmpty()) return
+        ToolExecutionLog.recordAction(
+            name = "demonstration_recorded",
+            result = DemonstrationSummaryFormatter.completionMessage(session),
+            status = "complete",
+            source = currentProviderMode().toLogSource(),
+            details = "session_id=${session.sessionId}; steps=${session.steps.size}",
+        )
+        conversation += ChatEvent.DemonstrationRecording(
+            sessionId = session.sessionId,
+            active = false,
+            stepCount = session.steps.size,
+            summary = DemonstrationSummaryFormatter.compact(session),
+            runId = runId,
+        )
+        conversation += ChatEvent.Agent(
+            "Demonstration captured.",
+            DemonstrationSummaryFormatter.completionMessage(session),
         )
     }
 

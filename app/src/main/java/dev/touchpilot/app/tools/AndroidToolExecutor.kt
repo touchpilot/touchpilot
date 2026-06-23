@@ -43,9 +43,15 @@ class AndroidToolExecutor(
     private val retryPolicy: AndroidToolRetryPolicy = AndroidToolRetryPolicy(),
     private val verifier: ToolVerifier = ToolVerifier(),
     private val findElementMatcher: FindElementMatcher = FindElementMatcher(),
-    private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
+    private val sleeper: (Long) -> Unit = { Thread.sleep(it) },
+    private var recordingListener: dev.touchpilot.app.demonstration.recording.ToolExecutionRecordingListener =
+        dev.touchpilot.app.demonstration.recording.NoOpToolExecutionRecordingListener,
 ) {
     private val executionSource = ThreadLocal.withInitial { ToolSource.DIRECT_DEBUG }
+
+    fun setRecordingListener(listener: dev.touchpilot.app.demonstration.recording.ToolExecutionRecordingListener) {
+        recordingListener = listener
+    }
 
     fun execute(
         name: String,
@@ -144,12 +150,15 @@ class AndroidToolExecutor(
 
     private fun executeOnceVerified(name: String, args: Map<String, String>): ToolResult {
         val before = AccessibilityBridge.observeScreenContext()
+        val source = executionSource.get() ?: ToolSource.DIRECT_DEBUG
+        recordingListener.onBeforeExecution(name, args, source, before)
         val result = executeOnce(name, args)
         val after = if (name == "observe_screen" || name == "observe_screen_context") {
             before
         } else {
             AccessibilityBridge.observeScreenContext()
         }
+        recordingListener.onAfterExecution(name, args, source, before, after, result)
         val verification = verifier.verify(
             toolName = name,
             args = args,

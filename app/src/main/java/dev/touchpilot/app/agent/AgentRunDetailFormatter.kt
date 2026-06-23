@@ -463,6 +463,9 @@ object AgentRunDetailFormatter {
             } else {
                 AgentRunStepStatus.FAILED
             }
+            is AgentEvent.DemonstrationRecordingStarted -> AgentRunStepStatus.INFO
+            is AgentEvent.DemonstrationStepCaptured -> AgentRunStepStatus.INFO
+            is AgentEvent.DemonstrationRecordingFinished -> AgentRunStepStatus.INFO
         }
     }
 
@@ -491,6 +494,10 @@ object AgentRunDetailFormatter {
             is AgentEvent.WorkflowStepStarted -> "Workflow step ${event.stepIndex}/${event.totalSteps}: ${event.tool}"
             is AgentEvent.WorkflowStepCompleted -> "Workflow step ${event.stepIndex} ${if (event.success) "completed" else "failed"}"
             is AgentEvent.WorkflowReplayDone -> if (event.success) "Workflow replay done" else "Workflow replay failed"
+            is AgentEvent.DemonstrationRecordingStarted -> "Demonstration recording started"
+            is AgentEvent.DemonstrationStepCaptured ->
+                "Demonstration step ${event.stepIndex}: ${event.tool}"
+            is AgentEvent.DemonstrationRecordingFinished -> "Demonstration recording finished"
         }
     }
 
@@ -542,6 +549,17 @@ object AgentRunDetailFormatter {
                 appendLine("completed: ${payload.getInt("completed_steps")}/${payload.getInt("total_steps")}")
                 append(payload.getString("message"))
             }
+            is AgentEvent.DemonstrationRecordingStarted ->
+                "session: ${payload.getString("session_id")}"
+            is AgentEvent.DemonstrationStepCaptured -> buildString {
+                append("tool: ${payload.getString("tool")}")
+                payload.optString("screen_delta_summary")?.takeIf { it.isNotBlank() }?.let {
+                    appendLine()
+                    append("screen: $it")
+                }
+            }
+            is AgentEvent.DemonstrationRecordingFinished ->
+                "${payload.getInt("step_count")} step(s) · ${payload.getString("status")}"
         }
     }
 

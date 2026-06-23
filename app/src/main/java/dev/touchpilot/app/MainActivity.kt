@@ -76,6 +76,7 @@ class MainActivity : Activity() {
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
     private val conversation = mutableListOf<ChatEvent>()
+    private lateinit var demonstrationManager: dev.touchpilot.app.demonstration.DemonstrationSessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,6 +100,11 @@ class MainActivity : Activity() {
             accessibilityConnected = { AccessibilityBridge.isConnected() },
             observeScreen = { toolExecutor.observeScreen() }
         )
+        demonstrationManager = dev.touchpilot.app.demonstration.DemonstrationSessionManager(
+            config = dev.touchpilot.app.demonstration.DemonstrationPreferences.recordingConfig(preferences),
+            exporter = dev.touchpilot.app.demonstration.export.DemonstrationExporter(this),
+        )
+        toolExecutor.setRecordingListener(demonstrationManager.toolExecutionListener)
         localModelRuntime = LiteRtCommandModelRuntime(this)
 
         reasoningCore = DefaultLocalReasoningCore(
@@ -132,6 +138,7 @@ class MainActivity : Activity() {
             refreshStatus = ::refreshStatus,
             refreshStepTimeline = ::refreshStepTimeline,
             runtimeWorkingDetail = { currentRuntimeIndicator().workingDetail() },
+            demonstrationManager = demonstrationManager,
         )
 
         if (conversation.isEmpty()) {
@@ -241,6 +248,10 @@ class MainActivity : Activity() {
             openRunDetail = ::openRunDetail,
             openSkillDetail = ::openSkillDetail,
             refreshChatScreen = { showSection(AppSection.CHAT) },
+            isDemonstrationRecording = { agentRunController.isDemonstrationRecording },
+            demonstrationRecordingEnabled = {
+                dev.touchpilot.app.demonstration.DemonstrationPreferences.isRecordingEnabled(preferences)
+            },
         )
     }
 
@@ -406,7 +417,27 @@ class MainActivity : Activity() {
             toolExecutionController = toolExecutionController(),
             recordMcpResult = mcpResultStore::recordMcpResult,
             mcpResult = mcpResultStore::forMcp,
-            refreshSettingsScreen = { showSection(AppSection.SETTINGS) }
+            refreshSettingsScreen = { showSection(AppSection.SETTINGS) },
+            demonstrationRecordingEnabled = {
+                dev.touchpilot.app.demonstration.DemonstrationPreferences.isRecordingEnabled(preferences)
+            },
+            demonstrationAutoExportEnabled = {
+                dev.touchpilot.app.demonstration.DemonstrationPreferences.isAutoExportEnabled(preferences)
+            },
+            demonstrationSessionCount = { demonstrationManager.sessions.size },
+            onDemonstrationRecordingToggled = { enabled ->
+                dev.touchpilot.app.demonstration.DemonstrationPreferences.setRecordingEnabled(preferences, enabled)
+                demonstrationManager.updateConfig(
+                    dev.touchpilot.app.demonstration.DemonstrationPreferences.recordingConfig(preferences)
+                )
+                toolExecutor.setRecordingListener(demonstrationManager.toolExecutionListener)
+            },
+            onDemonstrationAutoExportToggled = { enabled ->
+                dev.touchpilot.app.demonstration.DemonstrationPreferences.setAutoExportEnabled(preferences, enabled)
+                demonstrationManager.updateConfig(
+                    dev.touchpilot.app.demonstration.DemonstrationPreferences.recordingConfig(preferences)
+                )
+            },
         ).render()
     }
 

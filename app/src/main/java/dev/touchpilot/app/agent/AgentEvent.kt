@@ -390,6 +390,74 @@ sealed class AgentEvent(
         }
     }
 
+    /**
+     * Emitted when demonstration recording mode begins for an agent run
+     * (issue #302).
+     */
+    data class DemonstrationRecordingStarted(
+        val sessionId: String,
+        val runId: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis(),
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.DEMONSTRATION_RECORDING_STARTED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "session_id" to sessionId,
+                "run_id" to runId,
+            )
+        }
+    }
+
+    /**
+     * Emitted after each tool step is captured with before/after screen context.
+     */
+    data class DemonstrationStepCaptured(
+        val sessionId: String,
+        val stepIndex: Int,
+        val tool: String,
+        val screenDeltaSummary: String? = null,
+        val durationMillis: Long = 0L,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis(),
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.DEMONSTRATION_STEP_CAPTURED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "session_id" to sessionId,
+                "step_index" to stepIndex,
+                "tool" to tool,
+                "screen_delta_summary" to screenDeltaSummary?.redacted(redactSensitive),
+                "duration_millis" to durationMillis,
+            )
+        }
+    }
+
+    /**
+     * Emitted when a demonstration recording session completes.
+     */
+    data class DemonstrationRecordingFinished(
+        val sessionId: String,
+        val runId: String,
+        val stepCount: Int,
+        val status: String,
+        override val id: String = nextId(),
+        override val timestampMillis: Long = System.currentTimeMillis(),
+    ) : AgentEvent(id, timestampMillis) {
+        override val type = AgentEventType.DEMONSTRATION_RECORDING_FINISHED
+
+        override fun payload(redactSensitive: Boolean): Map<String, Any?> {
+            return mapOf(
+                "session_id" to sessionId,
+                "run_id" to runId,
+                "step_count" to stepCount,
+                "status" to status,
+            )
+        }
+    }
+
     companion object {
         private var sequence = 0L
 
@@ -486,5 +554,8 @@ enum class AgentEventType(val wireName: String) {
     WORKFLOW_STEP_VERIFICATION_FAILED("workflow_step_verification_failed"),
     WORKFLOW_STEP_STARTED("workflow_step_started"),
     WORKFLOW_STEP_COMPLETED("workflow_step_completed"),
-    WORKFLOW_REPLAY_DONE("workflow_replay_done")
+    WORKFLOW_REPLAY_DONE("workflow_replay_done"),
+    DEMONSTRATION_RECORDING_STARTED("demonstration_recording_started"),
+    DEMONSTRATION_STEP_CAPTURED("demonstration_step_captured"),
+    DEMONSTRATION_RECORDING_FINISHED("demonstration_recording_finished"),
 }

@@ -50,6 +50,14 @@ sealed class ChatEvent {
         var state: ClarificationState = ClarificationState.PENDING
         var selectedAnswer: String? = null
     }
+
+    data class DemonstrationRecording(
+        val sessionId: String,
+        val active: Boolean,
+        val stepCount: Int = 0,
+        val summary: String = "",
+        val runId: String? = null,
+    ) : ChatEvent()
 }
 
 enum class ApprovalState { PENDING, APPROVED, REJECTED }

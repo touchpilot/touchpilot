@@ -49,6 +49,9 @@ class AgentStepTimelineBuilder {
             is AgentEvent.WorkflowStepStarted -> Unit
             is AgentEvent.WorkflowStepCompleted -> Unit
             is AgentEvent.WorkflowReplayDone -> Unit
+            is AgentEvent.DemonstrationRecordingStarted -> Unit
+            is AgentEvent.DemonstrationStepCaptured -> Unit
+            is AgentEvent.DemonstrationRecordingFinished -> Unit
         }
     }
 

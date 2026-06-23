@@ -20,5 +20,9 @@ enum class SettingsPanel(val label: String, val intro: String) {
     RUNTIME(
         "Runtime",
         "Choose how TouchPilot reasons about your requests on this device."
+    ),
+    RECORDING(
+        "Recording",
+        "Capture tool calls and screen context for each agent action as a demonstration."
     )
 }

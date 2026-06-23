@@ -64,7 +64,12 @@ class SettingsScreenRenderer(
     private val setLastFocusInputArgs: (Map<String, String>?) -> Unit,
     private val recordMcpResult: (String) -> Unit,
     private val mcpResult: () -> String,
-    private val refreshSettingsScreen: () -> Unit
+    private val refreshSettingsScreen: () -> Unit,
+    private val demonstrationRecordingEnabled: () -> Boolean = { false },
+    private val demonstrationAutoExportEnabled: () -> Boolean = { false },
+    private val demonstrationSessionCount: () -> Int = { 0 },
+    private val onDemonstrationRecordingToggled: (Boolean) -> Unit = {},
+    private val onDemonstrationAutoExportToggled: (Boolean) -> Unit = {},
 ) {
     fun render() {
         val panel = activeSettingsPanel()
@@ -82,6 +87,7 @@ class SettingsScreenRenderer(
             SettingsPanel.MCP -> renderMcpPanel()
             SettingsPanel.CLOUD -> renderCloudPanel()
             SettingsPanel.RUNTIME -> renderRuntimePanel()
+            SettingsPanel.RECORDING -> renderRecordingPanel()
         }
     }
 
@@ -219,6 +225,87 @@ class SettingsScreenRenderer(
             getLastFocusInputArgs = getLastFocusInputArgs,
             setLastFocusInputArgs = setLastFocusInputArgs
         ).render()
+    }
+
+    private fun renderRecordingPanel() {
+        val enabled = demonstrationRecordingEnabled()
+        val autoExport = demonstrationAutoExportEnabled()
+        val sessionCount = demonstrationSessionCount()
+
+        contentRoot.addView(
+            activity.summaryCard(
+                title = "Demonstration recording",
+                value = if (enabled) "Enabled" else "Disabled",
+                chipText = if (enabled) "recording" else "off",
+                chipAccent = enabled,
+            )
+        )
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "About demonstration mode",
+                body = buildString {
+                    appendLine("When enabled, TouchPilot records each tool call with arguments and screen context before and after every step.")
+                    appendLine()
+                    appendLine("Captured demonstrations can be exported as JSON or converted to replayable workflows.")
+                    appendLine()
+                    append("$sessionCount session(s) captured this launch.")
+                },
+            )
+        )
+
+        contentRoot.addView(activity.formLabel("Recording mode"))
+        contentRoot.addView(
+            skillSelectRow(
+                title = "Record demonstrations",
+                subtitle = "Capture tool calls and screen state for each agent action",
+                badge = if (enabled) "on" else null,
+                enabled = true,
+                selected = enabled,
+                onSelect = { onDemonstrationRecordingToggled(true) },
+                onToggleEnabled = null,
+                onViewDetails = null,
+            )
+        )
+        contentRoot.addView(
+            skillSelectRow(
+                title = "Do not record",
+                subtitle = "Run agents without capturing demonstration data",
+                badge = if (!enabled) "active" else null,
+                enabled = true,
+                selected = !enabled,
+                onSelect = { onDemonstrationRecordingToggled(false) },
+                onToggleEnabled = null,
+                onViewDetails = null,
+            )
+        )
+
+        if (enabled) {
+            contentRoot.addView(activity.formLabel("Export options"))
+            contentRoot.addView(
+                skillSelectRow(
+                    title = "Auto-export after each run",
+                    subtitle = "Save demonstration JSON to app storage when a run completes",
+                    badge = if (autoExport) "on" else null,
+                    enabled = true,
+                    selected = autoExport,
+                    onSelect = { onDemonstrationAutoExportToggled(true) },
+                    onToggleEnabled = null,
+                    onViewDetails = null,
+                )
+            )
+            contentRoot.addView(
+                skillSelectRow(
+                    title = "Keep in memory only",
+                    subtitle = "Store demonstrations for this session without writing files",
+                    badge = if (!autoExport) "active" else null,
+                    enabled = true,
+                    selected = !autoExport,
+                    onSelect = { onDemonstrationAutoExportToggled(false) },
+                    onToggleEnabled = null,
+                    onViewDetails = null,
+                )
+            )
+        }
     }
 
     private fun renderMcpPanel() {
@@ -420,6 +507,7 @@ class SettingsScreenRenderer(
                     SettingsPanel.MCP -> R.id.settings_panel_mcp_button
                     SettingsPanel.CLOUD -> R.id.settings_panel_cloud_button
                     SettingsPanel.RUNTIME -> R.id.settings_panel_runtime_button
+                    SettingsPanel.RECORDING -> R.id.settings_panel_recording_button
                 }
             }
             val content = LinearLayout(activity).apply {

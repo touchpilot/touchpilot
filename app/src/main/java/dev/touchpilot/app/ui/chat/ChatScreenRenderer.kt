@@ -42,9 +42,14 @@ class ChatScreenRenderer(
     private val openRunDetail: (String) -> Unit,
     private val openSkillDetail: (String) -> Unit,
     private val refreshChatScreen: () -> Unit,
+    private val isDemonstrationRecording: () -> Boolean = { false },
+    private val demonstrationRecordingEnabled: () -> Boolean = { false },
 ) {
     fun render() {
         contentRoot.addView(runStatePill())
+        if (demonstrationRecordingEnabled() && (isDemonstrationRecording() || agentRunState() == AgentRunState.RUNNING)) {
+            contentRoot.addView(demonstrationRecordingBanner())
+        }
         contentRoot.addView(chatContextStrip())
 
         conversation.forEach { event ->
@@ -114,6 +119,7 @@ class ChatScreenRenderer(
                 activity = activity,
                 refreshChatScreen = refreshChatScreen
             ).clarificationCard(event)
+            is ChatEvent.DemonstrationRecording -> demonstrationRecordingCard(event)
         }
     }
 
@@ -437,6 +443,83 @@ class ChatScreenRenderer(
 
         card.addView(content)
         return card.withMargins(top = 8, bottom = 8)
+    }
+
+    private fun demonstrationRecordingBanner(): View {
+        val recording = isDemonstrationRecording()
+        val color = if (recording) Color.rgb(220, 80, 80) else Theme.MutedText
+        return MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = color
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+            addView(
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(16, 10, 16, 10)
+                    addView(
+                        TextView(activity).apply {
+                            text = if (recording) "● Recording demonstration" else "Demonstration mode enabled"
+                            textSize = 12f
+                            typeface = Typeface.DEFAULT_BOLD
+                            setTextColor(color)
+                        }
+                    )
+                }
+            )
+        }.withMargins(top = 4, bottom = 4)
+    }
+
+    private fun demonstrationRecordingCard(event: ChatEvent.DemonstrationRecording): View {
+        val stroke = if (event.active) Color.rgb(220, 80, 80) else Theme.Accent
+        val card = MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            this.strokeColor = stroke
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+            if (event.runId != null) {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { openRunDetail(event.runId!!) }
+            }
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        content.addView(
+            TextView(activity).apply {
+                text = if (event.active) "Recording demonstration…" else "Demonstration captured"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            }
+        )
+        if (!event.active && event.stepCount > 0) {
+            content.addView(
+                TextView(activity).apply {
+                    text = "${event.stepCount} step(s) with screen context"
+                    textSize = 12f
+                    setTextColor(Theme.BodyText)
+                    setPadding(0, 4, 0, 0)
+                }
+            )
+            if (event.summary.isNotBlank()) {
+                content.addView(
+                    TextView(activity).apply {
+                        text = event.summary
+                        textSize = 11.5f
+                        setTextColor(Theme.MutedText)
+                        setPadding(0, 4, 0, 0)
+                    }
+                )
+            }
+        }
+        card.addView(content)
+        return card.withMargins(top = 6, bottom = 6)
     }
 
     private fun completionSummaryCard(summary: AgentRunCompletionSummary, runId: String): View {
