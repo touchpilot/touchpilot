@@ -39,3 +39,16 @@ TouchPilot should become a small, auditable mobile agent host:
 - optional local inference,
 - skill files that users can read and edit,
 - clear safety boundaries for app actions.
+
+## Final Goal
+
+The post-1.0 destination is a stable Android agent host that stays useful even
+without a local GPT-class model:
+
+- native Android control with clear permissions and approvals,
+- local-first memory, logs, and reusable traces,
+- readable and editable skills,
+- optional local reasoning and visual fallback where devices can support it,
+- extension boundaries that are explicit, revocable, and auditable,
+- a product that remains safe and understandable when it runs only on
+  deterministic routing plus policy.

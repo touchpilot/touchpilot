@@ -56,6 +56,13 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 13 | Planned | Real device beta. |
 | Milestone 14 | Planned | Advanced local AI. |
 | Milestone 15 | Planned | 1.0 release. |
+| Milestone 16 | Planned | Mobile agent host foundation. |
+| Milestone 17 | Planned | Local memory and trace system. |
+| Milestone 18 | Planned | Workflow capture and replay. |
+| Milestone 19 | Planned | Skills and extension management. |
+| Milestone 20 | Planned | Optional local intelligence. |
+| Milestone 21 | Planned | Real device host hardening. |
+| Milestone 22 | Planned | 2.0 platform release. |
 
 The active roadmap is between the final Milestone 6 skill-system PRs and the
 first Milestone 7 safety-policy PRs. Milestones 1 through 5 are retained as
@@ -619,3 +626,229 @@ Exit criteria:
 
 TouchPilot is installable, understandable, local-only by default, and safe
 enough for public users.
+
+## Post-1.0 Direction
+
+Milestone 15 is the stable public release. The post-1.0 path should stay
+grounded in the final vision of TouchPilot as a small, auditable mobile agent
+host. The work is split into smaller milestones so each one adds a usable piece
+of the platform without relying on a local GPT-class model.
+
+## Milestone 16: Mobile Agent Host Foundation
+
+Goal: make TouchPilot a host runtime with explicit lifecycle, permissions, and
+session boundaries.
+
+```text
+stable 1.0 runtime
+       │
+       ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Host       │ → │ Session      │ → │ Permission │
+│ lifecycle  │   │ boundaries   │   │ boundary   │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+               visibility ◄──────► audit  ▼
+                        │          explicit trust
+                        ▼
+               inspectable on-device control
+```
+
+Deliverables:
+
+- Define host-level session creation, pause, stop, and cleanup behavior.
+- Add clearer permission surfaces for Android tools, skills, and extensions.
+- Add host status indicators for active session, foreground service, and
+  permission readiness.
+- Keep the runtime visible and explainable when it is active.
+
+Exit criteria:
+
+Users can tell what state the host is in, what it can access, and what scope a
+session is using.
+
+## Milestone 17: Local Memory and Trace System
+
+Goal: turn logs and memory into a usable on-device host record.
+
+```text
+agent activity
+      │
+      ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Session    │ → │ Local       │ → │ Trace      │
+│ events     │   │ memory      │   │ viewer     │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+      preferences ◄─────┼────► replay     ▼
+                        │          export / inspect
+                        ▼
+                  on-device history
+```
+
+Deliverables:
+
+- Add local memory entries for preferences, recurring apps, and task history.
+- Add a structured trace viewer for steps, tool calls, approvals, and errors.
+- Add trace export and import for debugging and support.
+- Add redaction rules for stored traces and memory records.
+
+Exit criteria:
+
+Users can inspect what TouchPilot did, why it did it, and what it remembers on
+device.
+
+## Milestone 18: Workflow Capture and Replay
+
+Goal: make successful tasks repeatable as local workflows.
+
+```text
+successful task trace
+        │
+        ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Trace      │ → │ Workflow     │ → │ Replay     │
+│ capture    │   │ definition   │   │ engine     │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+      parameters ◄──────┼──────► verify   ▼
+                        │          each step
+                        ▼
+                 workflow review UI
+```
+
+Deliverables:
+
+- Add capture from completed agent runs into workflow definitions.
+- Add a workflow editor for parameters, expected states, and step order.
+- Add deterministic replay with step-by-step verification.
+- Add workflow failure recovery and repair suggestions.
+
+Exit criteria:
+
+TouchPilot can turn a known task into a repeatable, inspectable workflow and
+replay it with verification.
+
+## Milestone 19: Skills and Extension Management
+
+Goal: make skills and external tools first-class, revocable host resources.
+
+```text
+skill files / MCP tools
+         │
+         ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Registry   │ → │ Permissions  │ → │ Revocation │
+│ and scope  │   │ and policy   │   │ and audit  │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+        import/export ◄──┼──────► enable  ▼
+                        │          disable
+                        ▼
+              user-managed capability set
+```
+
+Deliverables:
+
+- Add skills import, export, enable, disable, and revocation flows.
+- Add explicit MCP and local extension permissions separate from Android tool
+  permissions.
+- Add a skill and extension review UI with visible scope and risk.
+- Expand audit logs so external capability use is easy to inspect later.
+
+Exit criteria:
+
+Users can manage skills and extensions as visible capabilities instead of
+hidden runtime behavior.
+
+## Milestone 20: Optional Local Intelligence
+
+Goal: add stronger local reasoning without making it required for the product.
+
+```text
+hosted Android tools
+       │
+       ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Optional   │ → │ Local        │ → │ Better     │
+│ model pack │   │ planner/VLM  │   │ reasoning  │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+     deterministic ◄────┼────► fallback   ▼
+                        │          same tool contract
+                        ▼
+                 capable-device upgrade path
+```
+
+Deliverables:
+
+- Add model file management for optional local LLM, VLM, and OCR assets.
+- Add a local planner that can sit on the same tool contract as the router.
+- Improve ambiguity handling, clarification, and preference learning.
+- Benchmark optional model paths against deterministic fallback.
+
+Exit criteria:
+
+TouchPilot can use richer local intelligence on capable devices, but the core
+agent still works when those models are absent.
+
+## Milestone 21: Real Device Host Hardening
+
+Goal: validate the host on real devices and make it dependable.
+
+```text
+beta device
+   │
+   ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Install    │ → │ Device      │ → │ Support    │
+│ and setup  │   │ behavior    │   │ artifacts  │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+     compatibility ◄────┼────► battery   ▼
+                        │          bug export
+                        ▼
+                  real-device beta
+```
+
+Deliverables:
+
+- Add real-device onboarding and compatibility checks.
+- Review battery, foreground service, and OEM-specific behavior.
+- Add local bug report export and support bundles.
+- Validate the host flow across multiple Android versions.
+
+Exit criteria:
+
+TouchPilot behaves predictably on real devices, not just emulators.
+
+## Milestone 22: 2.0 Release
+
+Goal: ship the post-1.0 mobile agent host as a stable platform release.
+
+```text
+TouchPilot host
+      │
+      ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Versioned  │ → │ Safety +     │ → │ Public     │
+│ contracts  │   │ extensions   │   │ platform   │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+       docs/tests ◄─────┼──────► release  ▼
+                        │          process
+                        ▼
+                  stable host product
+```
+
+Deliverables:
+
+- Freeze and version the tool, skill, workflow, memory, and policy contracts.
+- Publish the host-oriented documentation set and release process.
+- Keep extension boundaries explicit, revocable, and auditable.
+- Keep optional local intelligence as an enhancement, not a requirement.
+
+Exit criteria:
+
+TouchPilot is a stable, auditable Android agent host with optional local
+intelligence and a clear platform boundary.
