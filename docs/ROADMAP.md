@@ -60,10 +60,11 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 17 | Planned | Local memory and trace system. |
 | Milestone 18 | Planned | Workflow capture and replay. |
 | Milestone 19 | Planned | Skills and extension management. |
-| Milestone 20 | Planned | Skill pack expansion. |
-| Milestone 21 | Planned | Optional local intelligence. |
-| Milestone 22 | Planned | Real device host hardening. |
-| Milestone 23 | Planned | 2.0 platform release. |
+| Milestone 20 | Planned | Skill discovery and run entry. |
+| Milestone 21 | Planned | Skill pack expansion. |
+| Milestone 22 | Planned | Optional local intelligence. |
+| Milestone 23 | Planned | Real device host hardening. |
+| Milestone 24 | Planned | 2.0 platform release. |
 
 The active roadmap is between the final Milestone 6 skill-system PRs and the
 first Milestone 7 safety-policy PRs. Milestones 1 through 5 are retained as
@@ -762,7 +763,39 @@ Exit criteria:
 Users can manage skills and extensions as visible capabilities instead of
 hidden runtime behavior.
 
-## Milestone 20: Skill Pack Expansion
+## Milestone 20: Skill Discovery and Run Entry
+
+Goal: make the product page show individual skills users can run directly.
+
+```text
+use page
+   │
+   ▼
+┌────────────┐   ┌──────────────┐   ┌────────────┐
+│ Skill      │ → │ Skill run    │ → │ Chat /    │
+│ list       │   │ entry point  │   │ detail    │
+└────────────┘   └──────┬───────┘   └─────┬──────┘
+                        │                 │
+           examples ◄───┼──────► active   ▼
+                        │          skill scope
+                        ▼
+                "what can I do here?" page
+```
+
+Deliverables:
+
+- Show individual skills on the Use page instead of only skill packs.
+- Surface example prompts for each skill so users can understand the action.
+- Make each skill card a runnable entry point that activates the skill and
+  takes the user into the next step.
+- Keep the page focused on discoverability and simple entry into common tasks.
+
+Exit criteria:
+
+Users can open the Use page, understand what TouchPilot can do, and run a skill
+from that list.
+
+## Milestone 21: Skill Pack Expansion
 
 Goal: grow TouchPilot through reusable skill packs for common Android tasks.
 
@@ -794,7 +827,7 @@ Exit criteria:
 TouchPilot can gain new capability primarily by adding vetted skill packs, not
 just by changing the core agent runtime.
 
-## Milestone 21: Optional Local Intelligence
+## Milestone 22: Optional Local Intelligence
 
 Goal: add stronger local reasoning without making it required for the product.
 
@@ -825,7 +858,7 @@ Exit criteria:
 TouchPilot can use richer local intelligence on capable devices, but the core
 agent still works when those models are absent.
 
-## Milestone 22: Real Device Host Hardening
+## Milestone 23: Real Device Host Hardening
 
 Goal: validate the host on real devices and make it dependable.
 
@@ -855,7 +888,7 @@ Exit criteria:
 
 TouchPilot behaves predictably on real devices, not just emulators.
 
-## Milestone 23: 2.0 Release
+## Milestone 24: 2.0 Release
 
 Goal: ship the post-1.0 mobile agent host as a stable platform release.
 

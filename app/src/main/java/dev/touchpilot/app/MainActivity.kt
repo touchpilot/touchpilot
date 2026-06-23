@@ -294,16 +294,19 @@ class MainActivity : Activity() {
             activity = this,
             contentRoot = contentRoot,
             skills = skillRegistry.enabledSkills(),
-            toolExecutionController = toolExecutionController(),
             openAccessibilitySettings = ::openAccessibilitySettings,
             showSection = ::showSection,
             openSettingsTools = {
                 navigationController.openSettingsPanel(SettingsPanel.TOOLS)
                 showSection(AppSection.SETTINGS)
             },
-            openSkillDetail = ::openSkillDetail,
-            refreshProductScreen = { showSection(AppSection.PRODUCT) }
+            runSkill = ::runSkillFromProduct
         ).render()
+    }
+
+    private fun runSkillFromProduct(skillId: String) {
+        skillRegistry.setActiveSkill(skillId)
+        showSection(AppSection.CHAT)
     }
 
     private fun toolExecutionController(): ToolExecutionController {

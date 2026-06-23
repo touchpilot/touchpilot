@@ -4,24 +4,20 @@ import android.app.Activity
 import android.widget.LinearLayout
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.navigation.AppSection
-import dev.touchpilot.app.runtime.ToolExecutionController
-import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
-import dev.touchpilot.app.ui.withMargins
+import dev.touchpilot.app.ui.secondaryButton
 
 class ProductScreenRenderer(
     private val activity: Activity,
     private val contentRoot: LinearLayout,
     private val skills: List<Skill>,
-    private val toolExecutionController: ToolExecutionController,
     private val openAccessibilitySettings: () -> Unit,
     private val showSection: (AppSection) -> Unit,
     private val openSettingsTools: () -> Unit,
-    private val openSkillDetail: (String) -> Unit,
-    private val refreshProductScreen: () -> Unit
+    private val runSkill: (String) -> Unit
 ) {
     fun render() {
         contentRoot.addView(
@@ -71,31 +67,7 @@ class ProductScreenRenderer(
             }
         )
 
-        contentRoot.addView(activity.sectionTitle("Quick actions"))
-        val quickActionRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        quickActionRow.addView(
-            activity.primaryButton("Read Screen") {
-                toolExecutionController.executeAndRender("observe_screen_context", emptyMap())
-                refreshProductScreen()
-            },
-            rowParams()
-        )
-        quickActionRow.addView(
-            activity.primaryButton("Foreground App") {
-                toolExecutionController.executeAndRender("get_foreground_app", emptyMap())
-                refreshProductScreen()
-            },
-            rowParams()
-        )
-        contentRoot.addView(quickActionRow)
-
-        contentRoot.addView(
-            activity.primaryButton("Open Accessibility Settings") {
-                openAccessibilitySettings()
-            }.withMargins(top = 8)
-        )
-
-        contentRoot.addView(activity.sectionTitle("Skills you can use"))
+        contentRoot.addView(activity.sectionTitle("Skills you can run"))
         if (skills.isEmpty()) {
             contentRoot.addView(
                 activity.timelineCard(
@@ -108,25 +80,54 @@ class ProductScreenRenderer(
             )
         } else {
             skills.forEach { skill ->
-                val examples = skill.examples.take(2)
+                val examples = skill.examples.take(3)
+                val skillLabel = if (examples.isNotEmpty()) {
+                    examples.first()
+                } else {
+                    skill.title
+                }
                 val body = buildString {
-                    append(skill.description)
+                    appendLine(skill.description)
                     if (examples.isNotEmpty()) {
-                        append("\nExamples: ")
-                        append(examples.joinToString(separator = ", "))
+                        appendLine()
+                        append("Examples")
+                        appendLine(":")
+                        append(examples.joinToString(separator = "\n") { example -> "• $example" })
                     }
                 }
                 contentRoot.addView(
                     activity.timelineCard(
-                        title = skill.title,
+                        title = skillLabel,
                         body = body,
-                        actionHint = "Open skill details"
+                        actionHint = "Run skill"
                     ) {
-                        openSkillDetail(skill.id)
+                        runSkill(skill.id)
                     }
                 )
             }
         }
+
+        contentRoot.addView(activity.sectionTitle("Quick actions"))
+        val quickActionRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        quickActionRow.addView(
+            activity.primaryButton("Open Chat") {
+                showSection(AppSection.CHAT)
+            },
+            rowParams()
+        )
+        quickActionRow.addView(
+            activity.primaryButton("Open Settings") {
+                showSection(AppSection.SETTINGS)
+            },
+            rowParams()
+        )
+        contentRoot.addView(quickActionRow)
+
+        contentRoot.addView(
+            activity.secondaryButton("Open Accessibility Settings") {
+                openAccessibilitySettings()
+            }
+        )
     }
 
     private fun rowParams() = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
