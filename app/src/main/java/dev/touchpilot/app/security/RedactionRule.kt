@@ -52,9 +52,12 @@ internal sealed class RedactionRule {
      * `password="[REDACTED]"` and a value like `tool({password=hunter2})`
      * becomes `tool({password=[REDACTED]})` with the closing `})` intact.
      */
-    class KeyAssignment(keyAlternation: String) : RedactionRule() {
+    class KeyAssignment(
+        keyAlternation: String,
+        delimiterAlternation: String = "[:=]"
+    ) : RedactionRule() {
         private val pattern: Regex = Regex(
-            "(?i)((?:$keyAlternation)\\s*[:=]\\s*)([\"'`])?$TokenClass(\\2?)"
+            "(?i)((?:$keyAlternation)\\s*$delimiterAlternation\\s*)([\"'`])?$TokenClass(\\2?)"
         )
 
         override fun apply(text: String): String {
