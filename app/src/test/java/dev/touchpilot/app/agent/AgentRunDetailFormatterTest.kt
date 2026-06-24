@@ -340,6 +340,29 @@ class AgentRunDetailFormatterTest {
     }
 
     @Test
+    fun formatStepsRedactsSensitiveVerificationReasons() {
+        val record = sampleRecord(
+            events = listOf(
+                AgentEvent.UserMessage("Tap save"),
+                AgentEvent.ToolSucceeded(
+                    tool = "tap",
+                    message = "Tapped target",
+                    data = mapOf(
+                        "verification_status" to "passed",
+                        "verification_reason" to "password: hunter2",
+                        "screen_changed" to "true",
+                    ),
+                ),
+            ),
+        )
+
+        val steps = AgentRunDetailFormatter.formatSteps(record)
+
+        assertEquals(2, steps.size)
+        assertContains(steps[1].detail, "verification reason: [REDACTED]")
+    }
+
+    @Test
     fun unavailableRunDataProducesEmptyStepsAndReason() {
         val record = AgentRunRecord(
             id = "run-missing",
