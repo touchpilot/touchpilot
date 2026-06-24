@@ -5,7 +5,11 @@ object SensitiveTextRedactor {
         RedactionRule.KeyAssignment(
             keyAlternation =
                 "api[_-]?key|access[_-]?token|refresh[_-]?token|password|passcode|secret|" +
-                    "private[_-]?key|credential|auth|authorization"
+                    "private[_-]?key|credential"
+        ),
+        RedactionRule.KeyAssignment(
+            keyAlternation = "auth|authorization",
+            delimiterAlternation = "="
         ),
         RedactionRule.BearerHeader(),
         RedactionRule.LiteralValue(Regex("\\b\\d{13,19}\\b")),
