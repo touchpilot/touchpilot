@@ -1,13 +1,14 @@
 ---
 id: messages
 title: Messages
-description: Draft and review SMS or messaging actions with explicit user approval before sending.
+description: Draft SMS or chat replies and require explicit approval before sending.
 risk: high
 aliases:
   - messages
   - sms
   - text message
   - send a text
+  - draft a reply
 allowed_tools:
   - observe_screen_context
   - open_app
@@ -18,6 +19,7 @@ allowed_tools:
   - swipe
   - press_back
   - wait_for_idle
+  - wait_for_app
 success_criteria:
   - A draft message is visible and ready for user review.
   - Nothing is sent without explicit user approval.

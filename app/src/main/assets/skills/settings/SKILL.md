@@ -1,7 +1,7 @@
 ---
 id: settings
 title: Settings
-description: Navigate and inspect Android Settings screens safely.
+description: Navigate Android Settings screens safely and stop when the requested panel is visible.
 risk: medium
 aliases:
   - settings

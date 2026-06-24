@@ -1,7 +1,7 @@
 ---
 id: browser
 title: Browser
-description: Open pages, search the web, and inspect visible browser results.
+description: Open web pages and search results, then inspect the visible page content.
 risk: low
 aliases:
   - browser
@@ -18,6 +18,7 @@ allowed_tools:
   - swipe
   - press_back
   - wait_for_idle
+  - wait_for_app
 success_criteria:
   - The requested page or search results are visible.
   - The agent stops after the requested content is on screen.

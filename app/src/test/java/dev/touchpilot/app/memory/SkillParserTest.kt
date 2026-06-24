@@ -237,9 +237,8 @@ class SkillParserTest {
 
     @Test
     fun parsesLegacyV1WithoutToolValidation() {
-        // The bundled settings skill still ships in v1 and even lists a tool
-        // name that is not in the catalog (wait_for_ui). The legacy path must
-        // stay permissive so it keeps loading until issue #229 upgrades it.
+        // The legacy path must stay permissive for older skill packs that still
+        // use the heading + "Allowed initial tools:" format.
         val markdown = """
             # Settings Skill
 

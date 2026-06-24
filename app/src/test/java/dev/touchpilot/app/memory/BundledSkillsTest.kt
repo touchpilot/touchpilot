@@ -45,6 +45,28 @@ class BundledSkillsTest {
         assertTrue(skill.successCriteria.any { it.contains("approval", ignoreCase = true) })
     }
 
+    @Test
+    fun bundledAppLaunchSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("app-launch")
+        val skill = valid(SkillParser.parse("app-launch", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("App Launch", skill.title)
+        assertEquals(SkillRisk.LOW, skill.risk)
+        assertTrue("open_app" in skill.allowedTools)
+    }
+
+    @Test
+    fun bundledDeviceHelpSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("device-help")
+        val skill = valid(SkillParser.parse("device-help", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("Device Help", skill.title)
+        assertEquals(SkillRisk.MEDIUM, skill.risk)
+        assertTrue(skill.allowedTools.contains("open_settings_panel"))
+    }
+
     private fun readBundledSkill(id: String): String {
         val candidates = listOf(
             File("src/main/assets/skills/$id/SKILL.md"),
