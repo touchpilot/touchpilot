@@ -410,7 +410,7 @@ object AgentRunDetailFormatter {
             }
             step.verification?.let { verification ->
                 appendLine("verification: ${verification.status}")
-                appendLine("verification reason: ${verification.reason}")
+                appendLine("verification reason: ${SensitiveTextRedactor.redact(verification.reason)}")
                 if (verification.data.isNotEmpty()) {
                     append("verification data:")
                     appendLine(formatStringMap(verification.data))
@@ -618,7 +618,9 @@ object AgentRunDetailFormatter {
         if (status.isBlank()) return
         appendLine("verification: $status")
         val reason = data.optString("verification_reason")
-        if (reason.isNotBlank()) appendLine("verification reason: $reason")
+        if (reason.isNotBlank()) {
+            appendLine("verification reason: ${SensitiveTextRedactor.redact(reason)}")
+        }
         data.optString("screen_changed").takeIf { it.isNotBlank() }?.let {
             appendLine("screen changed: $it")
         }
