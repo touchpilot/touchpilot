@@ -509,6 +509,17 @@ class SettingsScreenRenderer(
                 )
             )
         }
+        if (!enabled) {
+            row.addView(
+                activity.statusChip("disabled", accent = false),
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    leftMargin = activity.dp(8)
+                }
+            )
+        }
         if (onToggleEnabled != null) {
             row.addView(
                 activity.secondaryButton(if (enabled) "Disable" else "Enable") {
