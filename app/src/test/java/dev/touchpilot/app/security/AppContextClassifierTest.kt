@@ -42,6 +42,36 @@ class AppContextClassifierTest {
     }
 
     @Test
+    fun classifiesPaymentAppPackage() {
+        val categories = AppContextClassifier.classify(
+            request(
+                foregroundApp = ForegroundAppInfo(
+                    packageName = "com.paypal.android.p2pmobile",
+                    appLabel = "PayPal",
+                    accessibilityConnected = true
+                )
+            )
+        )
+
+        assertTrue(PolicyAppCategory.CHECKOUT_PAYMENT in categories)
+    }
+
+    @Test
+    fun classifiesCashAppLabel() {
+        val categories = AppContextClassifier.classify(
+            request(
+                foregroundApp = ForegroundAppInfo(
+                    packageName = "com.squareup.cash",
+                    appLabel = "Cash App",
+                    accessibilityConnected = true
+                )
+            )
+        )
+
+        assertTrue(PolicyAppCategory.CHECKOUT_PAYMENT in categories)
+    }
+
+    @Test
     fun classifiesDestructiveSettingsScreen() {
         val categories = AppContextClassifier.classify(
             request(activeScreen = "System settings: factory reset phone")
