@@ -279,10 +279,6 @@ class LogsScreenRenderer(
             addView(logMetaChip(entry.source.ifBlank { "unknown" }, Theme.Warning))
             addView(spacer(activity.dp(6)))
             addView(logMetaChip(entry.status.ifBlank { "log" }, logStatusColor(entry.status)))
-            if (entry.actor.isNotBlank()) {
-                addView(spacer(activity.dp(6)))
-                addView(logMetaChip(entry.actor, Theme.SurfaceRaised))
-            }
         }
     }
 
@@ -319,10 +315,10 @@ class LogsScreenRenderer(
             iconTint = ColorStateList.valueOf(Theme.BodyText)
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
             iconPadding = 0
-            iconSize = activity.dp(24)
-            minWidth = activity.dp(44)
-            minHeight = activity.dp(44)
-            layoutParams = LinearLayout.LayoutParams(activity.dp(44), activity.dp(44)).apply {
+            iconSize = activity.dp(18)
+            minWidth = activity.dp(32)
+            minHeight = activity.dp(32)
+            layoutParams = LinearLayout.LayoutParams(activity.dp(32), activity.dp(32)).apply {
                 setMargins(activity.dp(2), 0, 0, 0)
             }
             insetTop = 0

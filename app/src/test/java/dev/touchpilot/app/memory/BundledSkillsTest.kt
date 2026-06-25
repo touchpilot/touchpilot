@@ -67,6 +67,65 @@ class BundledSkillsTest {
         assertTrue(skill.allowedTools.contains("open_settings_panel"))
     }
 
+    @Test
+    fun bundledWifiSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("wifi")
+        val skill = valid(SkillParser.parse("wifi", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("Wi-Fi", skill.title)
+        assertEquals(SkillRisk.MEDIUM, skill.risk)
+        assertTrue("open_settings_panel" in skill.allowedTools)
+        assertTrue("observe_screen_context" in skill.allowedTools)
+    }
+
+    @Test
+    fun bundledMediaVolumeSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("media-volume")
+        val skill = valid(SkillParser.parse("media-volume", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("Volume", skill.title)
+        assertEquals(SkillRisk.LOW, skill.risk)
+        assertTrue("open_settings_panel" in skill.allowedTools)
+        assertTrue("scroll" in skill.allowedTools)
+    }
+
+    @Test
+    fun bundledLauncherSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("launcher")
+        val skill = valid(SkillParser.parse("launcher", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("Launcher", skill.title)
+        assertEquals(SkillRisk.LOW, skill.risk)
+        assertTrue("press_home" in skill.allowedTools)
+        assertTrue("open_app" in skill.allowedTools)
+    }
+
+    @Test
+    fun bundledClipboardSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("clipboard")
+        val skill = valid(SkillParser.parse("clipboard", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("Clipboard", skill.title)
+        assertEquals(SkillRisk.LOW, skill.risk)
+        assertTrue("long_press" in skill.allowedTools)
+        assertTrue("focus_input" in skill.allowedTools)
+    }
+
+    @Test
+    fun bundledShareSkillUsesV2Metadata() {
+        val markdown = readBundledSkill("share")
+        val skill = valid(SkillParser.parse("share", markdown, knownTools))
+
+        assertEquals(SkillFormat.V2, skill.format)
+        assertEquals("Share", skill.title)
+        assertEquals(SkillRisk.MEDIUM, skill.risk)
+        assertTrue(skill.successCriteria.any { it.contains("approval", ignoreCase = true) })
+    }
+
     private fun readBundledSkill(id: String): String {
         val candidates = listOf(
             File("src/main/assets/skills/$id/SKILL.md"),
