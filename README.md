@@ -37,13 +37,9 @@ TouchPilot has completed the local Android agent foundation, hybrid local AI
 core, normalized screen context, reliable Android control baseline, and bounded
 local multi-step loop. The current codebase includes a Skills v2 registry,
 active skill selection, skill-aware prompts, skill allowlists, and risk-aware
-approval context.
-
-The active project work is now split between finishing the remaining Skills v2
-pack/UI PRs and starting Milestone 7 safety and policy v2. Open Milestone 7 work
-focuses on sensitive workflow classification, central policy decisions,
-app-aware policy rules, risk-specific approval copy, and expanded redaction for
-logs and traces.
+approval context. The project is now in the 1.0.0 release path: the skills pack
+and release-signing work are being finalized, the version is moving to 1.0.0,
+and GitHub Releases is the first distribution channel.
 
 ## Development
 
@@ -60,8 +56,9 @@ Build an installable development release APK:
 ```
 
 During early development, the release build is signed with the local Android
-debug key so it can be installed on emulators such as LDPlayer. Replace this
-with a real release signing key before publishing.
+debug key so it can be installed on emulators such as LDPlayer. When the
+`TOUCHPILOT_RELEASE_*` signing secrets are present, the release build uses the
+real release keystore instead.
 
 The current agent MVP defaults to the local router for simple Android actions
 and includes a LiteRT local model mode for command routing. An experimental

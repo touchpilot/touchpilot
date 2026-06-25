@@ -1,14 +1,16 @@
-name: Android
+name: Release
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
-  build-test-lint:
-    name: Build, Test, Lint
+  build-release:
+    name: Build and publish release
     runs-on: ubuntu-latest
 
     steps:
@@ -24,17 +26,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # Install only what build/test/lint need. The default ("tools …")
-          # pulls the Android Emulator, whose download intermittently fails to
-          # unzip on the runner ("Error on ZipFile unknown archive"). The
-          # emulator is only needed by the separate live-tests workflow.
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
-
-      - name: Make Gradle executable
-        run: chmod +x ./gradlew
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
       - name: Prepare release keystore
-        if: ${{ secrets.TOUCHPILOT_RELEASE_KEYSTORE_BASE64 != '' }}
         env:
           TOUCHPILOT_RELEASE_KEYSTORE_BASE64: ${{ secrets.TOUCHPILOT_RELEASE_KEYSTORE_BASE64 }}
           TOUCHPILOT_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.TOUCHPILOT_RELEASE_KEYSTORE_PASSWORD }}
@@ -50,14 +44,14 @@ jobs:
             echo "TOUCHPILOT_RELEASE_KEY_PASSWORD=$TOUCHPILOT_RELEASE_KEY_PASSWORD"
           } >> "$GITHUB_ENV"
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
 
       - name: Build release APK
         run: ./gradlew assembleRelease
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
-
-      - name: Run Android lint
-        run: ./gradlew lintDebug
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: true

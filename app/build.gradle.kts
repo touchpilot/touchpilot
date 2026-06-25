@@ -10,20 +10,44 @@ android {
     compileSdk = 35
     ndkVersion = "27.3.13750724"
 
+    signingConfigs {
+        create("release") {
+            val keystorePath = providers.environmentVariable("TOUCHPILOT_RELEASE_KEYSTORE").orNull
+            val keystorePassword = providers.environmentVariable("TOUCHPILOT_RELEASE_KEYSTORE_PASSWORD").orNull
+            val keyAlias = providers.environmentVariable("TOUCHPILOT_RELEASE_KEY_ALIAS").orNull
+            val keyPassword = providers.environmentVariable("TOUCHPILOT_RELEASE_KEY_PASSWORD").orNull
+            if (
+                !keystorePath.isNullOrBlank() &&
+                !keystorePassword.isNullOrBlank() &&
+                !keyAlias.isNullOrBlank() &&
+                !keyPassword.isNullOrBlank()
+            ) {
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "dev.touchpilot.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 10000
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            // Development-only: make release APKs installable on emulators.
-            // Replace this with a real release key before any public release.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (signingConfigs.findByName("release")?.storeFile != null) {
+                signingConfigs.getByName("release")
+            } else {
+                // Development-only fallback: make release APKs installable on
+                // emulators when release secrets are not configured.
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = false
         }
     }

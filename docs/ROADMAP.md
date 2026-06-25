@@ -55,7 +55,7 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 12 | Planned | Local extension tools. |
 | Milestone 13 | Planned | Real device beta. |
 | Milestone 14 | Planned | Advanced local AI. |
-| Milestone 15 | Planned | 1.0 release. |
+| Milestone 15 | In progress | 1.0 release. |
 | Milestone 16 | Planned | Mobile agent host foundation. |
 | Milestone 17 | Planned | Local memory and trace system. |
 | Milestone 18 | Planned | Workflow capture and replay. |
@@ -67,20 +67,17 @@ and safety-focused rather than a clone of any reference project.
 | Milestone 24 | Planned | 2.0 platform release. |
 
 The active roadmap is between the final Milestone 6 skill-system PRs and the
-first Milestone 7 safety-policy PRs. Milestones 1 through 5 are retained as
+1.0.0 release work in Milestone 15. Milestones 1 through 5 are retained as
 completed baselines so future work has a clear starting point.
 
 Current project status:
 
 - Milestones 1 through 5 are complete in the main branch.
-- Milestone 6 is mostly implemented: the app has a skill registry, active skill
-  selection, enabled/disabled skill state, skill-aware command context, tool
-  allowlists, and active-skill risk context in approvals.
-- Remaining Milestone 6 work is concentrated in open PRs for skill matching,
-  enable/disable controls, and bundled Skills v2 pack updates.
-- Milestone 7 has started. Open work covers sensitive workflow classification,
-  central policy decisions, app-aware policy rules, risk-specific approval copy,
-  and broader redaction for logs and traces.
+- Milestone 6 is complete and the bundled Skills v2 pack is being finalized for
+  the 1.0.0 release line.
+- Milestone 15 has started. Open work covers release signing, version bumps,
+  documentation refreshes, GitHub Release publishing, and the final release tag
+  path.
 
 ## Completed Baseline: Milestone 1
 
