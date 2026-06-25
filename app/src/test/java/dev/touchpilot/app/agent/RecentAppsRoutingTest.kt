@@ -7,10 +7,6 @@ import kotlin.test.assertTrue
 class RecentAppsRoutingTest {
     private fun route(task: String): String {
         val provider = LocalRouterCommandProvider(task = task, skill = null)
-        // First completion always observes the screen; the routed action is
-        // produced on the second completion.
-        val first = provider.complete("", "")
-        assertEquals("""{"tool":"observe_screen","args":{}}""", first)
         return provider.complete("", "")
     }
 

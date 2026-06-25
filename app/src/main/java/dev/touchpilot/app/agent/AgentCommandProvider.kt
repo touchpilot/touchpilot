@@ -52,13 +52,11 @@ class LocalRouterCommandProvider(
 
     override fun complete(systemPrompt: String, context: String): String {
         if (!hasActed) {
-            hasActed = true
-            return """{"tool":"observe_screen","args":{}}"""
-        }
-
-        val routed = routeTask(task)
-        if (routed != null && isAllowed(routed.tool)) {
-            return routed.toJson()
+            val routed = routeTask(task)
+            if (routed != null && isAllowed(routed.tool)) {
+                hasActed = true
+                return routed.toJson()
+            }
         }
 
         return """{"final":"Local router completed its safe routing pass. Try a more specific request, a skill, or local model mode for ambiguous tasks."}"""
