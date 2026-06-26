@@ -39,6 +39,12 @@ class WorkflowLibraryTest {
         assertTrue(library.delete("open-wifi-settings"))
         assertTrue(library.all().isEmpty())
         assertFalse(library.delete("open-wifi-settings"))
+
+        val reopened = WorkflowLibrary(
+            rootDir = root,
+            seedDefinitions = listOf(sampleWorkflow())
+        )
+        assertTrue(reopened.all().isEmpty())
     }
 
     private fun sampleWorkflow(): WorkflowDefinition {
