@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "open-system-settings",
+  "title": "Open System Settings",
+  "description": "Open the main Android settings screen and wait for it to settle.",
+  "steps": [
+    {
+      "id": "open-panel",
+      "tool": "open_settings_panel",
+      "args": {
+        "panel": "system_settings"
+      },
+      "description": "Open the system settings screen."
+    },
+    {
+      "id": "wait-for-idle",
+      "tool": "wait_for_idle",
+      "args": {
+        "stable_ms": "1000",
+        "timeout_ms": "5000"
+      },
+      "description": "Wait for the screen to finish loading."
+    }
+  ]
+}

@@ -66,4 +66,6 @@
     <item name="skill_detail_back_button" type="id" />
     <item name="skill_detail_activate_button" type="id" />
     <item name="skill_detail_clear_button" type="id" />
+    <item name="workflow_detail_back_button" type="id" />
+    <item name="workflow_rename_input" type="id" />
 </resources>

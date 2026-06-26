@@ -9,15 +9,18 @@ import dev.touchpilot.app.ui.sectionTitle
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.secondaryButton
+import dev.touchpilot.app.workflow.WorkflowLibraryEntry
 
 class ProductScreenRenderer(
     private val activity: Activity,
     private val contentRoot: LinearLayout,
     private val skills: List<Skill>,
+    private val workflows: List<WorkflowLibraryEntry>,
     private val openAccessibilitySettings: () -> Unit,
     private val showSection: (AppSection) -> Unit,
     private val openSettingsTools: () -> Unit,
-    private val runSkill: (String) -> Unit
+    private val runSkill: (String) -> Unit,
+    private val openWorkflowDetail: (String) -> Unit,
 ) {
     fun render() {
         contentRoot.addView(
@@ -102,6 +105,39 @@ class ProductScreenRenderer(
                         actionHint = "Run skill"
                     ) {
                         runSkill(skill.id)
+                    }
+                )
+            }
+        }
+
+        contentRoot.addView(activity.sectionTitle("Workflows you can review"))
+        if (workflows.isEmpty()) {
+            contentRoot.addView(
+                activity.timelineCard(
+                    title = "No saved workflows yet",
+                    body = "Captured workflows and bundled examples will appear here once available.",
+                    actionHint = "Open Settings"
+                ) {
+                    showSection(AppSection.SETTINGS)
+                }
+            )
+        } else {
+            workflows.forEach { workflow ->
+                val status = workflow.lastRun?.displayLabel ?: "never run"
+                val body = buildString {
+                    appendLine(workflow.definition.description.ifBlank { "No description provided." })
+                    appendLine()
+                    appendLine("${workflow.stepCount} steps")
+                    append("Last replay: ")
+                    append(status)
+                }
+                contentRoot.addView(
+                    activity.timelineCard(
+                        title = workflow.definition.title,
+                        body = body,
+                        actionHint = "Review workflow"
+                    ) {
+                        openWorkflowDetail(workflow.definition.id)
                     }
                 )
             }

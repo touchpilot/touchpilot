@@ -54,6 +54,11 @@ import dev.touchpilot.app.ui.product.ProductScreenRenderer
 import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.settings.SkillDetailRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
+import dev.touchpilot.app.ui.workflows.WorkflowDetailRenderer
+import dev.touchpilot.app.workflow.WorkflowLibraryEntry
+import dev.touchpilot.app.workflow.WorkflowLibrary
+import dev.touchpilot.app.workflow.WorkflowSeedLoader
+import dev.touchpilot.app.workflow.WorkflowRunStatus
 import java.io.File
 
 class MainActivity : Activity() {
@@ -64,6 +69,7 @@ class MainActivity : Activity() {
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
     private lateinit var agentRunController: AgentRunController
+    private lateinit var workflowLibrary: WorkflowLibrary
     private lateinit var contentRoot: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var chatInputBar: LinearLayout
@@ -83,6 +89,10 @@ class MainActivity : Activity() {
 
         preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
         ToolExecutionLog.configure(this)
+        workflowLibrary = WorkflowLibrary(
+            rootDir = File(filesDir, "workflows"),
+            seedDefinitions = WorkflowSeedLoader.load(this)
+        )
         val skillLoad = SkillStore(this).load()
         skillRegistry = SkillRegistry(skillLoad.skills, SharedPreferencesSkillStore(preferences))
         skillLoad.invalid.forEach { invalid ->
@@ -199,6 +209,9 @@ class MainActivity : Activity() {
         if (navigationController.activeSkillDetailId != null) {
             return "Skill details"
         }
+        navigationController.activeWorkflowDetailId?.let { workflowId ->
+            return findWorkflow(workflowId)?.definition?.title ?: "Workflow details"
+        }
         return when (navigationController.activeSection) {
             AppSection.CHAT -> "Chat"
             AppSection.PRODUCT -> "Use TouchPilot"
@@ -311,17 +324,24 @@ class MainActivity : Activity() {
     }
 
     private fun renderProductScreen() {
+        if (navigationController.activeWorkflowDetailId != null) {
+            renderWorkflowDetailScreen()
+            return
+        }
+
         ProductScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
             skills = skillRegistry.enabledSkills(),
+            workflows = workflowLibrary.all(),
             openAccessibilitySettings = ::openAccessibilitySettings,
             showSection = ::showSection,
             openSettingsTools = {
                 navigationController.openSettingsPanel(SettingsPanel.TOOLS)
                 showSection(AppSection.SETTINGS)
             },
-            runSkill = ::runSkillFromProduct
+            runSkill = ::runSkillFromProduct,
+            openWorkflowDetail = ::openWorkflowDetail,
         ).render()
     }
 
@@ -330,6 +350,68 @@ class MainActivity : Activity() {
         skillRegistry.setActiveSkill(skill.id)
         val task = skill.examples.firstOrNull()?.takeIf { it.isNotBlank() } ?: skill.title
         agentRunController.startFromChat(task)
+    }
+
+    private fun openWorkflowDetail(workflowId: String) {
+        navigationController.openWorkflowDetail(workflowId)
+        showSection(AppSection.PRODUCT)
+    }
+
+    private fun closeWorkflowDetail() {
+        navigationController.closeWorkflowDetail()
+        showSection(AppSection.PRODUCT)
+    }
+
+    private fun findWorkflow(workflowId: String): WorkflowLibraryEntry? {
+        return workflowLibrary.find(workflowId)
+    }
+
+    private fun renderWorkflowDetailScreen() {
+        WorkflowDetailRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            workflowId = navigationController.activeWorkflowDetailId,
+            findWorkflow = ::findWorkflow,
+            closeWorkflowDetail = ::closeWorkflowDetail,
+            replayWorkflow = ::runWorkflowFromProduct,
+            renameWorkflow = ::renameWorkflow,
+            deleteWorkflow = ::deleteWorkflow,
+            refreshProductScreen = { showSection(AppSection.PRODUCT) },
+        ).render()
+    }
+
+    private fun runWorkflowFromProduct(workflowId: String) {
+        val workflow = workflowLibrary.find(workflowId)?.definition ?: return
+        agentRunController.startWorkflowReplay(
+            definition = workflow,
+            onFinished = { success, message ->
+                workflowLibrary.recordRun(
+                    workflowId = workflow.id,
+                    status = if (success) WorkflowRunStatus.SUCCEEDED else WorkflowRunStatus.FAILED,
+                    message = message,
+                )
+                if (navigationController.activeSection == AppSection.PRODUCT) {
+                    showSection(AppSection.PRODUCT)
+                }
+            }
+        )
+    }
+
+    private fun renameWorkflow(workflowId: String, newTitle: String): WorkflowLibraryEntry? {
+        val updated = workflowLibrary.rename(workflowId, newTitle)
+        if (updated != null && navigationController.activeWorkflowDetailId == workflowId) {
+            navigationController.openWorkflowDetail(workflowId)
+            showSection(AppSection.PRODUCT)
+        }
+        return updated
+    }
+
+    private fun deleteWorkflow(workflowId: String): Boolean {
+        val deleted = workflowLibrary.delete(workflowId)
+        if (deleted && navigationController.activeWorkflowDetailId == workflowId) {
+            closeWorkflowDetail()
+        }
+        return deleted
     }
 
     private fun toolExecutionController(): ToolExecutionController {

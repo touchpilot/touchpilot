@@ -22,6 +22,7 @@ import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.demonstration.DemonstrationSessionManager
 import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
 import dev.touchpilot.app.tools.ToolExecutionLog
+import dev.touchpilot.app.workflow.WorkflowDefinition
 import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.ui.chat.ApprovalState
@@ -228,6 +229,120 @@ class AgentRunController(
         }
     }
 
+    fun startWorkflowReplay(
+        definition: WorkflowDefinition,
+        parameters: Map<String, String> = emptyMap(),
+        onFinished: ((success: Boolean, message: String) -> Unit)? = null,
+    ) {
+        cancellationSignal.set(false)
+        setRunState(AgentRunState.RUNNING)
+
+        conversation += ChatEvent.User("Replay workflow: ${definition.title}")
+        ToolExecutionLog.recordChat(
+            name = "workflow_replay_request",
+            actor = "User",
+            message = definition.title
+        )
+
+        val workingIndex = conversation.size
+        conversation += ChatEvent.Working("Replaying workflow.", runtimeWorkingDetail())
+        val stepTimeline = ChatEvent.StepTimeline()
+        conversation += stepTimeline
+        showChat()
+
+        val runId = AgentRunIds.next()
+        val startedAtMillis = System.currentTimeMillis()
+        ToolExecutionLog.recordAction(
+            name = "workflow_replay_started",
+            result = definition.title,
+            status = "running",
+            source = currentProviderMode().toLogSource()
+        )
+        val initialScreenRecord = AgentScreenRecord.capture(
+            sequenceNumber = 0,
+            phase = "initial",
+            timestampMillis = startedAtMillis,
+            context = AccessibilityBridge.observeScreenContext()
+        )
+
+        Thread {
+            val timelineBuilder = AgentStepTimelineBuilder()
+            val runOutcome = runCatching {
+                reasoningCore.replayWorkflow(
+                    definition = definition,
+                    parameters = parameters,
+                    timeline = timelineBuilder,
+                    listener = AgentEventListener { event ->
+                        runOnUiThread {
+                            refreshStepTimeline(stepTimeline, timelineBuilder.snapshot, false)
+                        }
+                    },
+                    cancellationSignal = cancellationSignal,
+                )
+            }
+            val completedAtMillis = System.currentTimeMillis()
+            val screenRecords = listOf(
+                initialScreenRecord,
+                AgentScreenRecord.capture(
+                    sequenceNumber = 1,
+                    phase = "final",
+                    timestampMillis = completedAtMillis,
+                    context = AccessibilityBridge.observeScreenContext()
+                )
+            )
+            val record = if (runOutcome.isSuccess) {
+                AgentRunRecord(
+                    id = runId,
+                    task = definition.title,
+                    startedAtMillis = startedAtMillis,
+                    completedAtMillis = completedAtMillis,
+                    result = runOutcome.getOrThrow(),
+                    screenRecords = screenRecords
+                )
+            } else {
+                AgentRunRecord(
+                    id = runId,
+                    task = definition.title,
+                    startedAtMillis = startedAtMillis,
+                    completedAtMillis = completedAtMillis,
+                    result = null,
+                    errorMessage = runOutcome.exceptionOrNull()?.message ?: "Unknown workflow error",
+                    screenRecords = screenRecords
+                )
+            }
+
+            runOnUiThread {
+                val steps = if (runOutcome.isFailure) {
+                    timelineBuilder.snapshot + timelineBuilder.failureStop(
+                        "Workflow failed: ${runOutcome.exceptionOrNull()?.message.orEmpty()}"
+                    )
+                } else {
+                    timelineBuilder.snapshot
+                }
+                if (cancellationSignal.get()) {
+                    setRunState(AgentRunState.CANCELLED)
+                } else if (runOutcome.isFailure) {
+                    setRunState(AgentRunState.FAILED)
+                } else {
+                    setRunState(AgentRunState.COMPLETED)
+                }
+                refreshStepTimeline(stepTimeline, steps, true)
+                finishAgentChatRun(
+                    record = record,
+                    runOutcome = runOutcome,
+                    workingIndex = workingIndex,
+                    resumeOriginalTask = null,
+                    timelineSteps = steps,
+                    shouldCaptureWorkflowTrace = false,
+                )
+                onFinished?.invoke(
+                    runOutcome.isSuccess,
+                    runOutcome.getOrNull()?.stopMessage ?: record.errorMessage.orEmpty()
+                )
+            }
+        }.start()
+    }
+
     fun cancelRun() {
         cancellationSignal.set(true)
         demonstrationManager?.cancelRun()
@@ -267,6 +382,7 @@ class AgentRunController(
         resumeOriginalTask: String?,
         timelineSteps: List<AgentStep> = emptyList(),
         demoCompletion: DemonstrationSessionManager.DemonstrationCompletion? = null,
+        shouldCaptureWorkflowTrace: Boolean = true,
     ) {
         removeWorkingIndicator(workingIndex)
         mutableRunHistory += record
@@ -367,7 +483,9 @@ class AgentRunController(
                     message = doneDetail,
                     status = "complete"
                 )
-                captureWorkflowTrace(record)
+                if (shouldCaptureWorkflowTrace) {
+                    captureWorkflowTrace(record)
+                }
                 captureDemonstration(demoCompletion, record.id)
             }
             else -> {

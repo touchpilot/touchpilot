@@ -16,11 +16,15 @@ class NavigationController(initialState: NavigationState = NavigationState()) {
     val activeSkillDetailId: String?
         get() = state.activeSkillDetailId
 
+    val activeWorkflowDetailId: String?
+        get() = state.activeWorkflowDetailId
+
     fun showSection(section: AppSection): NavigationState {
         state = state.copy(
             activeSection = section,
             activeRunDetailId = state.activeRunDetailId.takeIf { section.supportsRunDetail },
-            activeSkillDetailId = state.activeSkillDetailId.takeIf { section == AppSection.SETTINGS }
+            activeSkillDetailId = state.activeSkillDetailId.takeIf { section == AppSection.SETTINGS },
+            activeWorkflowDetailId = state.activeWorkflowDetailId.takeIf { section == AppSection.PRODUCT },
         )
         return state
     }
@@ -71,6 +75,16 @@ class NavigationController(initialState: NavigationState = NavigationState()) {
 
     fun closeSkillDetail(): NavigationState {
         state = state.copy(activeSkillDetailId = null)
+        return state
+    }
+
+    fun openWorkflowDetail(workflowId: String): NavigationState {
+        state = state.copy(activeWorkflowDetailId = workflowId)
+        return state
+    }
+
+    fun closeWorkflowDetail(): NavigationState {
+        state = state.copy(activeWorkflowDetailId = null)
         return state
     }
 

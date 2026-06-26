@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "open-wifi-settings",
+  "title": "Open Wi-Fi Settings",
+  "description": "Open the Wi-Fi settings panel and wait for the screen to settle.",
+  "steps": [
+    {
+      "id": "open-panel",
+      "tool": "open_settings_panel",
+      "args": {
+        "panel": "wifi"
+      },
+      "description": "Open the Wi-Fi settings panel."
+    },
+    {
+      "id": "wait-for-idle",
+      "tool": "wait_for_idle",
+      "args": {
+        "stable_ms": "1000",
+        "timeout_ms": "5000"
+      },
+      "description": "Wait for the panel to finish loading."
+    }
+  ]
+}

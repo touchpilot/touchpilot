@@ -5,5 +5,6 @@ data class NavigationState(
     val activeSettingsPanel: SettingsPanel? = null,
     val pendingSettingsAnimationDirection: Int = 0,
     val activeRunDetailId: String? = null,
-    val activeSkillDetailId: String? = null
+    val activeSkillDetailId: String? = null,
+    val activeWorkflowDetailId: String? = null,
 )
