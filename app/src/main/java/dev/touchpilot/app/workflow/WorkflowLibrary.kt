@@ -65,8 +65,9 @@ class WorkflowLibrary(
 ) {
     init {
         rootDir.mkdirs()
-        if (definitionFiles().isEmpty()) {
+        if (!seedMarkerFile().exists()) {
             seedDefinitions.forEach(::save)
+            seedMarkerFile().writeText("seeded")
         }
     }
 
@@ -145,5 +146,9 @@ class WorkflowLibrary(
             .listFiles { file -> file.isFile && file.extension == "json" && !file.name.endsWith(".state.json") }
             ?.toList()
             .orEmpty()
+    }
+
+    private fun seedMarkerFile(): File {
+        return File(rootDir, ".seeded")
     }
 }
