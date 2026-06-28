@@ -78,9 +78,10 @@ class WorkflowReplayEngine(
                 text = "Replay workflow: ${workflow.title}"
             )
         )
+        if (!workflow.expectedForegroundPackage.isNullOrBlank()) {
+            preflightForegroundWarning(workflow, tools.foregroundApp())?.let(::emit)
+        }
         publishSteps()
-
-        var currentScreen = tools.observeScreen()
 
         workflow.steps.forEachIndexed { index, step ->
             val stepNumber = index + 1
@@ -110,6 +111,8 @@ class WorkflowReplayEngine(
             }
 
             val resolvedArgs = WorkflowParameterSubstitutor.substitute(step.args, resolvedParameters)
+            val currentScreen = tools.observeScreen()
+            val foregroundApp = tools.foregroundApp()
 
             emit(
                 AgentEvent.WorkflowStepStarted(
@@ -175,6 +178,7 @@ class WorkflowReplayEngine(
                         args = resolvedArgs,
                         source = source,
                         activeScreen = currentScreen,
+                        foregroundApp = foregroundApp,
                     )
                 )
                 when (decision) {
@@ -257,7 +261,6 @@ class WorkflowReplayEngine(
             publishSteps()
             AgentEvent.toolRunning(command, source)?.let(::emit)
 
-            val foregroundApp = tools.foregroundApp()
             val result = runCatching {
                 tools.execute(step.tool, resolvedArgs, source, foregroundApp)
             }.getOrElse { error ->
@@ -294,11 +297,6 @@ class WorkflowReplayEngine(
             }
 
             emit(AgentEvent.toolResult(step.tool, result))
-            currentScreen = if (step.tool == "observe_screen" || step.tool == "observe_screen_context") {
-                result.message
-            } else {
-                tools.observeScreen()
-            }
 
             if (!result.ok) {
                 steps.replaceLastAct(
@@ -565,6 +563,24 @@ class WorkflowReplayEngine(
             stopMessage = stopMessage,
             completedStepCount = completedStepCount,
             verificationCards = verificationCards,
+        )
+    }
+
+    private fun preflightForegroundWarning(
+        workflow: WorkflowDefinition,
+        foregroundApp: ForegroundAppInfo,
+    ): AgentEvent.AssistantMessage? {
+        val expectedPackage = workflow.expectedForegroundPackage?.takeIf { it.isNotBlank() } ?: return null
+        val actualPackage = foregroundApp.packageName?.takeIf { it.isNotBlank() }
+        if (actualPackage == expectedPackage) return null
+        val actual = actualPackage ?: if (foregroundApp.accessibilityConnected) {
+            "unknown foreground app"
+        } else {
+            "disconnected accessibility service"
+        }
+        return AgentEvent.AssistantMessage(
+            text = "Workflow foreground check",
+            detail = "This workflow expects $expectedPackage, but replay is starting from $actual. Policy checks will still use the live screen and foreground app for every step.",
         )
     }
 

@@ -243,6 +243,66 @@ class WorkflowReplayEngineTest {
         assertIs<AgentEvent.RunCancelled>(result.events.last { it is AgentEvent.RunCancelled })
     }
 
+    @Test
+    fun evaluatesEachReplayStepAgainstFreshScreenAndForegroundApp() {
+        val policyRequests = mutableListOf<ToolPolicyRequest>()
+        val tools = FakeLoopTools(
+            results = listOf(
+                ToolResult(ok = true, message = "first"),
+                ToolResult(ok = true, message = "second"),
+            ),
+            screens = listOf("screen before first step", "screen before second step", "screen after replay"),
+            foregroundApps = listOf(
+                ForegroundAppInfo(packageName = "app.first", accessibilityConnected = true),
+                ForegroundAppInfo(packageName = "app.second", accessibilityConnected = true),
+            ),
+        )
+        val workflow = WorkflowDefinition(
+            id = "fresh-policy",
+            title = "Fresh Policy",
+            steps = listOf(
+                WorkflowStep(id = "tap-first", tool = "tap", args = mapOf("text" to "First")),
+                WorkflowStep(id = "tap-second", tool = "tap", args = mapOf("text" to "Second")),
+            ),
+        )
+
+        val result = WorkflowReplayEngine(
+            tools = tools,
+            approvalProvider = ToolApprovalProvider { true },
+            policy = RecordingPolicy(policyRequests),
+        ).replay(workflow)
+
+        assertEquals(AgentStepStopReason.COMPLETED, result.stopReason)
+        assertEquals(listOf("screen before first step", "screen before second step"), policyRequests.map { it.activeScreen })
+        assertEquals(listOf("app.first", "app.second"), policyRequests.map { it.foregroundApp?.packageName })
+        assertTrue(policyRequests.all { it.source == ToolSource.WORKFLOW_REPLAY })
+    }
+
+    @Test
+    fun warnsWhenExpectedForegroundAppDiffersBeforeReplay() {
+        val tools = FakeLoopTools(
+            results = listOf(ToolResult(ok = true, message = "done")),
+            foregroundApps = listOf(ForegroundAppInfo(packageName = "com.other", accessibilityConnected = true)),
+        )
+        val workflow = WorkflowDefinition(
+            id = "expected-app",
+            title = "Expected App",
+            expectedForegroundPackage = "com.expected",
+            steps = listOf(WorkflowStep(id = "home", tool = "press_home")),
+        )
+
+        val result = WorkflowReplayEngine(
+            tools = tools,
+            approvalProvider = ToolApprovalProvider { true },
+            policy = AllowAllPolicy,
+        ).replay(workflow)
+
+        val warning = assertIs<AgentEvent.AssistantMessage>(result.events[1])
+        assertEquals("Workflow foreground check", warning.text)
+        assertTrue(warning.detail.contains("com.expected"))
+        assertTrue(warning.detail.contains("com.other"))
+    }
+
     private fun sampleWorkflow(verifyOnlyFirstStep: Boolean = false): WorkflowDefinition {
         val steps = mutableListOf(
             WorkflowStep(
@@ -311,10 +371,24 @@ class WorkflowReplayEngineTest {
     private class FakeLoopTools(
         private val results: List<ToolResult>,
         private val onExecute: () -> Unit = {},
+        private val screens: List<String> = listOf("Home screen"),
+        private val foregroundApps: List<ForegroundAppInfo> = listOf(ForegroundAppInfo.Disconnected),
     ) : LocalAgentLoopTools {
         private val queue = ArrayDeque(results)
+        private var observeIndex = 0
+        private var foregroundIndex = 0
 
-        override fun observeScreen(): String = "Home screen"
+        override fun observeScreen(): String {
+            val value = screens[observeIndex.coerceAtMost(screens.lastIndex)]
+            observeIndex += 1
+            return value
+        }
+
+        override fun foregroundApp(): ForegroundAppInfo {
+            val value = foregroundApps[foregroundIndex.coerceAtMost(foregroundApps.lastIndex)]
+            foregroundIndex += 1
+            return value
+        }
 
         override fun validate(name: String, args: Map<String, String>): String? {
             return AndroidToolCatalog.validate(name, args)
@@ -346,6 +420,15 @@ class WorkflowReplayEngineTest {
     private object AllowAllPolicy : ActionPolicy {
         override fun evaluate(request: ToolPolicyRequest): PolicyDecision {
             return PolicyDecision.Allow(reason = "test allow")
+        }
+    }
+
+    private class RecordingPolicy(
+        private val requests: MutableList<ToolPolicyRequest>,
+    ) : ActionPolicy {
+        override fun evaluate(request: ToolPolicyRequest): PolicyDecision {
+            requests += request
+            return PolicyDecision.Allow(reason = "recorded")
         }
     }
 }

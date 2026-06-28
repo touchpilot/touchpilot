@@ -13,8 +13,11 @@ import dev.touchpilot.app.ui.secondaryButton
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.withMargins
+import dev.touchpilot.app.tools.AndroidToolCatalog
+import dev.touchpilot.app.tools.ToolRisk
 import dev.touchpilot.app.workflow.WorkflowLibraryEntry
 import dev.touchpilot.app.workflow.WorkflowRunStatus
+import dev.touchpilot.app.workflow.WorkflowStep
 
 class WorkflowDetailRenderer(
     private val activity: Activity,
@@ -128,6 +131,14 @@ class WorkflowDetailRenderer(
             ).withMargins(top = 6, bottom = 6)
         )
 
+        contentRoot.addView(
+            activity.detailSectionView(
+                title = "Replay policy",
+                body = buildPolicyPreview(workflow.definition.steps),
+                muted = false,
+            ).withMargins(top = 6, bottom = 6)
+        )
+
         contentRoot.addView(activity.sectionTitle("Steps"))
         workflow.definition.steps.forEachIndexed { index, step ->
             contentRoot.addView(
@@ -151,6 +162,16 @@ class WorkflowDetailRenderer(
                             append(step.expectedState.screenTextContains.joinToString(separator = "\n") { text ->
                                 "• screen text contains \"$text\""
                             }.ifBlank { "• no additional screen predicates" })
+                        }
+                        step.policy?.let { policy ->
+                            appendLine()
+                            appendLine("Policy hint:")
+                            if (policy.requiresApproval == true) {
+                                appendLine("• approval-sensitive")
+                            }
+                            policy.workflowClass?.let { workflowClass ->
+                                append("• workflow class: ${workflowClass.name.lowercase()}")
+                            }
                         }
                     },
                     muted = false,
@@ -186,5 +207,40 @@ class WorkflowDetailRenderer(
                 }
             }
             .show()
+    }
+
+    private fun buildPolicyPreview(steps: List<WorkflowStep>): String {
+        val approvalSensitive = steps.mapIndexedNotNull { index, step ->
+            val risk = AndroidToolCatalog.find(step.tool)?.risk
+            val requiresApproval = step.policy?.requiresApproval == true ||
+                risk == ToolRisk.MEDIUM ||
+                risk == ToolRisk.HIGH
+            if (requiresApproval) {
+                "Step ${index + 1}: ${step.tool}"
+            } else {
+                null
+            }
+        }
+        val blocked = steps.mapIndexedNotNull { index, step ->
+            val risk = AndroidToolCatalog.find(step.tool)?.risk
+            if (risk == ToolRisk.BLOCKED) "Step ${index + 1}: ${step.tool}" else null
+        }
+        return buildString {
+            appendLine("Replay evaluates every step against the live foreground app and current screen before the tool runs.")
+            appendLine()
+            if (approvalSensitive.isEmpty() && blocked.isEmpty()) {
+                append("No step is marked approval-sensitive by tool risk or workflow policy hints.")
+            } else {
+                if (approvalSensitive.isNotEmpty()) {
+                    appendLine("Approval-sensitive steps:")
+                    appendLine(approvalSensitive.joinToString(separator = "\n") { "• $it" })
+                }
+                if (blocked.isNotEmpty()) {
+                    if (approvalSensitive.isNotEmpty()) appendLine()
+                    appendLine("Blocked-risk steps:")
+                    append(blocked.joinToString(separator = "\n") { "• $it" })
+                }
+            }
+        }
     }
 }
