@@ -22,11 +22,13 @@ import dev.touchpilot.app.security.ToolApprovalRequest
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.workflow.WorkflowTraceStore
+import dev.touchpilot.app.workflow.WorkflowTraceSummarizer
 import dev.touchpilot.app.ui.chat.ApprovalState
 import dev.touchpilot.app.ui.chat.ChatEvent
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONObject
 
 class AgentRunController(
     private val reasoningCore: LocalReasoningCore,
@@ -357,18 +359,22 @@ class AgentRunController(
      */
     private fun captureWorkflowTrace(record: AgentRunRecord) {
         val trace = WorkflowTrace.from(record) ?: return
+        val summary = WorkflowTraceSummarizer.summarize(trace)
         workflowTraceStore.record(trace)
         val recorded = AgentEvent.TraceRecorded(runId = trace.runId, stepCount = trace.steps.size)
         ToolExecutionLog.recordAction(
             name = "workflow_trace_recorded",
-            result = "Captured a ${trace.steps.size}-step workflow trace.",
+            result = summary.overview,
             status = "complete",
             source = currentProviderMode().toLogSource(),
-            details = recorded.toJson(redactSensitive = true).toString(),
+            details = JSONObject()
+                .put("trace_recorded", recorded.toJson(redactSensitive = true))
+                .put("summary", summary.toJson())
+                .toString(),
         )
         conversation += ChatEvent.Agent(
             "Workflow captured.",
-            "${trace.steps.size} step(s) recorded — this run can be saved as a workflow.",
+            summary.overview,
         )
     }
 
