@@ -108,7 +108,7 @@ class ToolsScreenRenderer(
                     delayMillis = TOOL_ACTION_KEYBOARD_SETTLE_MS,
                     name = "tap",
                     args = mapOf("text" to targetText),
-                    toastLabel = "Tap"
+                    toastLabel = "Tap Text"
                 )
             }.apply { id = R.id.tap_text_button }
         )
@@ -125,7 +125,7 @@ class ToolsScreenRenderer(
                     delayMillis = TOOL_ACTION_KEYBOARD_SETTLE_MS,
                     name = "long_press",
                     args = mapOf("text" to targetText),
-                    toastLabel = "Long-press"
+                    toastLabel = "Long-Press Text"
                 )
             }.apply { id = R.id.long_press_text_button }
         )
