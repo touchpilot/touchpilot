@@ -19,6 +19,7 @@ import dev.touchpilot.app.memory.SkillDetailFormatter
 import dev.touchpilot.app.memory.SkillRisk
 import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.runtime.ToolExecutionController
+import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.RuntimeIndicator
@@ -360,6 +361,13 @@ class SettingsScreenRenderer(
                         val client = McpHttpClient(endpoint)
                         val initialized = client.initialize()
                         val tools = client.listTools()
+                        ToolExecutionLog.recordAction(
+                            name = "mcp_list_tools",
+                            result = "Listed ${tools.size} MCP tool(s)",
+                            status = "ok",
+                            source = "mcp",
+                            details = "endpoint=$endpoint\ninitialized=$initialized"
+                        )
                         buildString {
                             appendLine("MCP initialized:")
                             appendLine(initialized)
@@ -374,6 +382,13 @@ class SettingsScreenRenderer(
                             }
                         }
                     }.getOrElse { error ->
+                        ToolExecutionLog.recordAction(
+                            name = "mcp_list_tools",
+                            result = error.message.orEmpty(),
+                            status = "fail",
+                            source = "mcp",
+                            details = "endpoint=$endpoint"
+                        )
                         "MCP list failed: ${error.message}"
                     }
                     activity.runOnUiThread {
@@ -397,8 +412,31 @@ class SettingsScreenRenderer(
                         val client = McpHttpClient(endpoint)
                         client.initialize()
                         val callResult = client.callTool(toolName, JSONObject(argsText))
+                        ToolExecutionLog.recordAction(
+                            name = "mcp_call_tool",
+                            result = "Called $toolName -> ${callResult.ok}",
+                            status = if (callResult.ok) "ok" else "fail",
+                            source = "mcp",
+                            details = buildString {
+                                appendLine("endpoint=$endpoint")
+                                appendLine("tool=$toolName")
+                                appendLine("args=$argsText")
+                                appendLine("message=${callResult.message}")
+                            }
+                        )
                         "MCP $toolName -> ${callResult.ok}\n${callResult.message}"
                     }.getOrElse { error ->
+                        ToolExecutionLog.recordAction(
+                            name = "mcp_call_tool",
+                            result = error.message.orEmpty(),
+                            status = "fail",
+                            source = "mcp",
+                            details = buildString {
+                                appendLine("endpoint=$endpoint")
+                                appendLine("tool=$toolName")
+                                appendLine("args=$argsText")
+                            }
+                        )
                         "MCP call failed: ${error.message}"
                     }
                     activity.runOnUiThread {
