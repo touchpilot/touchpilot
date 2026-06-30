@@ -38,6 +38,7 @@ import dev.touchpilot.app.runtime.ToolExecutionCallbacks
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.runtime.AgentRunController
+import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
 import dev.touchpilot.app.tools.AndroidToolExecutor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.AppShellRenderer
@@ -507,6 +508,11 @@ class MainActivity : Activity() {
                 dev.touchpilot.app.demonstration.DemonstrationPreferences.isAutoExportEnabled(preferences)
             },
             demonstrationSessionCount = { demonstrationManager.sessions.size },
+            demonstrationSummaries = {
+                demonstrationManager.sessions
+                    .asReversed()
+                    .map(DemonstrationSummaryFormatter::format)
+            },
             onDemonstrationRecordingToggled = { enabled ->
                 dev.touchpilot.app.demonstration.DemonstrationPreferences.setRecordingEnabled(preferences, enabled)
                 demonstrationManager.updateConfig(

@@ -68,6 +68,7 @@ class SettingsScreenRenderer(
     private val demonstrationRecordingEnabled: () -> Boolean = { false },
     private val demonstrationAutoExportEnabled: () -> Boolean = { false },
     private val demonstrationSessionCount: () -> Int = { 0 },
+    private val demonstrationSummaries: () -> List<String> = { emptyList() },
     private val onDemonstrationRecordingToggled: (Boolean) -> Unit = {},
     private val onDemonstrationAutoExportToggled: (Boolean) -> Unit = {},
 ) {
@@ -252,6 +253,16 @@ class SettingsScreenRenderer(
                 },
             )
         )
+        val summaries = demonstrationSummaries()
+        if (summaries.isNotEmpty()) {
+            contentRoot.addView(activity.formLabel("Latest summary"))
+            contentRoot.addView(
+                activity.timelineCard(
+                    title = "Captured demonstration",
+                    body = summaries.first(),
+                )
+            )
+        }
 
         contentRoot.addView(activity.formLabel("Recording mode"))
         contentRoot.addView(

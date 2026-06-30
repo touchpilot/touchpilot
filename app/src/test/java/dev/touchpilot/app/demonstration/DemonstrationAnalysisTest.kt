@@ -69,6 +69,15 @@ class DemonstrationAnalysisTest {
     }
 
     @Test
+    fun summaryFormatterIncludesTaskAndStepCount() {
+        val session = buildSampleSession()
+        val summary = DemonstrationSummaryFormatter.format(session)
+        assertTrue(summary.contains("Demonstration: open settings"))
+        assertTrue(summary.contains("Steps: 1"))
+        assertTrue(summary.contains("Status: completed"))
+    }
+
+    @Test
     fun playbackEngineEmitsEvents() {
         val session = buildSampleSession()
         val result = DemonstrationPlaybackEngine(stepDelayMillis = 0).play(session)
