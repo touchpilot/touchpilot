@@ -82,17 +82,7 @@ class MainActivity : Activity() {
 
         preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
         ToolExecutionLog.configure(this)
-        val skillLoad = SkillStore(this).load()
-        skillRegistry = SkillRegistry(skillLoad.skills, SharedPreferencesSkillStore(preferences))
-        skillLoad.invalid.forEach { invalid ->
-            ToolExecutionLog.record(
-                name = "skill_load_failed",
-                args = "skill=${invalid.id}",
-                ok = false,
-                message = invalid.errors.joinToString("; "),
-                source = "skills"
-            )
-        }
+        loadSkillsFromStore()
         toolExecutor = AndroidToolExecutor(this)
         debugTraceExporter = DebugTraceExporter(
             context = this,
@@ -514,7 +504,9 @@ class MainActivity : Activity() {
             findAgentRun = ::findAgentRun,
             closeRunDetail = ::closeRunDetail,
             exportRunTrace = ::exportRunTrace,
-            exportSkillCandidate = ::exportSkillCandidate
+            exportSkillCandidate = ::exportSkillCandidate,
+            buildSkillCandidate = ::buildSkillCandidate,
+            saveSkillCandidate = ::saveSkillCandidate
         ).render()
     }
 
@@ -524,6 +516,32 @@ class MainActivity : Activity() {
 
     private fun exportSkillCandidate(record: AgentRunRecord): File? {
         return debugTraceExporter.exportSkillCandidate(record)
+    }
+
+    private fun buildSkillCandidate(record: AgentRunRecord): String? {
+        return debugTraceExporter.buildSkillCandidate(record)
+    }
+
+    private fun saveSkillCandidate(markdown: String): DebugTraceExporter.SkillCandidateSaveResult {
+        val result = debugTraceExporter.saveSkillCandidate(markdown)
+        if (result is DebugTraceExporter.SkillCandidateSaveResult.Saved) {
+            loadSkillsFromStore()
+        }
+        return result
+    }
+
+    private fun loadSkillsFromStore() {
+        val skillLoad = SkillStore(this).load()
+        skillRegistry = SkillRegistry(skillLoad.skills, SharedPreferencesSkillStore(preferences))
+        skillLoad.invalid.forEach { invalid ->
+            ToolExecutionLog.record(
+                name = "skill_load_failed",
+                args = "skill=${invalid.id}",
+                ok = false,
+                message = invalid.errors.joinToString("; "),
+                source = "skills"
+            )
+        }
     }
 
     private fun exportDebugTrace(): File {

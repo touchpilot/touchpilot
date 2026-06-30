@@ -6,9 +6,11 @@ import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.text.InputType
 import com.google.android.material.card.MaterialCardView
 import dev.touchpilot.app.R
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
@@ -16,8 +18,10 @@ import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentRunStepSeverity
 import dev.touchpilot.app.agent.AgentRunStepStatus
+import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.agent.severity
 import dev.touchpilot.app.security.SensitiveTextRedactor
+import dev.touchpilot.app.ui.rowButtonParams
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.secondaryButton
@@ -34,7 +38,9 @@ class AgentRunDetailRenderer(
     private val findAgentRun: (String) -> AgentRunRecord?,
     private val closeRunDetail: () -> Unit,
     private val exportRunTrace: (AgentRunRecord) -> File,
-    private val exportSkillCandidate: (AgentRunRecord) -> File?
+    private val exportSkillCandidate: (AgentRunRecord) -> File?,
+    private val buildSkillCandidate: (AgentRunRecord) -> String?,
+    private val saveSkillCandidate: (String) -> DebugTraceExporter.SkillCandidateSaveResult
 ) {
     fun render() {
         contentRoot.addView(
@@ -105,6 +111,7 @@ class AgentRunDetailRenderer(
                 ).show()
             }.apply { id = R.id.export_skill_candidate_button }
         )
+        renderSkillCandidateReview(record)
 
         val steps = AgentRunDetailFormatter.formatSteps(record)
         contentRoot.addView(
@@ -131,6 +138,95 @@ class AgentRunDetailRenderer(
         steps.forEach { step ->
             contentRoot.addView(runDetailStepCard(step))
         }
+    }
+
+    private fun renderSkillCandidateReview(record: AgentRunRecord) {
+        val candidate = buildSkillCandidate(record)
+        contentRoot.addView(
+            activity.summaryCard(
+                title = "Skill Candidate",
+                value = if (candidate == null) {
+                    "No workflow trace available for this run."
+                } else {
+                    "Review, edit, and approve this generated candidate before saving it as a skill."
+                },
+                chipText = "candidate",
+                chipAccent = candidate != null
+            )
+        )
+        if (candidate == null) return
+
+        val editor = EditText(activity).apply {
+            id = R.id.skill_candidate_editor
+            setText(candidate)
+            setTextColor(Color.WHITE)
+            setHint("Editable skill markdown")
+            setHintTextColor(Theme.MutedText)
+            setTextIsSelectable(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setHorizontallyScrolling(false)
+            setPadding(12, 12, 12, 12)
+            setBackgroundColor(Theme.SurfaceRaised)
+            minLines = 10
+            isVerticalScrollBarEnabled = true
+            typeface = Typeface.MONOSPACE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (activity.resources.displayMetrics.density * 260f).toInt()
+            ).apply {
+                setMargins(0, 8, 0, 8)
+            }
+        }
+
+        contentRoot.addView(editor)
+
+        val actions = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        actions.addView(
+            activity.primaryButton("Save as skill") {
+                when (val result = saveSkillCandidate(editor.text.toString())) {
+                    is DebugTraceExporter.SkillCandidateSaveResult.Saved -> {
+                        Toast.makeText(
+                            activity,
+                            "Skill candidate saved: ${result.skillId}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    is DebugTraceExporter.SkillCandidateSaveResult.InvalidCandidate -> {
+                        Toast.makeText(
+                            activity,
+                            "Cannot save candidate: ${result.errors.joinToString(", ")}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    is DebugTraceExporter.SkillCandidateSaveResult.Failure -> {
+                        Toast.makeText(
+                            activity,
+                            "Cannot save candidate: ${result.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }.apply {
+                id = R.id.approve_skill_candidate_button
+            },
+            rowButtonParams()
+        )
+        actions.addView(
+            activity.secondaryButton("Discard") {
+                editor.setText(candidate)
+                Toast.makeText(
+                    activity,
+                    "Candidate discarded.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }.apply {
+                id = R.id.discard_skill_candidate_button
+            },
+            rowButtonParams()
+        )
+        contentRoot.addView(actions)
     }
 
     private fun runDetailStepCard(step: AgentRunDisplayStep): View {

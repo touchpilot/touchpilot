@@ -180,6 +180,13 @@ class SkillParserTest {
     }
 
     @Test
+    fun allowsIdMismatchWhenCustomCandidateFlagSet() {
+        val result = valid(SkillParser.parse("settings-panel", validV2(), knownTools, allowDirectoryIdMismatch = true))
+
+        assertEquals("settings", result.id)
+    }
+
+    @Test
     fun reportsMalformedId() {
         val markdown = validV2().replace("id: settings", "id: Settings_Panel")
 

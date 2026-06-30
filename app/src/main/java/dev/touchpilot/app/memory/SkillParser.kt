@@ -7,13 +7,16 @@ package dev.touchpilot.app.memory
  * (docs/SKILLS.md) and validated strictly: every required field must be present,
  * `risk` must be `low`/`medium`/`high`, and every entry in `allowed_tools` must
  * name a known Android tool. Policy-sensitive problems (unknown risk, unknown or
- * empty tools, missing required fields, id mismatch) fail closed as a
- * [SkillParseResult.Invalid] rather than loading a partial skill.
+ * empty tools, missing required fields) fail closed as a [SkillParseResult.Invalid]
+ * rather than loading a partial skill.
  *
  * Files without front matter fall back to the legacy v1 reader (heading +
  * "Allowed initial tools:" list) so the not-yet-upgraded bundled pack keeps
  * loading until issue #229 migrates it to v2. The legacy path stays permissive
  * (it does not validate tool names) to preserve current behavior.
+ *
+ * By default, front-matter `id` must match the directory/declared path, but
+ * user-authored candidate loading can disable that check when needed.
  *
  * The parser is pure — no Android dependency — so it is fully unit-testable.
  */
@@ -22,10 +25,15 @@ object SkillParser {
     private val IdPattern = Regex("^[a-z0-9-]+$")
     private val RequiredScalarFields = listOf("id", "title", "description", "risk")
 
-    fun parse(directoryId: String, markdown: String, knownTools: Set<String>): SkillParseResult {
+    fun parse(
+        directoryId: String,
+        markdown: String,
+        knownTools: Set<String>,
+        allowDirectoryIdMismatch: Boolean = false,
+    ): SkillParseResult {
         val normalized = markdown.replace("\r\n", "\n").replace("\r", "\n")
         return if (declaresFrontMatter(normalized)) {
-            parseV2(directoryId, normalized, knownTools)
+            parseV2(directoryId, normalized, knownTools, allowDirectoryIdMismatch)
         } else {
             SkillParseResult.Valid(parseLegacy(directoryId, normalized))
         }
@@ -39,7 +47,8 @@ object SkillParser {
     private fun parseV2(
         directoryId: String,
         markdown: String,
-        knownTools: Set<String>
+        knownTools: Set<String>,
+        allowDirectoryIdMismatch: Boolean
     ): SkillParseResult {
         val split = splitFrontMatter(markdown)
             ?: return SkillParseResult.Invalid(
@@ -61,7 +70,7 @@ object SkillParser {
         if (id.isNotBlank()) {
             if (!IdPattern.matches(id)) {
                 errors += "id '$id' must use only a-z, 0-9, and '-'"
-            } else if (id != directoryId) {
+            } else if (!allowDirectoryIdMismatch && id != directoryId) {
                 errors += "id '$id' does not match the skill directory '$directoryId'"
             }
         }
@@ -86,9 +95,10 @@ object SkillParser {
             return SkillParseResult.Invalid(directoryId, errors)
         }
 
+        val canonicalId = if (id.isNotBlank()) id else directoryId
         return SkillParseResult.Valid(
             Skill(
-                id = directoryId,
+                id = canonicalId,
                 title = fields.scalar("title").orEmpty().trim(),
                 markdown = body.trim(),
                 allowedTools = allowedTools.toCollection(LinkedHashSet()),
