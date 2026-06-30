@@ -204,6 +204,35 @@ class WorkflowTraceSerializerTest {
   fun slugifyNormalizesTitles() {
     assertEquals("open-wi-fi-settings", WorkflowTraceSerializer.slugify("Open Wi-Fi Settings!"))
   }
+
+  @Test
+  fun convertsTraceToSkillMarkdownDraft() {
+    val trace = WorkflowTrace(
+      runId = "run-3",
+      task = "open Wi-Fi settings",
+      capturedAtMillis = 3_000L,
+      steps = listOf(
+        WorkflowTraceStep(
+          index = 1,
+          tool = "open_settings_panel",
+          args = mapOf("panel" to "wifi"),
+          source = "local_router",
+          succeeded = true,
+          verification = WorkflowTraceVerification(status = "passed", reason = "Wi-Fi visible"),
+        ),
+      ),
+      screenSignals = emptyList(),
+    )
+
+    val markdown = WorkflowTraceSerializer.toSkillMarkdown(trace)
+
+    assertTrue(markdown.contains("id: 'open-wi-fi-settings'"))
+    assertTrue(markdown.contains("title: 'open Wi-Fi settings'"))
+    assertTrue(markdown.contains("risk: medium"))
+    assertTrue(markdown.contains("- 'open_settings_panel'"))
+    assertTrue(markdown.contains("success_criteria:"))
+    assertTrue(markdown.contains("Wi-Fi visible"))
+  }
 }
 
 class WorkflowParametersTest {

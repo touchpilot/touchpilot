@@ -3,6 +3,8 @@ package dev.touchpilot.app.logging
 import android.content.Context
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunRecord
+import dev.touchpilot.app.workflow.WorkflowTrace
+import dev.touchpilot.app.workflow.WorkflowTraceSerializer
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import java.io.File
@@ -23,6 +25,14 @@ class DebugTraceExporter(
         val timestamp = timestamp()
         val file = File(traceDirectory(), "touchpilot-run-${record.id}-$timestamp.txt")
         file.writeText(AgentRunDetailFormatter.exportRedactedTrace(record))
+        return file
+    }
+
+    fun exportSkillCandidate(record: AgentRunRecord): File? {
+        val trace = WorkflowTrace.from(record) ?: return null
+        val timestamp = timestamp()
+        val file = File(traceDirectory(), "touchpilot-skill-candidate-${trace.runId}-$timestamp.md")
+        file.writeText(WorkflowTraceSerializer.toSkillMarkdown(trace))
         return file
     }
 

@@ -97,6 +97,43 @@ object WorkflowTraceSerializer {
         }
     }
 
+    /**
+     * Converts a recorded [WorkflowTrace] to a SKILL.md v2 draft.
+     *
+     * Inference points:
+     * - `id` from the workflow title slug
+     * - `title` from the trace task
+     * - `description` from the task intent
+     * - `allowed_tools` from observed tool steps
+     * - `success_criteria` from inferred workflow expected-state predicates
+     */
+    fun toSkillMarkdown(trace: WorkflowTrace): String {
+        val definition = toDefinition(trace)
+        val skillId = definition.id.ifBlank { slugify(trace.runId) }
+        val title = definition.title.ifBlank { "Demonstration Skill" }
+        val description = "Generated from recorded demonstration: ${definition.title.ifBlank { "demonstration task" }}."
+        val allowedTools = definition.steps.map { it.tool }.toSet().toList()
+        val successCriteria = inferSuccessCriteria(definition.steps).ifEmpty {
+            listOf("The task completes after executing ${definition.steps.size} actions.")
+        }
+        val risk = inferRisk(definition.steps)
+
+        return buildString {
+            appendLine("---")
+            appendLine("id: ${yamlScalar(skillId)}")
+            appendLine("title: ${yamlScalar(title)}")
+            appendLine("description: ${yamlScalar(description)}")
+            appendLine("risk: $risk")
+            appendYamlList(this, "allowed_tools", allowedTools)
+            appendYamlList(this, "success_criteria", successCriteria)
+            appendLine("---")
+            appendLine()
+            appendLine("# ${sanitizeMarkdownHeading(title)}")
+            appendLine()
+            appendLine("Generated automatically from a recorded demonstration trace (`${trace.runId}`).")
+        }
+    }
+
     private fun expectedStateFromStep(step: WorkflowTraceStep): WorkflowExpectedState? {
         val tappedText = step.args["text"]?.takeIf { it.isNotBlank() }
         val verificationReason = step.verification?.reason?.takeIf { it.isNotBlank() }
@@ -145,6 +182,69 @@ object WorkflowTraceSerializer {
             index += 1
         }
         return "${base}_$index"
+    }
+
+    private fun inferRisk(steps: List<WorkflowStep>): String {
+        val hasMediumOrHigh = steps.any { step ->
+            val risk = AndroidToolCatalog.find(step.tool)?.risk
+            risk == ToolRisk.MEDIUM || risk == ToolRisk.HIGH
+        }
+        return if (hasMediumOrHigh) "medium" else "low"
+    }
+
+    private fun inferSuccessCriteria(steps: List<WorkflowStep>): List<String> {
+        val criteria = linkedSetOf<String>()
+        steps.forEach { step ->
+            step.expectedState?.screenTextContains?.forEach { text ->
+                if (text.isNotBlank()) {
+                    criteria += "The screen should contain \"${sanitizeText(text)}\"."
+                }
+            }
+            step.expectedState?.windowTitle?.takeIf { it.isNotBlank() }?.let { title ->
+                criteria += "The window title should be \"${sanitizeText(title)}\"."
+            }
+            step.expectedState?.elementPresent?.forEach { predicate ->
+                val text = predicate.text
+                    ?: predicate.contentDescription
+                    ?: predicate.nodeId
+                    ?: predicate.viewId
+                if (text != null && text.isNotBlank()) {
+                    criteria += "The UI should expose \"${sanitizeText(text)}\"."
+                }
+            }
+        }
+        return criteria.toList()
+    }
+
+    private fun appendYamlList(
+        builder: StringBuilder,
+        label: String,
+        values: List<String>
+    ) {
+        builder.appendLine("$label:")
+        if (values.isEmpty()) {
+            builder.appendLine("  - ''")
+            return
+        }
+        values.forEach { value ->
+            builder.appendLine("  - ${yamlScalar(value)}")
+        }
+    }
+
+    private fun yamlScalar(value: String): String {
+        val escaped = sanitizeText(value).replace("'", "''")
+        return "'$escaped'"
+    }
+
+    private fun sanitizeText(value: String): String {
+        return value
+            .trim()
+            .replace("\r\n", " ")
+            .replace('\n', ' ')
+    }
+
+    private fun sanitizeMarkdownHeading(value: String): String {
+        return sanitizeText(value).ifBlank { "Demonstration Skill" }
     }
 
     private fun slugifyArgValue(value: String): String {

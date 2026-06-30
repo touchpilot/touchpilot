@@ -513,12 +513,17 @@ class MainActivity : Activity() {
             runId = navigationController.activeRunDetailId,
             findAgentRun = ::findAgentRun,
             closeRunDetail = ::closeRunDetail,
-            exportRunTrace = ::exportRunTrace
+            exportRunTrace = ::exportRunTrace,
+            exportSkillCandidate = ::exportSkillCandidate
         ).render()
     }
 
     private fun exportRunTrace(record: AgentRunRecord): File {
         return debugTraceExporter.exportRunTrace(record)
+    }
+
+    private fun exportSkillCandidate(record: AgentRunRecord): File? {
+        return debugTraceExporter.exportSkillCandidate(record)
     }
 
     private fun exportDebugTrace(): File {

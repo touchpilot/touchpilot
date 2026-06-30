@@ -33,7 +33,8 @@ class AgentRunDetailRenderer(
     private val runId: String?,
     private val findAgentRun: (String) -> AgentRunRecord?,
     private val closeRunDetail: () -> Unit,
-    private val exportRunTrace: (AgentRunRecord) -> File
+    private val exportRunTrace: (AgentRunRecord) -> File,
+    private val exportSkillCandidate: (AgentRunRecord) -> File?
 ) {
     fun render() {
         contentRoot.addView(
@@ -89,6 +90,20 @@ class AgentRunDetailRenderer(
                     Toast.LENGTH_SHORT
                 ).show()
             }.apply { id = R.id.export_run_trace_button }
+        )
+        contentRoot.addView(
+            activity.secondaryButton("Export Skill Candidate") {
+                val file = exportSkillCandidate(record)
+                Toast.makeText(
+                    activity,
+                    if (file == null) {
+                        "No workflow trace available for this run."
+                    } else {
+                        "Skill candidate exported: ${file.name}"
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
+            }.apply { id = R.id.export_skill_candidate_button }
         )
 
         val steps = AgentRunDetailFormatter.formatSteps(record)
