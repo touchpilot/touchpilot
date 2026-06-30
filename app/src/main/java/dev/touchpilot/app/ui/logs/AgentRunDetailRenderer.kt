@@ -1,6 +1,7 @@
 package dev.touchpilot.app.ui.logs
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
@@ -25,6 +26,8 @@ import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.summaryCard
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.withMargins
+import dev.touchpilot.app.workflow.WorkflowTrace
+import dev.touchpilot.app.workflow.WorkflowSkillCandidateFormatter
 import java.io.File
 
 class AgentRunDetailRenderer(
@@ -33,7 +36,7 @@ class AgentRunDetailRenderer(
     private val runId: String?,
     private val findAgentRun: (String) -> AgentRunRecord?,
     private val closeRunDetail: () -> Unit,
-    private val exportRunTrace: (AgentRunRecord) -> File
+    private val exportRunTrace: (AgentRunRecord) -> File,
 ) {
     fun render() {
         contentRoot.addView(
@@ -90,6 +93,16 @@ class AgentRunDetailRenderer(
                 ).show()
             }.apply { id = R.id.export_run_trace_button }
         )
+        WorkflowTrace.from(record)?.let { trace ->
+            val candidate = WorkflowSkillCandidateFormatter.fromTrace(trace)
+            if (candidate != null) {
+                contentRoot.addView(
+                    activity.primaryButton("View Skill Candidate") {
+                        showSkillCandidate(candidate.toMarkdown())
+                    }.withMargins(top = 6, bottom = 8)
+                )
+            }
+        }
 
         val steps = AgentRunDetailFormatter.formatSteps(record)
         contentRoot.addView(
@@ -116,6 +129,21 @@ class AgentRunDetailRenderer(
         steps.forEach { step ->
             contentRoot.addView(runDetailStepCard(step))
         }
+    }
+
+    private fun showSkillCandidate(markdown: String) {
+        val view = TextView(activity).apply {
+            text = markdown
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            setPadding(24, 20, 24, 20)
+            setTextIsSelectable(true)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle("Skill candidate")
+            .setView(view)
+            .setPositiveButton("Close", null)
+            .show()
     }
 
     private fun runDetailStepCard(step: AgentRunDisplayStep): View {
