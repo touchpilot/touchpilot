@@ -48,6 +48,8 @@
     <item name="call_mcp_tool_button" type="id" />
     <item name="mcp_tool_input" type="id" />
     <item name="mcp_args_input" type="id" />
+    <item name="local_extension_tool_name_input" type="id" />
+    <item name="local_extension_tool_description_input" type="id" />
     <item name="output_view" type="id" />
     <item name="export_debug_trace_button" type="id" />
     <item name="execution_log_view" type="id" />

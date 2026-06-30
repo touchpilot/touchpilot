@@ -14,6 +14,8 @@ import dev.touchpilot.app.R
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.mcp.McpHttpClient
+import dev.touchpilot.app.mcp.LocalExtensionTool
+import dev.touchpilot.app.mcp.LocalExtensionToolStore
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillDetailFormatter
 import dev.touchpilot.app.memory.SkillRisk
@@ -73,6 +75,13 @@ class SettingsScreenRenderer(
     private val onDemonstrationRecordingToggled: (Boolean) -> Unit = {},
     private val onDemonstrationAutoExportToggled: (Boolean) -> Unit = {},
 ) {
+    private fun localExtensionToolStore(): LocalExtensionToolStore {
+        return LocalExtensionToolStore(
+            readJson = { preferences.getString("local_extension_tools", "").orEmpty() },
+            writeJson = { preferences.edit().putString("local_extension_tools", it).apply() }
+        )
+    }
+
     fun render() {
         val panel = activeSettingsPanel()
         if (panel == null) {
@@ -322,6 +331,8 @@ class SettingsScreenRenderer(
 
     private fun renderMcpPanel() {
         val savedEndpoint = preferences.getString("mcp_endpoint", "").orEmpty()
+        val extensionStore = localExtensionToolStore()
+        val extensionTools = extensionStore.all()
         contentRoot.addView(
             activity.summaryCard(
                 title = "MCP endpoint",
@@ -348,6 +359,51 @@ class SettingsScreenRenderer(
         }
         contentRoot.addView(toolInput)
         contentRoot.addView(argsInput)
+
+        contentRoot.addView(activity.formLabel("Local extension tool"))
+        val extensionNameInput = activity.editText("Extension tool name").apply {
+            id = R.id.local_extension_tool_name_input
+        }
+        val extensionDescriptionInput = activity.editText("Tool description").apply {
+            id = R.id.local_extension_tool_description_input
+        }
+        contentRoot.addView(extensionNameInput)
+        contentRoot.addView(extensionDescriptionInput)
+        contentRoot.addView(
+            activity.primaryButton("Register Tool") {
+                val tool = LocalExtensionTool(
+                    name = extensionNameInput.text.toString().trim(),
+                    description = extensionDescriptionInput.text.toString().trim(),
+                    endpoint = savedEndpoint
+                )
+                if (tool.name.isNotBlank() && tool.endpoint.isNotBlank()) {
+                    extensionStore.add(tool)
+                    refreshSettingsScreen()
+                }
+            }
+        )
+
+        contentRoot.addView(activity.formLabel("Registered extension tools"))
+        if (extensionTools.isEmpty()) {
+            contentRoot.addView(activity.timelineCard("No extension tools registered", "Add a local MCP tool above to store it here."))
+        } else {
+            extensionTools.forEach { tool ->
+                contentRoot.addView(
+                    activity.timelineCard(
+                        title = tool.name,
+                        body = buildString {
+                            appendLine(tool.description.ifBlank { "No description provided." })
+                            append("Endpoint: ")
+                            append(tool.endpoint)
+                        },
+                        actionHint = "Remove tool"
+                    ) {
+                        extensionStore.remove(tool.name, tool.endpoint)
+                        refreshSettingsScreen()
+                    }
+                )
+            }
+        }
 
         val actionRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         actionRow.addView(
