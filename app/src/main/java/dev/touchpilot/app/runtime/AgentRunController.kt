@@ -44,12 +44,11 @@ class AgentRunController(
     private val refreshStatus: () -> Unit,
     private val refreshStepTimeline: (ChatEvent.StepTimeline, List<AgentStep>, Boolean) -> Unit,
     private val demonstrationManager: DemonstrationSessionManager? = null,
+    private val workflowTraceStore: WorkflowTraceStore,
 ) {
     private var pendingClarification: PendingClarification? = null
     private var cancellationSignal: AtomicBoolean = AtomicBoolean(false)
     private val mutableRunHistory = mutableListOf<AgentRunRecord>()
-    private val workflowTraceStore = WorkflowTraceStore()
-
     var runState: AgentRunState = AgentRunState.IDLE
         private set
 
@@ -510,7 +509,8 @@ class AgentRunController(
     /**
      * Captures a successful run as a reusable [WorkflowTrace] (issue #289).
      * Non-successful runs (errors, blocks, no tool actions) yield no trace, so
-     * this is a no-op for them. The trace stays in-memory for the session.
+     * this is a no-op for them. The trace is also persisted for demonstration
+     * recording history.
      */
     private fun captureWorkflowTrace(record: AgentRunRecord) {
         val trace = WorkflowTrace.from(record) ?: return

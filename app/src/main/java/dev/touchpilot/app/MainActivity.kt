@@ -34,6 +34,7 @@ import dev.touchpilot.app.memory.SkillStore
 import dev.touchpilot.app.navigation.AppSection
 import dev.touchpilot.app.navigation.NavigationController
 import dev.touchpilot.app.navigation.SettingsPanel
+import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.security.ToolApprovalProvider
@@ -68,6 +69,7 @@ class MainActivity : Activity() {
     private lateinit var debugTraceExporter: DebugTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
     private lateinit var reasoningCore: LocalReasoningCore
+    private lateinit var workflowTraceStore: WorkflowTraceStore
     private lateinit var agentRunController: AgentRunController
     private lateinit var workflowLibrary: WorkflowLibrary
     private lateinit var contentRoot: LinearLayout
@@ -105,6 +107,7 @@ class MainActivity : Activity() {
             )
         }
         toolExecutor = AndroidToolExecutor(this)
+        workflowTraceStore = WorkflowTraceStore(traceDirectory())
         debugTraceExporter = DebugTraceExporter(
             context = this,
             accessibilityConnected = { AccessibilityBridge.isConnected() },
@@ -149,6 +152,7 @@ class MainActivity : Activity() {
             refreshStepTimeline = ::refreshStepTimeline,
             runtimeWorkingDetail = { currentRuntimeIndicator().workingDetail() },
             demonstrationManager = demonstrationManager,
+            workflowTraceStore = workflowTraceStore,
         )
 
         if (conversation.isEmpty()) {
@@ -562,8 +566,15 @@ class MainActivity : Activity() {
         return LogsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
-            exportDebugTrace = ::exportDebugTrace
+            exportDebugTrace = ::exportDebugTrace,
+            listWorkflowTraces = workflowTraceStore::all,
+            deleteWorkflowTrace = workflowTraceStore::delete,
+            refreshLogsScreen = { showSection(AppSection.LOGS) },
         )
+    }
+
+    private fun traceDirectory(): File {
+        return File(filesDir, "workflow-traces").apply { mkdirs() }
     }
 
     private fun refreshStatus() {

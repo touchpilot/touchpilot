@@ -24,10 +24,15 @@ import com.google.android.material.card.MaterialCardView
 import dev.touchpilot.app.R
 import dev.touchpilot.app.logging.DeveloperLogEntry
 import dev.touchpilot.app.logging.LogDetailSection
+import dev.touchpilot.app.agent.AgentRunDetailFormatter.formatTimestamp
+import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.tools.ToolExecutionLog
+import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.dp
+import dev.touchpilot.app.ui.rowButtonParams
 import dev.touchpilot.app.ui.primaryButton
+import dev.touchpilot.app.ui.secondaryButton
 import dev.touchpilot.app.ui.rounded
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.withMargins
@@ -38,7 +43,10 @@ import java.io.File
 class LogsScreenRenderer(
     private val activity: Activity,
     private val contentRoot: LinearLayout,
-    private val exportDebugTrace: () -> File
+    private val exportDebugTrace: () -> File,
+    private val listWorkflowTraces: () -> List<WorkflowTrace>,
+    private val deleteWorkflowTrace: (String) -> Boolean,
+    private val refreshLogsScreen: () -> Unit,
 ) {
     fun render(): LinearLayout {
         contentRoot.addView(
@@ -61,6 +69,11 @@ class LogsScreenRenderer(
 
     fun renderLogRows(container: LinearLayout) {
         container.removeAllViews()
+        renderDeveloperLogs(container)
+        renderWorkflowRecordings(container)
+    }
+
+    private fun renderDeveloperLogs(container: LinearLayout) {
         val entries = ToolExecutionLog.recentEntries()
         if (entries.isEmpty()) {
             container.addView(
@@ -74,6 +87,101 @@ class LogsScreenRenderer(
         entries.forEach { entry ->
             container.addView(developerLogRow(entry))
         }
+    }
+
+    private fun renderWorkflowRecordings(container: LinearLayout) {
+        container.addView(
+            TextView(activity).apply {
+                text = "Demonstration recordings"
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 20, 0, 10)
+            }
+        )
+
+        val traces = listWorkflowTraces()
+            .sortedByDescending { it.capturedAtMillis }
+
+        if (traces.isEmpty()) {
+            container.addView(
+                activity.timelineCard(
+                    title = "No recordings yet",
+                    body = "Run and complete a task to create a demonstration trace."
+                )
+            )
+            return
+        }
+
+        traces.forEach { trace ->
+            container.addView(recordingCard(trace))
+        }
+    }
+
+    private fun recordingCard(trace: WorkflowTrace): View {
+        val card = MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = Theme.StrokeDark
+            strokeWidth = 1
+            radius = 8f
+            cardElevation = 0f
+        }
+
+        val body = buildString {
+            appendLine("Captured at ${formatTimestamp(trace.capturedAtMillis)}")
+            appendLine("Task: ${SensitiveTextRedactor.redact(trace.task).ifBlank { "(no task)" }}")
+            appendLine("Steps: ${trace.steps.size}")
+            append("Tools: ${trace.steps.joinToString(", ") { it.tool }}")
+        }
+
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 11, 16, 11)
+        }
+
+        content.addView(
+            TextView(activity).apply {
+                text = trace.runId
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                maxLines = 1
+            }
+        )
+        content.addView(
+            TextView(activity).apply {
+                text = body
+                textSize = 12f
+                setTextColor(Theme.BodyText)
+                setLineSpacing(4f, 1f)
+                setPadding(0, 6, 0, 0)
+                setTextIsSelectable(true)
+            }
+        )
+
+        val actions = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        actions.addView(
+            activity.secondaryButton("Delete") {
+                val deleted = deleteWorkflowTrace(trace.runId)
+                if (deleted) {
+                    Toast.makeText(activity, "Recording ${trace.runId} deleted", Toast.LENGTH_SHORT)
+                        .show()
+                    refreshLogsScreen()
+                } else {
+                    Toast.makeText(activity, "Unable to delete ${trace.runId}", Toast.LENGTH_SHORT)
+                        .show()
+                }
+            }.apply {
+                id = R.id.delete_workflow_recording_button
+            },
+            rowButtonParams()
+        )
+        content.addView(actions)
+
+        card.addView(content)
+        return card.withMargins(top = 4, bottom = 4)
     }
 
     private fun developerLogRow(entry: DeveloperLogEntry): View {
