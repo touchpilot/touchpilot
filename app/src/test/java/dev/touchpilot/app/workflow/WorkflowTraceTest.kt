@@ -144,4 +144,22 @@ class WorkflowTraceTest {
         assertEquals(1, json.getJSONArray("steps").length())
         assertEquals("open_app", json.getJSONArray("steps").getJSONObject(0).getString("tool"))
     }
+
+    @Test
+    fun parsesFromJson() {
+        val trace = WorkflowTrace.from(
+            record(listOf(actStep(1, "open_app", mapOf("target" to "Settings")))),
+        )!!
+        val json = trace.toJson()
+        val parsed = WorkflowTrace.fromJson(json)
+
+        assertEquals(trace.runId, parsed?.runId)
+        assertEquals(trace.steps.size, parsed?.steps?.size)
+        assertEquals(trace.steps.single().tool, parsed?.steps?.single()?.tool)
+    }
+
+    @Test
+    fun parsingInvalidJsonReturnsNull() {
+        assertNull(WorkflowTrace.fromJson(org.json.JSONObject("{}")))
+    }
 }

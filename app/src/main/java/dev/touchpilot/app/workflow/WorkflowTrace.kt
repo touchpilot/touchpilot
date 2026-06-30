@@ -95,6 +95,115 @@ data class WorkflowTrace(
             val risk = AndroidToolCatalog.find(tool)?.risk ?: return false
             return risk == ToolRisk.MEDIUM || risk == ToolRisk.HIGH
         }
+
+        fun fromJson(json: JSONObject): WorkflowTrace? {
+            val runId = json.optString("run_id").trim()
+            val task = json.optString("task").trim()
+            val capturedAtMillis = json.optLong("captured_at_millis", Long.MIN_VALUE)
+            if (runId.isBlank() || capturedAtMillis == Long.MIN_VALUE) return null
+
+            val steps = json.optJSONArray("steps")?.let(::workflowStepsFromJson) ?: return null
+            val screenSignals = workflowScreenSignalsFromJson(json.optJSONArray("screen_signals"))
+            if (steps.isEmpty()) return null
+
+            val allowedTools = json.optJSONArray("allowed_tools")?.let { array ->
+                (0 until array.length())
+                    .mapNotNull { index -> array.optString(index, "")
+                        .trim()
+                        .takeIf { it.isNotBlank() }
+                    }
+                    .toList()
+            }.orEmpty()
+
+            val skillId = if (json.isNull("skill_id")) {
+                null
+            } else {
+                json.optString("skill_id").trim().ifBlank { null }
+            }
+
+            return WorkflowTrace(
+                runId = runId,
+                task = task,
+                capturedAtMillis = capturedAtMillis,
+                steps = steps,
+                screenSignals = screenSignals,
+                skillId = skillId,
+                allowedTools = allowedTools,
+            )
+        }
+
+        private fun workflowStepsFromJson(jsonArray: JSONArray): List<WorkflowTraceStep> {
+            return (0 until jsonArray.length()).mapNotNull { index ->
+                workflowStepFromJson(jsonArray.optJSONObject(index))
+            }
+        }
+
+        private fun workflowStepFromJson(json: JSONObject?): WorkflowTraceStep? {
+            if (json == null) return null
+            val index = json.optInt("index", Int.MIN_VALUE)
+            val tool = json.optString("tool").trim()
+            if (index == Int.MIN_VALUE || tool.isBlank()) return null
+
+            return WorkflowTraceStep(
+                index = index,
+                tool = tool,
+                args = json.optJSONObject("args")?.let(::workflowArgsFromJson).orEmpty(),
+                source = json.optString("source").trim(),
+                succeeded = json.optBoolean("succeeded", false),
+                verification = workflowVerificationFromJson(json.optJSONObject("verification")),
+                requiresApproval = json.optBooleanOrNull("requires_approval"),
+                workflowClass = json.optString("workflow_class").trim().uppercase().let { name ->
+                    name.takeIf { it.isNotBlank() }?.let { runCatching { PolicyWorkflowClass.valueOf(it) }.getOrNull() }
+                },
+            )
+        }
+
+        private fun workflowVerificationFromJson(json: JSONObject?): WorkflowTraceVerification? {
+            if (json == null) return null
+            val status = json.optString("status").trim()
+            val reason = json.optString("reason").trim()
+            if (status.isBlank() && reason.isBlank()) return null
+            return WorkflowTraceVerification(
+                status = status,
+                reason = reason,
+            )
+        }
+
+        private fun workflowScreenSignalsFromJson(jsonArray: JSONArray?): List<WorkflowTraceScreenSignal> {
+            if (jsonArray == null) return emptyList()
+            return (0 until jsonArray.length()).mapNotNull { index ->
+                workflowScreenSignalFromJson(jsonArray.optJSONObject(index))
+            }
+        }
+
+        private fun workflowScreenSignalFromJson(json: JSONObject?): WorkflowTraceScreenSignal? {
+            if (json == null) return null
+            val phase = json.optString("phase").trim()
+            if (phase.isBlank()) return null
+
+            return WorkflowTraceScreenSignal(
+                phase = phase,
+                nodeCount = json.optInt("node_count", 0),
+                containsSensitiveContent = json.optBoolean("contains_sensitive_content", false),
+            )
+        }
+
+        private fun workflowArgsFromJson(json: JSONObject): Map<String, String> {
+            val args = mutableMapOf<String, String>()
+            json.keys().forEach { key ->
+                args[key] = json.optString(key).trim()
+            }
+            return args.toMap()
+        }
+    }
+}
+
+private fun JSONObject.optBooleanOrNull(name: String): Boolean? {
+    if (!has(name) || isNull(name)) return null
+    return try {
+        getBoolean(name)
+    } catch (_: Exception) {
+        null
     }
 }
 
