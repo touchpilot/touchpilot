@@ -92,4 +92,24 @@ object SwipeGesture {
             SwipeDirection.DOWN -> SwipeRequest(centerX, top, centerX, bottom, durationMs)
         }
     }
+
+    /**
+     * Plans the swipe that emulates a content scroll when the accessibility
+     * `ACTION_SCROLL_*` path is unavailable (issue #218): node scroll actions
+     * are no-ops on some emulators and canvas/WebView surfaces — notably
+     * LDPlayer — while [android.accessibilityservice.AccessibilityService.dispatchGesture]
+     * swipes still register.
+     *
+     * A *forward* content scroll reveals content further down the surface, which
+     * a user performs by dragging the surface upward, so it maps to
+     * [SwipeDirection.UP]; a *backward* scroll maps to [SwipeDirection.DOWN].
+     */
+    fun forScroll(
+        forward: Boolean,
+        area: TargetBounds,
+        durationMs: Long = DefaultDurationMs,
+    ): SwipeRequest {
+        val direction = if (forward) SwipeDirection.UP else SwipeDirection.DOWN
+        return forDirection(direction, area, durationMs)
+    }
 }

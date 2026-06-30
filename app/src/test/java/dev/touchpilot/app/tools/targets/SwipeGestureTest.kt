@@ -59,6 +59,35 @@ class SwipeGestureTest {
     }
 
     @Test
+    fun forwardScrollSwipesUpToRevealContentBelow() {
+        // Forward content scroll = drag the surface upward (issue #218 gesture fallback).
+        val request = SwipeGesture.forScroll(forward = true, area = area)
+
+        assertEquals(SwipeGesture.forDirection(SwipeDirection.UP, area), request)
+        assertTrue(request.startY > request.endY)
+        assertEquals(area.centerX, request.startX)
+        assertEquals(area.centerX, request.endX)
+    }
+
+    @Test
+    fun backwardScrollSwipesDownToRevealContentAbove() {
+        val request = SwipeGesture.forScroll(forward = false, area = area)
+
+        assertEquals(SwipeGesture.forDirection(SwipeDirection.DOWN, area), request)
+        assertTrue(request.startY < request.endY)
+        assertEquals(area.centerX, request.startX)
+        assertEquals(area.centerX, request.endX)
+    }
+
+    @Test
+    fun scrollSwipeEndpointsStayInsideArea() {
+        listOf(true, false).forEach { forward ->
+            val request = SwipeGesture.forScroll(forward, area)
+            assertTrue(request.within(area), "forward=$forward endpoints should stay inside area")
+        }
+    }
+
+    @Test
     fun directionSwipeUsesDefaultDurationUnlessOverridden() {
         assertEquals(
             SwipeGesture.DefaultDurationMs,

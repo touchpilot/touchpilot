@@ -635,8 +635,18 @@ class AndroidToolExecutor(
                         data = mapOf("target" to resolution.selector.toRedactedJson())
                     )
                 }
-                val attempted = AccessibilityBridge.scrollNode(nodeId, forward)
-                val verification = verifyScreenChanged(beforeContext, attempted)
+                val accessibilityScrolled = AccessibilityBridge.scrollNode(nodeId, forward)
+                var verification = verifyScreenChanged(beforeContext, accessibilityScrolled)
+                var usedGesture = false
+                if (!verification.changed) {
+                    val area = node.bounds.toTargetBounds().takeIf { !it.isEmpty }
+                        ?: AccessibilityBridge.activeWindowBounds()?.toTargetBounds()
+                    if (area != null && scrollByGesture(area, forward)) {
+                        usedGesture = true
+                        verification = verifyScreenChanged(beforeContext, true)
+                    }
+                }
+                val attempted = accessibilityScrolled || usedGesture
                 val message = when {
                     !attempted -> "Unable to perform scroll on resolved container"
                     !verification.changed -> "Scroll performed but screen did not change"
@@ -657,6 +667,7 @@ class AndroidToolExecutor(
                         "direction" to if (forward) "forward" else "backward",
                         "confidence" to resolution.confidence.toString(),
                         "screen_changed" to verification.changed.toString(),
+                        "method" to if (usedGesture) "gesture" else "accessibility",
                     )
                 )
             }
@@ -689,12 +700,21 @@ class AndroidToolExecutor(
                 )
             }
             is ScrollResolution.DirectionOnly -> {
-                val attempted = if (backward) {
+                val accessibilityScrolled = if (backward) {
                     AccessibilityBridge.scrollBackward()
                 } else {
                     AccessibilityBridge.scrollForward()
                 }
-                val verification = verifyScreenChanged(beforeContext, attempted)
+                var verification = verifyScreenChanged(beforeContext, accessibilityScrolled)
+                var usedGesture = false
+                if (!verification.changed) {
+                    val area = AccessibilityBridge.activeWindowBounds()?.toTargetBounds()
+                    if (area != null && scrollByGesture(area, forward)) {
+                        usedGesture = true
+                        verification = verifyScreenChanged(beforeContext, true)
+                    }
+                }
+                val attempted = accessibilityScrolled || usedGesture
                 val message = when {
                     !attempted -> "Unable to perform direction-only scroll"
                     !verification.changed -> "Scroll performed but screen did not change"
@@ -714,6 +734,7 @@ class AndroidToolExecutor(
                         "direction" to if (forward) "forward" else "backward",
                         "scrollable_count" to resolution.scrollableCount.toString(),
                         "screen_changed" to verification.changed.toString(),
+                        "method" to if (usedGesture) "gesture" else "accessibility",
                     )
                 )
             }
@@ -857,6 +878,26 @@ class AndroidToolExecutor(
     private sealed class SwipeArea {
         data class Resolved(val bounds: TargetBounds) : SwipeArea()
         data class Failure(val result: ToolResult) : SwipeArea()
+    }
+
+    /**
+     * Fallback for scrolls where the accessibility `ACTION_SCROLL_*` path did
+     * not move the screen (issue #218): some emulators and canvas/WebView
+     * surfaces ignore node scroll actions while `dispatchGesture` swipes still
+     * register. Plans a swipe over [area] in the scroll travel direction and
+     * dispatches it, returning true when the gesture was accepted. Gesture
+     * planning lives in [SwipeGesture] so it stays unit-testable.
+     */
+    private fun scrollByGesture(area: TargetBounds, forward: Boolean): Boolean {
+        if (area.isEmpty) return false
+        val request = SwipeGesture.forScroll(forward, area)
+        return AccessibilityBridge.swipe(
+            request.startX,
+            request.startY,
+            request.endX,
+            request.endY,
+            request.durationMs,
+        )
     }
 
     private fun verifyScreenChanged(
