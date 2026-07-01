@@ -48,6 +48,7 @@ import dev.touchpilot.app.ui.RuntimeIndicator
 import dev.touchpilot.app.ui.label
 import dev.touchpilot.app.ui.welcomeDetail
 import dev.touchpilot.app.ui.workingDetail
+import dev.touchpilot.app.ui.chat.ActiveSkillHeader
 import dev.touchpilot.app.ui.chat.ChatEvent
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
@@ -262,6 +263,8 @@ class MainActivity : Activity() {
             agentRunState = { agentRunController.runState },
             runtimeIndicator = ::currentRuntimeIndicator,
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
+            activeSkill = { selectedSkill()?.let { ActiveSkillHeader.from(it) } },
+            clearActiveSkill = ::clearActiveSkill,
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
             openSkillDetail = ::openSkillDetail,
@@ -345,16 +348,40 @@ class MainActivity : Activity() {
                 navigationController.openSettingsPanel(SettingsPanel.TOOLS)
                 showSection(AppSection.SETTINGS)
             },
-            runSkill = ::runSkillFromProduct,
+            runSkill = ::openSkillInChat,
             openWorkflowDetail = ::openWorkflowDetail,
         ).render()
     }
 
-    private fun runSkillFromProduct(skillId: String) {
+    /**
+     * Turns a Use-page skill card into an entry point into chat (#386): activate
+     * the skill, open chat with it visibly active, and prefill a starter prompt
+     * so the user runs it in context rather than triggering a surprise run.
+     */
+    private fun openSkillInChat(skillId: String) {
         val skill = skillRegistry.allSkills().firstOrNull { it.id == skillId } ?: return
         skillRegistry.setActiveSkill(skill.id)
-        val task = skill.examples.firstOrNull()?.takeIf { it.isNotBlank() } ?: skill.title
-        agentRunController.startFromChat(task)
+        val starter = skill.examples.firstOrNull { it.isNotBlank() }.orEmpty()
+        showSection(AppSection.CHAT)
+        prefillChatInput(starter)
+    }
+
+    private fun clearActiveSkill() {
+        skillRegistry.setActiveSkill(null)
+        showSection(AppSection.CHAT)
+    }
+
+    private fun prefillChatInput(text: String) {
+        if (!::chatTaskInput.isInitialized) return
+        chatTaskInput.setText(text)
+        chatTaskInput.setSelection(chatTaskInput.text?.length ?: 0)
+        chatTaskInput.requestFocus()
+        if (text.isNotEmpty()) showKeyboard(chatTaskInput)
+    }
+
+    private fun showKeyboard(anchor: View) {
+        val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        manager.showSoftInput(anchor, InputMethodManager.SHOW_IMPLICIT)
     }
 
     private fun openWorkflowDetail(workflowId: String) {
