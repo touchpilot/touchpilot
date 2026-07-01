@@ -15,7 +15,9 @@ import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
 import dev.touchpilot.app.mcp.McpHttpClient
 import dev.touchpilot.app.mcp.LocalExtensionTool
+import dev.touchpilot.app.mcp.LocalExtensionParseResult
 import dev.touchpilot.app.mcp.LocalExtensionToolStore
+import dev.touchpilot.app.mcp.PluginApiManifest
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillDetailFormatter
 import dev.touchpilot.app.memory.SkillRisk
@@ -332,7 +334,16 @@ class SettingsScreenRenderer(
     private fun renderMcpPanel() {
         val savedEndpoint = preferences.getString("mcp_endpoint", "").orEmpty()
         val extensionStore = localExtensionToolStore()
-        val extensionTools = extensionStore.all()
+        val extensionLoad = extensionStore.load()
+        val extensionTools = extensionLoad.tools
+        contentRoot.addView(
+            activity.summaryCard(
+                title = "Plugin API",
+                value = "Supported api_version ${PluginApiManifest.SUPPORTED_API_VERSION}",
+                chipText = "manifest",
+                chipAccent = true
+            )
+        )
         contentRoot.addView(
             activity.summaryCard(
                 title = "MCP endpoint",
@@ -371,17 +382,51 @@ class SettingsScreenRenderer(
         contentRoot.addView(extensionDescriptionInput)
         contentRoot.addView(
             activity.primaryButton("Register Tool") {
-                val tool = LocalExtensionTool(
+                val manifest = PluginApiManifest(
+                    apiVersion = PluginApiManifest.SUPPORTED_API_VERSION,
                     name = extensionNameInput.text.toString().trim(),
                     description = extensionDescriptionInput.text.toString().trim(),
-                    endpoint = savedEndpoint
+                    endpoint = savedEndpoint,
+                    featureFlags = mapOf("network_access" to true),
                 )
-                if (tool.name.isNotBlank() && tool.endpoint.isNotBlank()) {
-                    extensionStore.add(tool)
-                    refreshSettingsScreen()
+                when (val result = extensionStore.add(LocalExtensionTool(manifest))) {
+                    is LocalExtensionParseResult.Valid -> refreshSettingsScreen()
+                    is LocalExtensionParseResult.Invalid -> {
+                        recordMcpResult(
+                            buildString {
+                                appendLine("Extension manifest rejected for ${result.name}:")
+                                result.errors.forEach { appendLine("- $it") }
+                                result.recommendedAction?.let {
+                                    appendLine()
+                                    append("Recommended action: ")
+                                    append(it)
+                                }
+                            }
+                        )
+                        refreshSettingsScreen()
+                    }
                 }
             }
         )
+
+        if (extensionLoad.invalid.isNotEmpty()) {
+            contentRoot.addView(activity.formLabel("Incompatible extension manifests"))
+            extensionLoad.invalid.forEach { invalid ->
+                contentRoot.addView(
+                    activity.timelineCard(
+                        title = "${invalid.name} (incompatible)",
+                        body = buildString {
+                            invalid.errors.forEach { appendLine(it) }
+                            invalid.recommendedAction?.let {
+                                appendLine()
+                                append("Recommended action: ")
+                                append(it)
+                            }
+                        },
+                    )
+                )
+            }
+        }
 
         contentRoot.addView(activity.formLabel("Registered extension tools"))
         if (extensionTools.isEmpty()) {
@@ -393,6 +438,7 @@ class SettingsScreenRenderer(
                         title = tool.name,
                         body = buildString {
                             appendLine(tool.description.ifBlank { "No description provided." })
+                            appendLine("api_version: ${tool.manifest.apiVersion}")
                             append("Endpoint: ")
                             append(tool.endpoint)
                         },

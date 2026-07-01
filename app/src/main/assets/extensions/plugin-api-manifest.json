@@ -1,0 +1,7 @@
+{
+  "api_version": "1.0.0",
+  "runtime": "touchpilot-android",
+  "description": "TouchPilot local extension plugin API manifest",
+  "supported_feature_flags": ["network_access"],
+  "privileged_feature_flags": ["privileged_host", "file_system"]
+}

@@ -20,6 +20,52 @@ Android tools over MCP, it needs an explicit server permission model,
 foreground-service lifecycle, local-network binding controls, and request
 authentication.
 
+## Local Extension Plugin API Manifest
+
+Local extension tools must declare a versioned plugin API manifest when they are
+registered. TouchPilot validates the manifest locally at load time and rejects
+incompatible extensions with actionable guidance instead of failing later during
+tool calls.
+
+Bundled runtime reference:
+
+- `app/src/main/assets/extensions/plugin-api-manifest.json`
+
+Extension manifests are stored with each registered tool and must include:
+
+```json
+{
+  "api_version": "1.0.0",
+  "name": "weather",
+  "description": "Local weather tools",
+  "endpoint": "http://localhost:8080",
+  "feature_flags": {
+    "network_access": true
+  }
+}
+```
+
+Manifest fields:
+
+| Field | Meaning |
+| --- | --- |
+| `api_version` | Semver plugin API version the extension targets. Must match the supported major version and must not be newer than the runtime's supported version. |
+| `name` | Extension tool name shown in Settings. |
+| `description` | Human-readable summary for review UI. |
+| `endpoint` | Local MCP HTTP JSON-RPC endpoint for the extension. |
+| `feature_flags` | Explicit capability opt-ins. Omitted flags are disabled. Unknown flags are rejected. |
+
+Supported feature flags:
+
+- `network_access`
+- `privileged_host` (privileged; must be explicitly set to `true` to opt in)
+- `file_system` (privileged; must be explicitly set to `true` to opt in)
+
+`PluginApiManifest.parse` reads extension manifests and
+`PluginApiManifest.validationErrors` / `compatibilityErrors` validate them before
+registration or load. `LocalExtensionToolStore.load` separates valid tools from
+invalid manifests so Settings can show recommended actions.
+
 References:
 
 - https://modelcontextprotocol.io/docs/learn/architecture

@@ -2,22 +2,82 @@ package dev.touchpilot.app.mcp
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class LocalExtensionToolStoreTest {
     @Test
-    fun storesAndReloadsTools() {
+    fun storesAndReloadsToolsWithManifest() {
         var backing = ""
         val store = LocalExtensionToolStore(
             readJson = { backing },
             writeJson = { backing = it },
         )
 
-        store.add(LocalExtensionTool("weather", "Show weather", "http://localhost:8080"))
+        val result = store.add(validTool())
 
-        assertTrue(backing.contains("weather"))
-        assertEquals(1, store.all().size)
-        assertEquals("weather", store.all().first().name)
+        assertIs<LocalExtensionParseResult.Valid>(result)
+        assertTrue(backing.contains("api_version"))
+        assertEquals(1, store.load().tools.size)
+        assertEquals("weather", store.load().tools.first().name)
+    }
+
+    @Test
+    fun rejectsIncompatibleManifestOnAdd() {
+        var backing = ""
+        val store = LocalExtensionToolStore(
+            readJson = { backing },
+            writeJson = { backing = it },
+        )
+
+        val result = store.add(
+            LocalExtensionTool(
+                PluginApiManifest(
+                    apiVersion = "2.0.0",
+                    name = "weather",
+                    description = "Show weather",
+                    endpoint = "http://localhost:8080",
+                    featureFlags = mapOf("network_access" to true),
+                )
+            )
+        )
+
+        assertIs<LocalExtensionParseResult.Invalid>(result)
+        assertEquals(0, store.load().tools.size)
+        assertTrue(backing.isBlank())
+    }
+
+    @Test
+    fun loadSeparatesValidAndInvalidEntries() {
+        var backing = """
+            [
+              {
+                "api_version": "1.0.0",
+                "name": "weather",
+                "description": "Show weather",
+                "endpoint": "http://localhost:8080",
+                "feature_flags": { "network_access": true }
+              },
+              {
+                "api_version": "2.0.0",
+                "name": "broken",
+                "description": "Too new",
+                "endpoint": "http://localhost:9090",
+                "feature_flags": { "network_access": true }
+              }
+            ]
+        """.trimIndent()
+        val store = LocalExtensionToolStore(
+            readJson = { backing },
+            writeJson = { backing = it },
+        )
+
+        val load = store.load()
+
+        assertEquals(1, load.tools.size)
+        assertEquals("weather", load.tools.first().name)
+        assertEquals(1, load.invalid.size)
+        assertEquals("broken", load.invalid.first().name)
     }
 
     @Test
@@ -28,9 +88,9 @@ class LocalExtensionToolStoreTest {
             writeJson = { backing = it },
         )
 
-        store.add(LocalExtensionTool("weather", "Show weather", "http://localhost:8080"))
+        store.add(validTool())
         assertTrue(store.remove("weather", "http://localhost:8080"))
-        assertEquals(0, store.all().size)
+        assertEquals(0, store.load().tools.size)
     }
 
     @Test
@@ -41,11 +101,31 @@ class LocalExtensionToolStoreTest {
             writeJson = { backing = it },
         )
 
-        store.add(LocalExtensionTool("weather", "Local", "http://localhost:8080"))
-        store.add(LocalExtensionTool("weather", "Remote", "http://localhost:9090"))
+        store.add(validTool())
+        store.add(
+            LocalExtensionTool(
+                PluginApiManifest(
+                    apiVersion = PluginApiManifest.SUPPORTED_API_VERSION,
+                    name = "weather",
+                    description = "Remote",
+                    endpoint = "http://localhost:9090",
+                    featureFlags = mapOf("network_access" to true),
+                )
+            )
+        )
 
-        assertEquals(2, store.all().size)
+        assertEquals(2, store.load().tools.size)
         assertTrue(store.remove("weather", "http://localhost:8080"))
-        assertEquals(listOf("http://localhost:9090"), store.all().map { it.endpoint })
+        assertEquals(listOf("http://localhost:9090"), store.load().tools.map { it.endpoint })
     }
+
+    private fun validTool() = LocalExtensionTool(
+        PluginApiManifest(
+            apiVersion = PluginApiManifest.SUPPORTED_API_VERSION,
+            name = "weather",
+            description = "Show weather",
+            endpoint = "http://localhost:8080",
+            featureFlags = mapOf("network_access" to true),
+        )
+    )
 }
