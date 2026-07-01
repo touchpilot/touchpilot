@@ -416,12 +416,27 @@ class SettingsScreenRenderer(
                     activity.timelineCard(
                         title = "${invalid.name} (incompatible)",
                         body = buildString {
+                            invalid.endpoint?.let {
+                                appendLine("Endpoint: $it")
+                            }
                             invalid.errors.forEach { appendLine(it) }
                             invalid.recommendedAction?.let {
                                 appendLine()
                                 append("Recommended action: ")
                                 append(it)
                             }
+                        },
+                        actionHint = "Remove entry",
+                        onClick = {
+                            val removed = when {
+                                invalid.name == "(storage)" -> extensionStore.clearStorage()
+                                !invalid.endpoint.isNullOrBlank() ->
+                                    extensionStore.remove(invalid.name, invalid.endpoint)
+                                invalid.storageIndex != null ->
+                                    extensionStore.removeAt(invalid.storageIndex)
+                                else -> false
+                            }
+                            if (removed) refreshSettingsScreen()
                         },
                     )
                 )

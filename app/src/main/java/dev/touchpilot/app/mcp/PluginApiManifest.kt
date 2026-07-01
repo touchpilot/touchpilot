@@ -100,7 +100,7 @@ data class PluginApiManifest(
                 }
             }
             return PluginApiManifest(
-                apiVersion = obj.optString("api_version", SUPPORTED_API_VERSION),
+                apiVersion = obj.optString("api_version"),
                 name = obj.optString("name"),
                 description = obj.optString("description"),
                 endpoint = obj.optString("endpoint"),

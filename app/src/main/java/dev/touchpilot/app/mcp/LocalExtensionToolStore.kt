@@ -20,6 +20,8 @@ sealed class LocalExtensionParseResult {
 
     data class Invalid(
         override val name: String,
+        val endpoint: String?,
+        val storageIndex: Int?,
         val errors: List<String>,
         val recommendedAction: String?,
     ) : LocalExtensionParseResult()
@@ -43,8 +45,10 @@ class LocalExtensionToolStore(
                 invalid = listOf(
                     LocalExtensionParseResult.Invalid(
                         name = "(storage)",
+                        endpoint = null,
+                        storageIndex = null,
                         errors = listOf("local extension storage is not valid JSON"),
-                        recommendedAction = "Re-register extension tools from Settings > MCP.",
+                        recommendedAction = "Clear local extension storage from Settings > MCP and re-register tools.",
                     )
                 ),
             )
@@ -53,7 +57,7 @@ class LocalExtensionToolStore(
         val invalid = mutableListOf<LocalExtensionParseResult.Invalid>()
         for (index in 0 until array.length()) {
             val obj = array.optJSONObject(index) ?: continue
-            when (val result = parseEntry(obj)) {
+            when (val result = parseEntry(obj, index)) {
                 is LocalExtensionParseResult.Valid -> valid += result.tool
                 is LocalExtensionParseResult.Invalid -> invalid += result
             }
@@ -68,6 +72,8 @@ class LocalExtensionToolStore(
         if (errors.isNotEmpty()) {
             return LocalExtensionParseResult.Invalid(
                 name = tool.name.ifBlank { "(unnamed)" },
+                endpoint = tool.endpoint.takeIf { it.isNotBlank() },
+                storageIndex = null,
                 errors = errors,
                 recommendedAction = tool.manifest.recommendedAction(),
             )
@@ -81,23 +87,63 @@ class LocalExtensionToolStore(
     }
 
     fun remove(name: String, endpoint: String): Boolean {
-        val tools = all().toMutableList()
-        val removed = tools.removeAll { it.name == name && it.endpoint == endpoint }
-        if (removed) save(tools)
-        return removed
+        return removeStoredEntry { obj ->
+            obj.optString("name").trim() == name && obj.optString("endpoint").trim() == endpoint
+        }
     }
 
-    private fun parseEntry(obj: JSONObject): LocalExtensionParseResult {
+    fun removeAt(index: Int): Boolean {
+        val raw = readJson().trim()
+        if (raw.isBlank()) return false
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return false
+        if (index < 0 || index >= array.length()) return false
+        val updated = JSONArray()
+        for (entryIndex in 0 until array.length()) {
+            if (entryIndex != index) {
+                updated.put(array.get(entryIndex))
+            }
+        }
+        writeJson(updated.toString())
+        return true
+    }
+
+    fun clearStorage(): Boolean {
+        if (readJson().trim().isBlank()) return false
+        writeJson("")
+        return true
+    }
+
+    private fun parseEntry(obj: JSONObject, storageIndex: Int): LocalExtensionParseResult {
         val manifest = PluginApiManifest.parse(obj)
         val errors = manifest.validationErrors() + manifest.compatibilityErrors()
         if (errors.isNotEmpty()) {
             return LocalExtensionParseResult.Invalid(
                 name = manifest.name.ifBlank { "(unnamed)" },
+                endpoint = manifest.endpoint.takeIf { it.isNotBlank() },
+                storageIndex = storageIndex,
                 errors = errors,
                 recommendedAction = manifest.recommendedAction(),
             )
         }
         return LocalExtensionParseResult.Valid(LocalExtensionTool(manifest))
+    }
+
+    private fun removeStoredEntry(matches: (JSONObject) -> Boolean): Boolean {
+        val raw = readJson().trim()
+        if (raw.isBlank()) return false
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return false
+        val updated = JSONArray()
+        var removed = false
+        for (index in 0 until array.length()) {
+            val obj = array.optJSONObject(index) ?: continue
+            if (matches(obj)) {
+                removed = true
+            } else {
+                updated.put(obj)
+            }
+        }
+        if (removed) writeJson(updated.toString())
+        return removed
     }
 
     private fun save(tools: List<LocalExtensionTool>) {

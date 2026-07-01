@@ -42,6 +42,23 @@ class PluginApiManifestTest {
     }
 
     @Test
+    fun missingApiVersionIsInvalid() {
+        val manifest = PluginApiManifest.parse(
+            """
+            {
+              "name": "weather",
+              "description": "Local weather tools",
+              "endpoint": "http://localhost:8080",
+              "feature_flags": { "network_access": true }
+            }
+            """.trimIndent()
+        )
+
+        assertFalse(manifest.isValid)
+        assertTrue(manifest.validationErrors().any { it.contains("api_version") })
+    }
+
+    @Test
     fun blankRequiredFieldsAreInvalid() {
         val manifest = valid().copy(name = "", endpoint = "", apiVersion = "")
 

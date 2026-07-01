@@ -78,6 +78,54 @@ class LocalExtensionToolStoreTest {
         assertEquals("weather", load.tools.first().name)
         assertEquals(1, load.invalid.size)
         assertEquals("broken", load.invalid.first().name)
+        assertEquals("http://localhost:9090", load.invalid.first().endpoint)
+    }
+
+    @Test
+    fun removesIncompatibleStoredEntry() {
+        var backing = """
+            [
+              {
+                "api_version": "2.0.0",
+                "name": "broken",
+                "description": "Too new",
+                "endpoint": "http://localhost:9090",
+                "feature_flags": { "network_access": true }
+              }
+            ]
+        """.trimIndent()
+        val store = LocalExtensionToolStore(
+            readJson = { backing },
+            writeJson = { backing = it },
+        )
+
+        assertEquals(1, store.load().invalid.size)
+        assertTrue(store.remove("broken", "http://localhost:9090"))
+        assertEquals(0, store.load().invalid.size)
+        assertTrue(backing.isBlank() || backing == "[]")
+    }
+
+    @Test
+    fun rejectsLegacyEntryMissingApiVersion() {
+        var backing = """
+            [
+              {
+                "name": "legacy",
+                "description": "Old format",
+                "endpoint": "http://localhost:8080"
+              }
+            ]
+        """.trimIndent()
+        val store = LocalExtensionToolStore(
+            readJson = { backing },
+            writeJson = { backing = it },
+        )
+
+        val load = store.load()
+
+        assertEquals(0, load.tools.size)
+        assertEquals(1, load.invalid.size)
+        assertTrue(load.invalid.first().errors.any { it.contains("api_version") })
     }
 
     @Test
