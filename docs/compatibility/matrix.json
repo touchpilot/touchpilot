@@ -1,0 +1,263 @@
+{
+  "version": 1,
+  "description": "Machine-readable device compatibility matrix for TouchPilot (issue #387).",
+  "lastUpdated": "2026-07-01",
+  "apiLevels": [31, 33, 34, 35],
+  "androidVersions": {
+    "31": "12",
+    "33": "13",
+    "34": "14",
+    "35": "15"
+  },
+  "coreTools": [
+    "observe",
+    "tap",
+    "type",
+    "scroll",
+    "open_app",
+    "back",
+    "home",
+    "wait"
+  ],
+  "permissionChecks": [
+    "install",
+    "accessibility_manual",
+    "accessibility_persistence",
+    "foreground_notification",
+    "battery_optimization",
+    "debug_trace_export"
+  ],
+  "statusValues": ["pass", "fail", "partial", "blocked", "not_tested"],
+  "profiles": [
+    {
+      "id": "stock_pixel_api31",
+      "label": "Pixel 6 (stock Google APIs)",
+      "oem": "google",
+      "skin": "stock",
+      "apiLevel": 31,
+      "testMethod": "ci_emulator",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": "CI matrix job in android-live-tests.yml"
+    },
+    {
+      "id": "stock_pixel_api33",
+      "label": "Pixel 6 (stock Google APIs)",
+      "oem": "google",
+      "skin": "stock",
+      "apiLevel": 33,
+      "testMethod": "ci_emulator",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": "CI matrix job in android-live-tests.yml"
+    },
+    {
+      "id": "stock_pixel_api34",
+      "label": "Pixel 6 (stock Google APIs)",
+      "oem": "google",
+      "skin": "stock",
+      "apiLevel": 34,
+      "testMethod": "ci_emulator",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": "CI matrix job in android-live-tests.yml"
+    },
+    {
+      "id": "stock_pixel_api35",
+      "label": "TouchPilot_API_35 / Pixel 6 (stock)",
+      "oem": "google",
+      "skin": "stock",
+      "apiLevel": 35,
+      "testMethod": "manual_emulator",
+      "status": "partial",
+      "tools": {
+        "observe": "pass",
+        "tap": "pass",
+        "type": "pass",
+        "scroll": "pass",
+        "open_app": "pass",
+        "back": "pass",
+        "home": "pass",
+        "wait": "partial"
+      },
+      "permissions": "pass",
+      "lastRun": "2026-03",
+      "resultLog": "docs/LIVE_TESTING.md",
+      "notes": "Phase 6 validation on commit 470c7e1; wait tools partially unchecked"
+    },
+    {
+      "id": "samsung_oneui",
+      "label": "Samsung Galaxy (One UI)",
+      "oem": "samsung",
+      "skin": "one_ui",
+      "apiLevelRange": [31, 35],
+      "testMethod": "manual_device",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": null
+    },
+    {
+      "id": "google_pixel_device",
+      "label": "Google Pixel (physical)",
+      "oem": "google",
+      "skin": "stock",
+      "apiLevelRange": [31, 35],
+      "testMethod": "manual_device",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": null
+    },
+    {
+      "id": "xiaomi_miui",
+      "label": "Xiaomi / Redmi (MIUI / HyperOS)",
+      "oem": "xiaomi",
+      "skin": "miui",
+      "apiLevelRange": [31, 35],
+      "testMethod": "manual_device",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": null
+    },
+    {
+      "id": "oneplus_oxygenos",
+      "label": "OnePlus (OxygenOS)",
+      "oem": "oneplus",
+      "skin": "oxygenos",
+      "apiLevelRange": [31, 35],
+      "testMethod": "manual_device",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": null
+    },
+    {
+      "id": "motorola_stock",
+      "label": "Motorola (near-stock)",
+      "oem": "motorola",
+      "skin": "stock",
+      "apiLevelRange": [31, 35],
+      "testMethod": "manual_device",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": null
+    },
+    {
+      "id": "oppo_coloros",
+      "label": "Oppo / Realme (ColorOS)",
+      "oem": "oppo",
+      "skin": "coloros",
+      "apiLevelRange": [31, 35],
+      "testMethod": "manual_device",
+      "status": "not_tested",
+      "tools": {
+        "observe": "not_tested",
+        "tap": "not_tested",
+        "type": "not_tested",
+        "scroll": "not_tested",
+        "open_app": "not_tested",
+        "back": "not_tested",
+        "home": "not_tested",
+        "wait": "not_tested"
+      },
+      "permissions": "not_tested",
+      "lastRun": null,
+      "resultLog": null,
+      "notes": null
+    }
+  ]
+}

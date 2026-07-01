@@ -3,6 +3,13 @@
 Phase 6 validates TouchPilot on a real Android runtime. The current target is
 the local Android emulator AVD named `TouchPilot_API_35`.
 
+For multi-device and OEM skin coverage, use the Milestone 13 compatibility
+workflow:
+
+- [Compatibility Matrix](COMPATIBILITY_MATRIX.md)
+- [Device Compatibility Checklist](DEVICE_COMPATIBILITY_CHECKLIST.md)
+- [Known Limitations](KNOWN_LIMITATIONS.md)
+
 ## Emulator Setup
 
 Start the emulator from GNOME with the `TouchPilot Emulator` launcher, or run:
@@ -128,8 +135,12 @@ Dump visible UI text:
 
 ## Known Post-Milestone Follow-Up Areas
 
+Tracked in [Known Limitations](KNOWN_LIMITATIONS.md):
+
 - Manual accessibility enablement should be tested, not only adb settings.
 - MCP needs a local test server fixture.
 - Approval UI should gain automated instrumentation coverage.
 - Product UI should continue to receive emulator screenshots or recordings for
   material UX changes.
+- OEM skin matrix rows (Samsung, Xiaomi, OnePlus, Motorola, ColorOS) need
+  manual device runs per [Device Compatibility Checklist](DEVICE_COMPATIBILITY_CHECKLIST.md).

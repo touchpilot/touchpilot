@@ -550,11 +550,13 @@ beta user
 Deliverables:
 
 - Real-device onboarding.
-- Compatibility testing across Android versions and OEM skins.
+- Compatibility testing across Android versions and OEM skins — see
+  [Compatibility Matrix](COMPATIBILITY_MATRIX.md),
+  [Device Compatibility Checklist](DEVICE_COMPATIBILITY_CHECKLIST.md).
 - Battery and foreground-service behavior review.
 - Local bug report export.
 - Real-device beta checklist.
-- Known limitations page.
+- Known limitations page — [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md).
 
 Exit criteria:
 

@@ -14,9 +14,13 @@ concurrency:
 
 jobs:
   emulator-live-tests:
-    name: Emulator Live Tests
+    name: API ${{ matrix.api-level }} live tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [31, 33, 34, 35]
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -54,7 +58,7 @@ jobs:
       - name: Run live instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
@@ -67,7 +71,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-live-test-reports
+          name: android-live-test-reports-api-${{ matrix.api-level }}
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/

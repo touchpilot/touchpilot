@@ -74,4 +74,4 @@ body:
     id: evidence
     attributes:
       label: Logs, screenshots, or traces
-      description: Add relevant screenshots, exported debug traces, logcat lines, or UI dumps.
+      description: Add relevant screenshots, exported debug traces, logcat lines, or UI dumps. Check [Known Limitations](https://github.com/touchpilot/touchpilot/blob/main/docs/KNOWN_LIMITATIONS.md) before filing duplicate OEM issues.

@@ -57,3 +57,9 @@ Milestone 4 is complete as the reliable-control foundation. Remaining product
 hardening should be tracked as post-milestone bugs or Milestone 6+ work, such
 as broader real-device coverage, additional Tools page controls, and UI polish
 for tool logs.
+
+Real-device and OEM compatibility testing is documented under Milestone 13:
+
+- [Compatibility Matrix](COMPATIBILITY_MATRIX.md)
+- [Device Compatibility Checklist](DEVICE_COMPATIBILITY_CHECKLIST.md)
+- [Known Limitations](KNOWN_LIMITATIONS.md)

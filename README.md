@@ -111,5 +111,21 @@ skills live under `app/src/main/assets/skills/`.
 See [Code Structure](docs/CODE_STRUCTURE.md) for the current package layout and
 future module-split direction.
 
+## Compatibility Testing
+
+TouchPilot tracks Android version and OEM skin compatibility through a local,
+manual-first test matrix (issue #387):
+
+- [Compatibility Matrix](docs/COMPATIBILITY_MATRIX.md) — status board across API 31–35 and major OEMs
+- [Device Compatibility Checklist](docs/DEVICE_COMPATIBILITY_CHECKLIST.md) — step-by-step tester workflow
+- [Known Limitations](docs/KNOWN_LIMITATIONS.md) — documented incompatibilities and workarounds
+
+Run the instrumentation smoke test on a connected device or emulator:
+
+```bash
+./gradlew connectedDebugAndroidTest \
+  --tests 'dev.touchpilot.app.compatibility.DeviceCompatibilitySmokeLiveTest'
+```
+
 ## Community
 https://discord.gg/TvXwsNbx
