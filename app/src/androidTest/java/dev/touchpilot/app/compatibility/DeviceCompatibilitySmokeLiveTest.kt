@@ -40,6 +40,13 @@ class DeviceCompatibilitySmokeLiveTest {
         uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
         Thread.sleep(1_500L)
 
+        val launcherPackage = foregroundPackage(uiAutomation)
+        assertTrue(
+            "Could not read launcher package after initial HOME",
+            launcherPackage.isNotBlank(),
+        )
+        Log.i(tag, "launcher: package=$launcherPackage")
+
         val context = instrumentation.targetContext
         context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -51,6 +58,12 @@ class DeviceCompatibilitySmokeLiveTest {
 
         val packageName = root!!.packageName?.toString().orEmpty()
         Log.i(tag, "observe: package=$packageName childCount=${root.childCount}")
+        assertTrue(
+            "Settings did not become foreground (launcher=$launcherPackage actual=$packageName)",
+            packageName.isNotBlank() &&
+                !packageName.equals(launcherPackage, ignoreCase = true) &&
+                packageName.contains("settings", ignoreCase = true),
+        )
 
         val scrollable = findFirstScrollable(root)
         if (scrollable != null) {
@@ -65,15 +78,24 @@ class DeviceCompatibilitySmokeLiveTest {
 
         uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
         Thread.sleep(1_000L)
-        Log.i(tag, "back: performed")
+        val afterBackPackage = foregroundPackage(uiAutomation)
+        Log.i(tag, "back: package=$afterBackPackage")
+        assertTrue(
+            "BACK left Settings foreground (settings=$packageName actual=$afterBackPackage)",
+            afterBackPackage.isNotBlank() &&
+                !afterBackPackage.contains("settings", ignoreCase = true),
+        )
 
         uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
         Thread.sleep(1_000L)
 
-        val homeRoot = uiAutomation.rootInActiveWindow
-        assertNotNull("rootInActiveWindow was null after HOME", homeRoot)
-        Log.i(tag, "home: package=${homeRoot?.packageName}")
-        assertTrue("HOME did not return to a foreground window", homeRoot!!.childCount >= 0)
+        val homePackage = foregroundPackage(uiAutomation)
+        assertTrue("rootInActiveWindow was null after HOME", homePackage.isNotBlank())
+        Log.i(tag, "home: package=$homePackage expected=$launcherPackage")
+        assertTrue(
+            "HOME did not return to launcher (expected=$launcherPackage actual=$homePackage)",
+            homePackage.equals(launcherPackage, ignoreCase = true),
+        )
     }
 
     @After
@@ -93,6 +115,10 @@ class DeviceCompatibilitySmokeLiveTest {
             .put("release", Build.VERSION.RELEASE)
             .put("fingerprint", Build.FINGERPRINT)
         Log.i(tag, "device_metadata=$metadata")
+    }
+
+    private fun foregroundPackage(uiAutomation: UiAutomation): String {
+        return uiAutomation.rootInActiveWindow?.packageName?.toString().orEmpty()
     }
 
     private fun findFirstScrollable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
