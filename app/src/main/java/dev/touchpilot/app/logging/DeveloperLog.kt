@@ -21,7 +21,9 @@ data class DeveloperLogEntry(
     val result: String,
     val errorDetails: String = "",
     val payloadSummary: String = "",
-    val details: String = ""
+    val details: String = "",
+    val target: String = "",
+    val policyDecision: String = "",
 ) {
     fun redacted(): DeveloperLogEntry {
         return copy(
@@ -30,7 +32,9 @@ data class DeveloperLogEntry(
             result = SensitiveTextRedactor.redact(result),
             errorDetails = SensitiveTextRedactor.redact(errorDetails),
             payloadSummary = SensitiveTextRedactor.redact(payloadSummary),
-            details = SensitiveTextRedactor.redact(details)
+            details = SensitiveTextRedactor.redact(details),
+            target = SensitiveTextRedactor.redact(target),
+            policyDecision = SensitiveTextRedactor.redact(policyDecision),
         )
     }
 
@@ -54,6 +58,12 @@ data class DeveloperLogEntry(
         }
         if (errorDetails.isNotBlank() && errorDetails != message) {
             sections += LogDetailSection("Error details", errorDetails)
+        }
+        if (target.isNotBlank()) {
+            sections += LogDetailSection("Target", target)
+        }
+        if (policyDecision.isNotBlank()) {
+            sections += LogDetailSection("Policy decision", policyDecision)
         }
         if (details.isNotBlank()) {
             sections += LogDetailSection("Log details", details)
@@ -92,6 +102,16 @@ data class DeveloperLogEntry(
                 appendLine()
                 appendLine("Error details")
                 appendLine(errorDetails)
+            }
+            if (target.isNotBlank()) {
+                appendLine()
+                appendLine("Target")
+                appendLine(target)
+            }
+            if (policyDecision.isNotBlank()) {
+                appendLine()
+                appendLine("Policy decision")
+                appendLine(policyDecision)
             }
             if (details.isNotBlank()) {
                 appendLine()

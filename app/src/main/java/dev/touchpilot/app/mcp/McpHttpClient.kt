@@ -9,11 +9,11 @@ import java.util.concurrent.atomic.AtomicLong
 
 class McpHttpClient(
     private val endpoint: String
-) {
+) : McpClient {
     private val nextId = AtomicLong(1L)
     private var sessionId: String? = null
 
-    fun initialize(): String {
+    override fun initialize(): String {
         val result = request(
             method = "initialize",
             params = JSONObject()
@@ -34,7 +34,7 @@ class McpHttpClient(
         return result.toString(2)
     }
 
-    fun listTools(): List<McpTool> {
+    override fun listTools(): List<McpTool> {
         val result = request("tools/list", JSONObject())
         val tools = result.optJSONArray("tools") ?: JSONArray()
         return buildList {
@@ -50,7 +50,7 @@ class McpHttpClient(
         }
     }
 
-    fun callTool(name: String, args: JSONObject): McpToolCallResult {
+    override fun callTool(name: String, args: JSONObject): McpToolCallResult {
         val result = request(
             method = "tools/call",
             params = JSONObject()

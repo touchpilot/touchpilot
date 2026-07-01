@@ -26,6 +26,8 @@ class DeveloperLogStore(context: Context) {
                 put("error_details", redacted.errorDetails)
                 put("payload_summary", redacted.payloadSummary)
                 put("details", redacted.details)
+                put("target", redacted.target)
+                put("policy_decision", redacted.policyDecision)
             }
         )
         trimToMaxEntries()
@@ -98,8 +100,15 @@ class DeveloperLogStore(context: Context) {
             result = getString(getColumnIndexOrThrow("result")).orEmpty(),
             errorDetails = getString(getColumnIndexOrThrow("error_details")).orEmpty(),
             payloadSummary = getString(getColumnIndexOrThrow("payload_summary")).orEmpty(),
-            details = getString(getColumnIndexOrThrow("details")).orEmpty()
+            details = getString(getColumnIndexOrThrow("details")).orEmpty(),
+            target = columnString("target"),
+            policyDecision = columnString("policy_decision"),
         )
+    }
+
+    private fun Cursor.columnString(name: String): String {
+        val index = getColumnIndex(name)
+        return if (index >= 0) getString(index).orEmpty() else ""
     }
 
     private class DeveloperLogDatabase(context: Context) : SQLiteOpenHelper(
@@ -122,7 +131,9 @@ class DeveloperLogStore(context: Context) {
                     result TEXT NOT NULL,
                     error_details TEXT NOT NULL,
                     payload_summary TEXT NOT NULL,
-                    details TEXT NOT NULL
+                    details TEXT NOT NULL,
+                    target TEXT NOT NULL DEFAULT '',
+                    policy_decision TEXT NOT NULL DEFAULT ''
                 )
                 """.trimIndent()
             )
@@ -133,6 +144,10 @@ class DeveloperLogStore(context: Context) {
             if (oldVersion < 1) {
                 onCreate(db)
             }
+            if (oldVersion < 2) {
+                db.execSQL("ALTER TABLE $Table ADD COLUMN target TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE $Table ADD COLUMN policy_decision TEXT NOT NULL DEFAULT ''")
+            }
         }
 
         companion object {
@@ -142,7 +157,7 @@ class DeveloperLogStore(context: Context) {
 
     companion object {
         private const val DatabaseName = "touchpilot-developer-logs.db"
-        private const val DatabaseVersion = 1
+        private const val DatabaseVersion = 2
         private const val MaxEntries = 500
         private const val DefaultRecentLimit = 100
         private val Columns = arrayOf(
@@ -156,7 +171,9 @@ class DeveloperLogStore(context: Context) {
             "result",
             "error_details",
             "payload_summary",
-            "details"
+            "details",
+            "target",
+            "policy_decision",
         )
     }
 }
