@@ -1,0 +1,43 @@
+name: Publish Validation Matrix
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish-matrix:
+    name: Publish validation matrix on release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Ensure docs folder present
+        run: mkdir -p docs/compatibility
+
+      - name: Copy human-readable matrix to compatibility folder
+        run: cp docs/VALIDATION_MATRIX.md docs/compatibility/VALIDATION_MATRIX.md
+
+      - name: Commit and push matrix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git add docs/compatibility/VALIDATION_MATRIX.md
+          git commit -m "chore: publish validation matrix for release $GITHUB_REF" || echo "No changes to commit"
+          git push origin HEAD:refs/heads/main
+
+      - name: Upload matrix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-matrix
+          path: docs/compatibility/VALIDATION_MATRIX.md
+
+    # Note: This job makes a best-effort push to `main`. If your project uses a protected branch policy,
+    # adjust the workflow to open a PR instead of pushing directly.
+
