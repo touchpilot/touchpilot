@@ -82,6 +82,33 @@ class LocalExtensionToolStoreTest {
     }
 
     @Test
+    fun addValidDoesNotDropInvalidStoredEntries() {
+        var backing = """
+            [
+              {
+                "api_version": "2.0.0",
+                "name": "broken",
+                "description": "Too new",
+                "endpoint": "http://localhost:9090",
+                "feature_flags": { "network_access": true }
+              }
+            ]
+        """.trimIndent()
+        val store = LocalExtensionToolStore(
+            readJson = { backing },
+            writeJson = { backing = it },
+        )
+
+        val result = store.add(validTool())
+        assertIs<LocalExtensionParseResult.Valid>(result)
+
+        val load = store.load()
+        assertEquals(1, load.tools.size)
+        assertEquals(1, load.invalid.size)
+        assertEquals("broken", load.invalid.first().name)
+    }
+
+    @Test
     fun removesIncompatibleStoredEntry() {
         var backing = """
             [

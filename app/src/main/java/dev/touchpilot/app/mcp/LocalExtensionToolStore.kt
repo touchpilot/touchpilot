@@ -147,26 +147,49 @@ class LocalExtensionToolStore(
     }
 
     private fun save(tools: List<LocalExtensionTool>) {
-        val json = JSONArray().apply {
-            tools.forEach { tool ->
-                put(
-                    JSONObject().apply {
-                        put("api_version", tool.manifest.apiVersion)
-                        put("name", tool.manifest.name)
-                        put("description", tool.manifest.description)
-                        put("endpoint", tool.manifest.endpoint)
-                        put(
-                            "feature_flags",
-                            JSONObject().apply {
-                                tool.manifest.featureFlags.forEach { (flag, enabled) ->
-                                    put(flag, enabled)
-                                }
-                            }
-                        )
-                    }
-                )
+        // Preserve any existing stored entries that are not being replaced by the
+        // new list of valid tools. This avoids silently dropping incompatible or
+        // legacy manifests that the user may want to inspect or remove.
+        val raw = readJson().trim()
+        val existing = runCatching { JSONArray(raw) }.getOrNull() ?: JSONArray()
+
+        // Keys are name||endpoint. Use trimmed values for robust matching.
+        val replaceKeys = tools.map { it.name.trim() + "||" + it.endpoint.trim() }.toSet()
+
+        val merged = JSONArray()
+        for (i in 0 until existing.length()) {
+            val obj = existing.optJSONObject(i) ?: continue
+            val name = obj.optString("name").trim()
+            val endpoint = obj.optString("endpoint").trim()
+            val key = name + "||" + endpoint
+            // If this existing entry matches one of the valid tools, skip it now
+            // so the authoritative (possibly updated) tool JSON is appended below.
+            if (name.isNotBlank() && endpoint.isNotBlank() && key in replaceKeys) {
+                continue
             }
+            merged.put(obj)
         }
-        writeJson(json.toString())
+
+        // Append authoritative JSON objects for the valid tools.
+        tools.forEach { tool ->
+            merged.put(
+                JSONObject().apply {
+                    put("api_version", tool.manifest.apiVersion)
+                    put("name", tool.manifest.name)
+                    put("description", tool.manifest.description)
+                    put("endpoint", tool.manifest.endpoint)
+                    put(
+                        "feature_flags",
+                        JSONObject().apply {
+                            tool.manifest.featureFlags.forEach { (flag, enabled) ->
+                                put(flag, enabled)
+                            }
+                        }
+                    )
+                }
+            )
+        }
+
+        writeJson(merged.toString())
     }
 }
