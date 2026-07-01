@@ -3,6 +3,8 @@ package dev.touchpilot.app.tools
 import android.content.Context
 import dev.touchpilot.app.logging.DeveloperLogEntry
 import dev.touchpilot.app.logging.DeveloperLogStore
+import dev.touchpilot.app.security.ExternalCapabilityAuditRecord
+import dev.touchpilot.app.security.ExternalCapabilityKind
 import dev.touchpilot.app.security.SensitiveTextRedactor
 
 data class ToolLogEntry(
@@ -87,6 +89,47 @@ object ToolExecutionLog {
                 result = redactedMessage,
                 payloadSummary = redactedMessage.take(240),
                 details = "chat_activity=$name"
+            )
+        )
+    }
+
+    @Synchronized
+    fun recordExternalCapability(record: ExternalCapabilityAuditRecord) {
+        val timestampMillis = System.currentTimeMillis()
+        val actionName = record.action.name.lowercase()
+        val source = when (record.target.kind) {
+            ExternalCapabilityKind.MCP_SERVER -> "mcp"
+            ExternalCapabilityKind.LOCAL_EXTENSION -> "local_extension"
+        }
+        val parametersText = record.parameters.entries.joinToString { (key, value) ->
+            "$key=$value"
+        }
+        val redactedParameters = SensitiveTextRedactor.redact(parametersText)
+        val redactedMessage = SensitiveTextRedactor.redact(record.message)
+        val policyLabel = "${record.policyDecision.auditLabel()}: ${record.policyDecision.reason}"
+        val targetLabel = record.target.displayLabel()
+        store?.insert(
+            DeveloperLogEntry(
+                timestampMillis = timestampMillis,
+                type = "capability",
+                actor = "TouchPilot",
+                name = actionName,
+                status = if (record.ok) "ok" else "fail",
+                source = source,
+                result = redactedMessage,
+                errorDetails = if (record.ok) "" else redactedMessage,
+                payloadSummary = redactedParameters,
+                target = targetLabel,
+                policyDecision = policyLabel,
+                details = buildString {
+                    appendLine("action=$actionName")
+                    appendLine("target=$targetLabel")
+                    appendLine("policy=${record.policyDecision.auditLabel()}")
+                    if (redactedParameters.isNotBlank()) {
+                        appendLine("parameters=$redactedParameters")
+                    }
+                    appendLine("message=$redactedMessage")
+                }.trim()
             )
         )
     }

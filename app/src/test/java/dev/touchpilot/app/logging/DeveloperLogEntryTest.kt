@@ -30,6 +30,26 @@ class DeveloperLogEntryTest {
     }
 
     @Test
+    fun detailSections_includesTargetAndPolicyDecisionForCapabilityAudit() {
+        val entry = DeveloperLogEntry(
+            type = "capability",
+            actor = "TouchPilot",
+            name = "call_tool",
+            status = "ok",
+            source = "mcp",
+            result = "Called echo",
+            payloadSummary = "tool=echo",
+            target = "http://localhost:8080",
+            policyDecision = "allow: Granted call tool",
+        )
+
+        val sections = entry.detailSections()
+
+        assertTrue(sections.any { it.title == "Target" && it.body.contains("localhost") })
+        assertTrue(sections.any { it.title == "Policy decision" && it.body.startsWith("allow") })
+    }
+
+    @Test
     fun detailSections_includesDistinctPayloadAndErrorSections() {
         val entry = DeveloperLogEntry(
             type = "tool",
