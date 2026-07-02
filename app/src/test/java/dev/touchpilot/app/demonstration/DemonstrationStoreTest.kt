@@ -71,6 +71,16 @@ class DemonstrationStoreTest {
         assertEquals("tap", workflow.steps[0].tool)
     }
 
+    @Test
+    fun failedSessionsDoNotConvertToReplayableWorkflows() {
+        val session = sampleSession("demo-1", "run-1")
+            .withCompleted(DemonstrationStatus.FAILED, 300L)
+
+        val workflow = DemonstrationWorkflowConverter.toWorkflowDefinition(session)
+
+        assertEquals(null, workflow)
+    }
+
     private fun sampleSession(sessionId: String, runId: String): DemonstrationSession {
         val screen = ScreenContext(
             packageName = "com.test",

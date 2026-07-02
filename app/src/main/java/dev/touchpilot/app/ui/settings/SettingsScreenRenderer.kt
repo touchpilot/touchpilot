@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.text.InputType
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -19,6 +20,9 @@ import dev.touchpilot.app.mcp.LocalExtensionTool
 import dev.touchpilot.app.mcp.LocalExtensionParseResult
 import dev.touchpilot.app.mcp.LocalExtensionToolStore
 import dev.touchpilot.app.mcp.PluginApiManifest
+import dev.touchpilot.app.security.AesGcmSecretCipher
+import dev.touchpilot.app.security.AndroidKeystoreSecretKeyProvider
+import dev.touchpilot.app.security.EncryptedSecretStore
 import dev.touchpilot.app.security.ExternalCapabilityAction
 import dev.touchpilot.app.security.ExternalCapabilityInvocation
 import dev.touchpilot.app.security.ExternalCapabilityKind
@@ -26,9 +30,13 @@ import dev.touchpilot.app.security.ExternalCapabilityPermissionStore
 import dev.touchpilot.app.security.ExternalCapabilityPolicy
 import dev.touchpilot.app.security.ExternalCapabilityTarget
 import dev.touchpilot.app.security.ExternalCapabilityTargetResolver
+import dev.touchpilot.app.security.SharedPreferencesSecretPreferences
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillDetailFormatter
 import dev.touchpilot.app.memory.SkillRisk
+import dev.touchpilot.app.demonstration.DemonstrationSession
+import dev.touchpilot.app.demonstration.DemonstrationStatus
+import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
 import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.ui.dp
@@ -80,10 +88,25 @@ class SettingsScreenRenderer(
     private val demonstrationRecordingEnabled: () -> Boolean = { false },
     private val demonstrationAutoExportEnabled: () -> Boolean = { false },
     private val demonstrationSessionCount: () -> Int = { 0 },
+    private val demonstrationSessions: () -> List<DemonstrationSession> = { emptyList() },
     private val demonstrationSummaries: () -> List<String> = { emptyList() },
     private val onDemonstrationRecordingToggled: (Boolean) -> Unit = {},
     private val onDemonstrationAutoExportToggled: (Boolean) -> Unit = {},
+    private val onDemonstrationReplayRequested: (String) -> Unit = {},
 ) {
+    /**
+     * Encrypted store for the cloud provider API key. The key is encrypted with
+     * an Android Keystore-backed AES-256-GCM key before being written to
+     * SharedPreferences, and legacy plaintext keys migrate on first read.
+     */
+    private val secretStore: EncryptedSecretStore by lazy {
+        EncryptedSecretStore(
+            preferences = SharedPreferencesSecretPreferences(preferences),
+            cipher = AesGcmSecretCipher(AndroidKeystoreSecretKeyProvider()),
+            onError = { message, error -> Log.w("SettingsSecretStore", message, error) },
+        )
+    }
+
     private fun localExtensionToolStore(): LocalExtensionToolStore {
         return LocalExtensionToolStore(
             readJson = { preferences.getString("local_extension_tools", "").orEmpty() },
@@ -293,6 +316,26 @@ class SettingsScreenRenderer(
                     body = summaries.first(),
                 )
             )
+        }
+
+        val sessions = demonstrationSessions()
+        if (sessions.isNotEmpty()) {
+            contentRoot.addView(activity.formLabel("Captured demonstrations"))
+            sessions.asReversed().forEach { session ->
+                val replayable = session.metadata.status == DemonstrationStatus.COMPLETED && session.steps.isNotEmpty()
+                contentRoot.addView(
+                    activity.timelineCard(
+                        title = session.metadata.task.ifBlank { session.sessionId },
+                        body = DemonstrationSummaryFormatter.format(session),
+                        actionHint = if (replayable) "Replay approved demonstration" else null,
+                        onClick = if (replayable) {
+                            { onDemonstrationReplayRequested(session.sessionId) }
+                        } else {
+                            null
+                        },
+                    )
+                )
+            }
         }
 
         contentRoot.addView(activity.formLabel("Recording mode"))
@@ -637,7 +680,7 @@ class SettingsScreenRenderer(
     private fun renderCloudPanel() {
         val savedUrl = preferences.getString("agent_provider_url", "").orEmpty()
         val savedModel = preferences.getString("agent_model", "").orEmpty()
-        val savedKey = preferences.getString("agent_api_key", "").orEmpty()
+        val savedKey = secretStore.read("agent_api_key").orEmpty()
         val configured = savedUrl.isNotBlank() && savedModel.isNotBlank() && savedKey.isNotBlank()
 
         contentRoot.addView(
@@ -676,8 +719,8 @@ class SettingsScreenRenderer(
                 preferences.edit()
                     .putString("agent_provider_url", providerInput.text.toString().trim())
                     .putString("agent_model", modelInput.text.toString().trim())
-                    .putString("agent_api_key", apiKeyInput.text.toString().trim())
                     .apply()
+                secretStore.write("agent_api_key", apiKeyInput.text.toString())
                 hideKeyboard(apiKeyInput)
                 refreshSettingsScreen()
             }.apply { id = R.id.save_cloud_api_button }
