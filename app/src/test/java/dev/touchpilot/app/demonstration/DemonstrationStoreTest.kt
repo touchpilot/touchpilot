@@ -72,9 +72,9 @@ class DemonstrationStoreTest {
     }
 
     @Test
-    fun cancelledSessionsDoNotConvertToReplayableWorkflows() {
+    fun failedSessionsDoNotConvertToReplayableWorkflows() {
         val session = sampleSession("demo-1", "run-1")
-            .withCompleted(DemonstrationStatus.CANCELLED, 300L)
+            .withCompleted(DemonstrationStatus.FAILED, 300L)
 
         val workflow = DemonstrationWorkflowConverter.toWorkflowDefinition(session)
 
