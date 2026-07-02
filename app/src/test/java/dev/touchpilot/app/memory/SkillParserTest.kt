@@ -108,6 +108,33 @@ class SkillParserTest {
     }
 
     @Test
+    fun parsesEscapedQuotedValuesAndInlineEmptyLists() {
+        val markdown = """
+            ---
+            id: demo
+            title: "Quoted \"Title\""
+            description: "Path C:\\temp and \"quotes\""
+            risk: low
+            aliases: []
+            allowed_tools:
+              - tap
+            examples: []
+            success_criteria:
+              - "He said \"yes\" and path C:\\temp"
+            ---
+            body
+        """.trimIndent()
+
+        val skill = valid(SkillParser.parse("demo", markdown, knownTools))
+
+        assertEquals("Quoted \"Title\"", skill.title)
+        assertEquals("Path C:\\temp and \"quotes\"", skill.description)
+        assertTrue(skill.aliases.isEmpty())
+        assertTrue(skill.examples.isEmpty())
+        assertEquals(listOf("He said \"yes\" and path C:\\temp"), skill.successCriteria)
+    }
+
+    @Test
     fun reportsUnknownRiskAndFailsClosed() {
         val markdown = validV2().replace("risk: medium", "risk: critical")
 

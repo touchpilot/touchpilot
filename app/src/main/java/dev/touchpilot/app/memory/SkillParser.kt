@@ -119,7 +119,8 @@ object SkillParser {
     /**
      * Parses the front matter block as the documented YAML subset: `key: value`
      * scalars and `key:` followed by indented `- item` lists. Values may be
-     * single- or double-quoted. This is intentionally not a full YAML parser.
+     * single- or double-quoted, and empty lists may use `[]`. This is
+     * intentionally not a full YAML parser.
      */
     private fun parseFrontMatter(block: String): FrontMatter {
         val values = LinkedHashMap<String, Any>()
@@ -162,11 +163,40 @@ object SkillParser {
         if (value.length >= 2) {
             val first = value.first()
             val last = value.last()
-            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
-                return value.substring(1, value.length - 1)
+            if (first == '"' && last == '"') {
+                return decodeDoubleQuoted(value.substring(1, value.length - 1))
+            }
+            if (first == '\'' && last == '\'') {
+                return value.substring(1, value.length - 1).replace("''", "'")
             }
         }
         return value
+    }
+
+    private fun decodeDoubleQuoted(value: String): String {
+        val out = StringBuilder(value.length)
+        var escaped = false
+        for (char in value) {
+            if (escaped) {
+                out.append(
+                    when (char) {
+                        '\\' -> '\\'
+                        '"' -> '"'
+                        'n' -> '\n'
+                        'r' -> '\r'
+                        't' -> '\t'
+                        else -> char
+                    }
+                )
+                escaped = false
+            } else if (char == '\\') {
+                escaped = true
+            } else {
+                out.append(char)
+            }
+        }
+        if (escaped) out.append('\\')
+        return out.toString()
     }
 
     private fun parseLegacy(directoryId: String, markdown: String): Skill {
@@ -214,7 +244,7 @@ object SkillParser {
 
         fun list(key: String): List<String> = when (val value = values[key]) {
             is List<*> -> value.filterIsInstance<String>()
-            is String -> if (value.isBlank()) emptyList() else listOf(value)
+            is String -> if (value.isBlank() || value == "[]") emptyList() else listOf(value)
             else -> emptyList()
         }
     }

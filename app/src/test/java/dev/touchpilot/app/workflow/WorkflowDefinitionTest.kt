@@ -1,5 +1,9 @@
 package dev.touchpilot.app.workflow
 
+import dev.touchpilot.app.memory.Skill
+import dev.touchpilot.app.memory.SkillFormat
+import dev.touchpilot.app.memory.SkillParseResult
+import dev.touchpilot.app.memory.SkillParser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -140,6 +144,11 @@ class WorkflowDefinitionRoundTripTest {
 }
 
 class WorkflowTraceSerializerTest {
+  private fun parsedSkill(result: SkillParseResult): Skill = when (result) {
+    is SkillParseResult.Valid -> result.skill
+    is SkillParseResult.Invalid -> fail("expected Valid, got Invalid: ${result.errors}")
+  }
+
   @Test
   fun convertsCapturedTraceToDefinition() {
     val trace = WorkflowTrace(
@@ -209,7 +218,7 @@ class WorkflowTraceSerializerTest {
   fun generatesSkillCandidateMarkdownFromTrace() {
     val trace = WorkflowTrace(
       runId = "run-3",
-      task = "open wifi settings",
+      task = "",
       capturedAtMillis = 2_000L,
       steps = listOf(
         WorkflowTraceStep(
@@ -224,22 +233,42 @@ class WorkflowTraceSerializerTest {
           tool = "tap",
           args = mapOf("text" to "Wi-Fi"),
           succeeded = true,
-          verification = WorkflowTraceVerification(status = "passed", reason = "Wi-Fi visible"),
+          verification = WorkflowTraceVerification(
+            status = "passed",
+            reason = "He said \"yes\" and path C:\\temp",
+          ),
         ),
       ),
       screenSignals = emptyList(),
+      allowedTools = listOf("open_settings_panel"),
     )
 
     val candidate = WorkflowSkillCandidateFormatter.fromTrace(trace)
-    assertEquals("open wifi settings", candidate?.title)
+    assertEquals("Generated skill candidate", candidate?.title)
+    assertTrue(candidate?.examples?.isEmpty() == true)
     assertEquals(listOf("open_settings_panel", "tap"), candidate?.allowedTools)
     val markdown = candidate?.toMarkdown()
-    assertTrue(markdown?.contains("---") == true)
-    assertTrue(markdown?.contains("id: \"open-wifi-settings\"") == true)
-    assertTrue(markdown?.contains("allowed_tools:") == true)
-    assertTrue(markdown?.contains("success_criteria:") == true)
-    assertTrue(markdown?.contains("## Success Criteria") == true)
-    assertTrue(markdown?.contains("Wi-Fi visible") == true)
+    assertTrue(markdown?.contains("examples: []") == true)
+
+    val parsed = parsedSkill(
+      SkillParser.parse(
+        WorkflowTraceSerializer.slugify(candidate!!.title),
+        markdown!!,
+        setOf("open_settings_panel", "tap"),
+      )
+    )
+
+    assertEquals(SkillFormat.V2, parsed.format)
+    assertEquals(candidate.title, parsed.title)
+    assertEquals(candidate.description, parsed.description)
+    assertEquals(candidate.allowedTools.toSet(), parsed.allowedTools)
+    assertEquals(candidate.examples, parsed.examples)
+    assertEquals(candidate.successCriteria, parsed.successCriteria)
+    assertEquals(candidate.risk, parsed.risk)
+    assertTrue(
+      parsed.successCriteria.any { it.contains("He said \"yes\" and path C:\\temp") },
+      parsed.successCriteria.toString()
+    )
   }
 }
 
