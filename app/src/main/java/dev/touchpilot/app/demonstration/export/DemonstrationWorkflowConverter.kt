@@ -22,7 +22,7 @@ import dev.touchpilot.app.workflow.WorkflowTraceVerification
 object DemonstrationWorkflowConverter {
     fun toWorkflowDefinition(session: DemonstrationSession): WorkflowDefinition? {
         if (session.steps.isEmpty()) return null
-        if (session.metadata.status == DemonstrationStatus.CANCELLED) return null
+        if (session.metadata.status != DemonstrationStatus.COMPLETED) return null
 
         val trace = toWorkflowTrace(session) ?: return null
         return WorkflowTraceSerializer.toDefinition(
