@@ -29,6 +29,9 @@ import dev.touchpilot.app.security.ExternalCapabilityTargetResolver
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillDetailFormatter
 import dev.touchpilot.app.memory.SkillRisk
+import dev.touchpilot.app.demonstration.DemonstrationSession
+import dev.touchpilot.app.demonstration.DemonstrationStatus
+import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
 import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.ui.dp
@@ -80,9 +83,11 @@ class SettingsScreenRenderer(
     private val demonstrationRecordingEnabled: () -> Boolean = { false },
     private val demonstrationAutoExportEnabled: () -> Boolean = { false },
     private val demonstrationSessionCount: () -> Int = { 0 },
+    private val demonstrationSessions: () -> List<DemonstrationSession> = { emptyList() },
     private val demonstrationSummaries: () -> List<String> = { emptyList() },
     private val onDemonstrationRecordingToggled: (Boolean) -> Unit = {},
     private val onDemonstrationAutoExportToggled: (Boolean) -> Unit = {},
+    private val onDemonstrationReplayRequested: (String) -> Unit = {},
 ) {
     private fun localExtensionToolStore(): LocalExtensionToolStore {
         return LocalExtensionToolStore(
@@ -293,6 +298,26 @@ class SettingsScreenRenderer(
                     body = summaries.first(),
                 )
             )
+        }
+
+        val sessions = demonstrationSessions()
+        if (sessions.isNotEmpty()) {
+            contentRoot.addView(activity.formLabel("Captured demonstrations"))
+            sessions.asReversed().forEach { session ->
+                val replayable = session.metadata.status == DemonstrationStatus.COMPLETED && session.steps.isNotEmpty()
+                contentRoot.addView(
+                    activity.timelineCard(
+                        title = session.metadata.task.ifBlank { session.sessionId },
+                        body = DemonstrationSummaryFormatter.format(session),
+                        actionHint = if (replayable) "Replay approved demonstration" else null,
+                        onClick = if (replayable) {
+                            { onDemonstrationReplayRequested(session.sessionId) }
+                        } else {
+                            null
+                        },
+                    )
+                )
+            }
         }
 
         contentRoot.addView(activity.formLabel("Recording mode"))

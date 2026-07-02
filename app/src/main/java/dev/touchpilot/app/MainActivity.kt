@@ -35,6 +35,7 @@ import dev.touchpilot.app.navigation.AppSection
 import dev.touchpilot.app.navigation.NavigationController
 import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.workflow.WorkflowTraceStore
+import dev.touchpilot.app.demonstration.export.DemonstrationWorkflowConverter
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.security.ToolApprovalProvider
@@ -530,6 +531,8 @@ class MainActivity : Activity() {
                     dev.touchpilot.app.demonstration.DemonstrationPreferences.recordingConfig(preferences)
                 )
             },
+            demonstrationSessions = { demonstrationManager.sessions },
+            onDemonstrationReplayRequested = ::replayDemonstration,
         ).render()
     }
 
@@ -653,6 +656,20 @@ class MainActivity : Activity() {
 
     private fun exportDebugTrace(): File {
         return debugTraceExporter.exportDebugTrace()
+    }
+
+    private fun replayDemonstration(sessionId: String) {
+        val session = demonstrationManager.findSession(sessionId)
+        val workflow = session?.let(DemonstrationWorkflowConverter::toWorkflowDefinition)
+        if (workflow == null) {
+            android.widget.Toast.makeText(
+                this,
+                "That demonstration cannot be replayed.",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        agentRunController.startWorkflowReplay(definition = workflow)
     }
 
 }
