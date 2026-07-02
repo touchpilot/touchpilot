@@ -27,6 +27,27 @@ class SkillLoadMergerTest {
         assertTrue(merged.invalid.first().errors.first().contains("local invalid"))
     }
 
+    @Test
+    fun invalidLocalSkillsDoNotHideBundledFallbacks() {
+        val bundled = SkillLoad(
+            skills = listOf(
+                skill("settings", "Bundled Settings"),
+            ),
+            invalid = emptyList(),
+        )
+        val local = SkillLoad(
+            skills = emptyList(),
+            invalid = listOf(SkillParseResult.Invalid("settings", listOf("local invalid"))),
+        )
+
+        val merged = SkillLoadMerger.merge(bundled, local, shadowedIds = emptySet())
+
+        assertEquals(listOf("settings"), merged.skills.map { it.id })
+        assertEquals("Bundled Settings", merged.skills.first().title)
+        assertEquals(1, merged.invalid.size)
+        assertTrue(merged.invalid.first().errors.first().contains("local invalid"))
+    }
+
     private fun skill(id: String, title: String): Skill {
         return Skill(
             id = id,

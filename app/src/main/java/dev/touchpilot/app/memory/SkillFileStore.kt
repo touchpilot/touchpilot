@@ -2,8 +2,12 @@ package dev.touchpilot.app.memory
 
 import dev.touchpilot.app.tools.AndroidToolCatalog
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 data class SkillFileLoad(
+    /** Valid local skill ids that should shadow bundled skills during merge. */
     val skillIds: Set<String>,
     val load: SkillLoad,
 )
@@ -42,7 +46,13 @@ class SkillFileStore(
         rootDir.mkdirs()
         val skillDir = File(rootDir, normalizedId).apply { mkdirs() }
         val file = File(skillDir, SkillFileName)
-        file.writeText(markdown.trimEnd() + "\n")
+        val tempFile = File.createTempFile("skill-$normalizedId-", ".tmp", skillDir)
+        try {
+            tempFile.writeText(markdown.trimEnd() + "\n")
+            moveReplacingExisting(tempFile, file)
+        } finally {
+            tempFile.delete()
+        }
         return file
     }
 
@@ -54,9 +64,14 @@ class SkillFileStore(
         directories.forEach { directory ->
             val skillFile = File(directory, SkillFileName)
             if (!skillFile.isFile) return@forEach
-            ids += directory.name
             val markdown = runCatching { skillFile.readText() }.getOrNull() ?: return@forEach
-            parsed += SkillParser.parse(directory.name, markdown, knownTools)
+            when (val result = SkillParser.parse(directory.name, markdown, knownTools)) {
+                is SkillParseResult.Valid -> {
+                    ids += result.skill.id
+                    parsed += result
+                }
+                is SkillParseResult.Invalid -> parsed += result
+            }
         }
         return SkillFileLoad(
             skillIds = ids,
@@ -65,6 +80,23 @@ class SkillFileStore(
                 invalid = parsed.filterIsInstance<SkillParseResult.Invalid>(),
             ),
         )
+    }
+
+    private fun moveReplacingExisting(source: File, target: File) {
+        try {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }
     }
 
     private companion object {
