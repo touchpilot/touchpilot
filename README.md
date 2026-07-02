@@ -67,7 +67,9 @@ The current agent MVP defaults to the local router for simple Android actions
 and includes a LiteRT local model mode for command routing. An experimental
 cloud fallback can be configured with an OpenAI-compatible chat completions URL,
 model name, and API key. Fallback URL and model are stored in app preferences.
-API keys are encrypted with an Android Keystore-backed key before being stored.
+The API key is encrypted with AES-256-GCM using an Android Keystore-backed key
+before being written to preferences; any key stored in plaintext by an earlier
+build is migrated to the encrypted form the first time it is read.
 
 When the model selects a medium- or high-risk Android tool, TouchPilot asks the
 user for approval in the chat before executing it. Low-risk observation and wait
