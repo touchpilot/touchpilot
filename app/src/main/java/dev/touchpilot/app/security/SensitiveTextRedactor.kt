@@ -26,7 +26,9 @@ object SensitiveTextRedactor {
         for (rule in redactionRules) {
             redacted = rule.apply(redacted)
         }
-        return redacted
+        // Catch bare credential tokens (JWTs, cloud keys, PEM blocks) that have
+        // no adjacent key/header to trip the rules above.
+        return SecretScanner.redact(redacted)
     }
 
     fun redact(args: Map<String, String>): Map<String, String> {
@@ -41,7 +43,8 @@ object SensitiveTextRedactor {
 
     fun containsSensitiveText(text: String): Boolean {
         return sensitiveWords.containsMatchIn(text) ||
-            redactionRules.any { rule -> rule.matches(text) }
+            redactionRules.any { rule -> rule.matches(text) } ||
+            SecretScanner.containsSecret(text)
     }
 
     private val apiKeyVariantPattern = Regex("(?i)api[_-]?key")
