@@ -235,6 +235,10 @@ class WorkflowTraceSerializerTest {
     assertEquals(listOf("open_settings_panel", "tap"), candidate?.allowedTools)
     assertTrue(candidate?.toMarkdown()?.contains("## Success Criteria") == true)
     assertTrue(candidate?.toMarkdown()?.contains("Wi-Fi visible") == true)
+    val skillMarkdown = candidate?.toSkillMarkdown()
+    assertTrue(skillMarkdown?.contains("id: 'open-wifi-settings'") == true)
+    assertTrue(skillMarkdown?.contains("allowed_tools:") == true)
+    assertTrue(skillMarkdown?.contains("success_criteria:") == true)
   }
 }
 

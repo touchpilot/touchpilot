@@ -163,7 +163,12 @@ object SkillParser {
             val first = value.first()
             val last = value.last()
             if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
-                return value.substring(1, value.length - 1)
+                val body = value.substring(1, value.length - 1)
+                return when (first) {
+                    '"' -> body.replace("\\\"", "\"").replace("\\\\", "\\")
+                    '\'' -> body.replace("''", "'")
+                    else -> body
+                }
             }
         }
         return value
