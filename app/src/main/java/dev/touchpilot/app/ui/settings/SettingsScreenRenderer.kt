@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.text.InputType
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -19,6 +20,9 @@ import dev.touchpilot.app.mcp.LocalExtensionTool
 import dev.touchpilot.app.mcp.LocalExtensionParseResult
 import dev.touchpilot.app.mcp.LocalExtensionToolStore
 import dev.touchpilot.app.mcp.PluginApiManifest
+import dev.touchpilot.app.security.AesGcmSecretCipher
+import dev.touchpilot.app.security.AndroidKeystoreSecretKeyProvider
+import dev.touchpilot.app.security.EncryptedSecretStore
 import dev.touchpilot.app.security.ExternalCapabilityAction
 import dev.touchpilot.app.security.ExternalCapabilityInvocation
 import dev.touchpilot.app.security.ExternalCapabilityKind
@@ -26,6 +30,7 @@ import dev.touchpilot.app.security.ExternalCapabilityPermissionStore
 import dev.touchpilot.app.security.ExternalCapabilityPolicy
 import dev.touchpilot.app.security.ExternalCapabilityTarget
 import dev.touchpilot.app.security.ExternalCapabilityTargetResolver
+import dev.touchpilot.app.security.SharedPreferencesSecretPreferences
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillDetailFormatter
 import dev.touchpilot.app.memory.SkillRisk
@@ -84,6 +89,19 @@ class SettingsScreenRenderer(
     private val onDemonstrationRecordingToggled: (Boolean) -> Unit = {},
     private val onDemonstrationAutoExportToggled: (Boolean) -> Unit = {},
 ) {
+    /**
+     * Encrypted store for the cloud provider API key. The key is encrypted with
+     * an Android Keystore-backed AES-256-GCM key before being written to
+     * SharedPreferences, and legacy plaintext keys migrate on first read.
+     */
+    private val secretStore: EncryptedSecretStore by lazy {
+        EncryptedSecretStore(
+            preferences = SharedPreferencesSecretPreferences(preferences),
+            cipher = AesGcmSecretCipher(AndroidKeystoreSecretKeyProvider()),
+            onError = { message, error -> Log.w("SettingsSecretStore", message, error) },
+        )
+    }
+
     private fun localExtensionToolStore(): LocalExtensionToolStore {
         return LocalExtensionToolStore(
             readJson = { preferences.getString("local_extension_tools", "").orEmpty() },
@@ -637,7 +655,7 @@ class SettingsScreenRenderer(
     private fun renderCloudPanel() {
         val savedUrl = preferences.getString("agent_provider_url", "").orEmpty()
         val savedModel = preferences.getString("agent_model", "").orEmpty()
-        val savedKey = preferences.getString("agent_api_key", "").orEmpty()
+        val savedKey = secretStore.read("agent_api_key").orEmpty()
         val configured = savedUrl.isNotBlank() && savedModel.isNotBlank() && savedKey.isNotBlank()
 
         contentRoot.addView(
@@ -676,8 +694,8 @@ class SettingsScreenRenderer(
                 preferences.edit()
                     .putString("agent_provider_url", providerInput.text.toString().trim())
                     .putString("agent_model", modelInput.text.toString().trim())
-                    .putString("agent_api_key", apiKeyInput.text.toString().trim())
                     .apply()
+                secretStore.write("agent_api_key", apiKeyInput.text.toString())
                 hideKeyboard(apiKeyInput)
                 refreshSettingsScreen()
             }.apply { id = R.id.save_cloud_api_button }
