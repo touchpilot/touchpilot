@@ -44,6 +44,48 @@ class ExternalCapabilityInvokerTest {
         assertIs<ExternalCapabilityInvokeResult.Denied>(result)
     }
 
+    @Test
+    fun callToolDeniedWhenRequiredFeatureFlagsNotGranted() {
+        val invoker = invokerWithExtensionGrant(
+            actions = setOf(ExternalCapabilityAction.CALL_TOOL),
+            grantedFlags = emptySet(),
+            requiredFlags = setOf("network_access"),
+        )
+
+        val result = invoker.callTool(
+            extensionTarget(),
+            "echo",
+            JSONObject(),
+            requiredFeatureFlags = setOf("network_access"),
+        )
+
+        assertIs<ExternalCapabilityInvokeResult.Denied>(result)
+        assertTrue((result as ExternalCapabilityInvokeResult.Denied).decision.reason.contains("network_access"))
+    }
+
+    private fun invokerWithExtensionGrant(
+        actions: Set<ExternalCapabilityAction>,
+        grantedFlags: Set<String>,
+        requiredFlags: Set<String>,
+    ): ExternalCapabilityInvoker {
+        var backing = ""
+        val store = ExternalCapabilityPermissionStore(
+            readJson = { backing },
+            writeJson = { backing = it },
+        )
+        store.grant(extensionTarget(), actions, grantedFlags)
+        return ExternalCapabilityInvoker(
+            policy = ExternalCapabilityPolicy(store),
+            clientFactory = { FakeMcpClient() },
+        )
+    }
+
+    private fun extensionTarget() = ExternalCapabilityTarget(
+        kind = ExternalCapabilityKind.LOCAL_EXTENSION,
+        endpoint = "http://localhost:8080",
+        name = "weather",
+    )
+
     private fun invoker(
         grants: Set<ExternalCapabilityAction>,
         client: McpClient? = null,

@@ -20,10 +20,12 @@ import dev.touchpilot.app.mcp.LocalExtensionParseResult
 import dev.touchpilot.app.mcp.LocalExtensionToolStore
 import dev.touchpilot.app.mcp.PluginApiManifest
 import dev.touchpilot.app.security.ExternalCapabilityAction
+import dev.touchpilot.app.security.ExternalCapabilityInvocation
 import dev.touchpilot.app.security.ExternalCapabilityKind
 import dev.touchpilot.app.security.ExternalCapabilityPermissionStore
 import dev.touchpilot.app.security.ExternalCapabilityPolicy
 import dev.touchpilot.app.security.ExternalCapabilityTarget
+import dev.touchpilot.app.security.ExternalCapabilityTargetResolver
 import dev.touchpilot.app.memory.Skill
 import dev.touchpilot.app.memory.SkillDetailFormatter
 import dev.touchpilot.app.memory.SkillRisk
@@ -585,11 +587,14 @@ class SettingsScreenRenderer(
                 recordMcpResult("Listing MCP tools...")
                 refreshSettingsScreen()
                 Thread {
-                    val target = ExternalCapabilityInvoker.targetForEndpoint(endpoint)
-                    val result = when (val outcome = invoker.listTools(target)) {
-                        is ExternalCapabilityInvokeResult.Success -> outcome.message
-                        is ExternalCapabilityInvokeResult.Denied -> "Permission denied: ${outcome.decision.reason}"
-                        is ExternalCapabilityInvokeResult.Failed -> "MCP list failed: ${outcome.message}"
+                    val result = invokeExternalCapability(
+                        endpoint = endpoint,
+                        action = ExternalCapabilityAction.LIST_TOOLS,
+                        permissionStore = permissionStore,
+                        policy = policy,
+                        invoker = invoker,
+                    ) { target, requiredFlags ->
+                        invoker.listTools(target, requiredFlags)
                     }
                     activity.runOnUiThread {
                         recordMcpResult(result)
@@ -608,13 +613,14 @@ class SettingsScreenRenderer(
                 recordMcpResult("Calling MCP tool...")
                 refreshSettingsScreen()
                 Thread {
-                    val target = ExternalCapabilityInvoker.targetForEndpoint(endpoint)
-                    val result = when (
-                        val outcome = invoker.callTool(target, toolName, JSONObject(argsText))
-                    ) {
-                        is ExternalCapabilityInvokeResult.Success -> outcome.message
-                        is ExternalCapabilityInvokeResult.Denied -> "Permission denied: ${outcome.decision.reason}"
-                        is ExternalCapabilityInvokeResult.Failed -> "MCP call failed: ${outcome.message}"
+                    val result = invokeExternalCapability(
+                        endpoint = endpoint,
+                        action = ExternalCapabilityAction.CALL_TOOL,
+                        permissionStore = permissionStore,
+                        policy = policy,
+                        invoker = invoker,
+                    ) { target, requiredFlags ->
+                        invoker.callTool(target, toolName, JSONObject(argsText), requiredFlags)
                     }
                     activity.runOnUiThread {
                         recordMcpResult(result)
@@ -690,6 +696,42 @@ class SettingsScreenRenderer(
     }
 
     private fun permissionLabel(granted: Boolean): String = if (granted) "granted" else "denied (default)"
+
+    private fun invokeExternalCapability(
+        endpoint: String,
+        action: ExternalCapabilityAction,
+        permissionStore: ExternalCapabilityPermissionStore,
+        policy: ExternalCapabilityPolicy,
+        invoker: ExternalCapabilityInvoker,
+        execute: (ExternalCapabilityTarget, Set<String>) -> ExternalCapabilityInvokeResult,
+    ): String {
+        val extensions = localExtensionToolStore().load().tools
+        return when (
+            val invocation = ExternalCapabilityTargetResolver.resolve(
+                endpoint = endpoint,
+                extensions = extensions,
+                policy = policy,
+                action = action,
+                permissionStore = permissionStore,
+            )
+        ) {
+            is ExternalCapabilityInvocation.Ambiguous -> {
+                "Permission denied: multiple local extensions share endpoint $endpoint " +
+                    "(${invocation.extensionNames.joinToString()}). Grant permissions for one extension " +
+                    "or use a unique endpoint per extension."
+            }
+            is ExternalCapabilityInvocation.Ready -> when (
+                val outcome = execute(invocation.target, invocation.requiredFeatureFlags)
+            ) {
+                is ExternalCapabilityInvokeResult.Success -> outcome.message
+                is ExternalCapabilityInvokeResult.Denied -> "Permission denied: ${outcome.decision.reason}"
+                is ExternalCapabilityInvokeResult.Failed -> when (action) {
+                    ExternalCapabilityAction.LIST_TOOLS -> "MCP list failed: ${outcome.message}"
+                    ExternalCapabilityAction.CALL_TOOL -> "MCP call failed: ${outcome.message}"
+                }
+            }
+        }
+    }
 
     private fun settingsIntro(value: String): View {
         return TextView(activity).apply {
