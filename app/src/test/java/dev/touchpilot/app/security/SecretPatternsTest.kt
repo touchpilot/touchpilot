@@ -8,11 +8,11 @@ import kotlin.test.assertTrue
 class SecretPatternsTest {
 
     private fun assertMatches(pattern: SecretPattern, value: String) {
-        assertTrue("expected ${pattern.name} to match '$value'", pattern.regex.containsMatchIn(value))
+        assertTrue(pattern.regex.containsMatchIn(value), "expected ${pattern.name} to match '$value'")
     }
 
     private fun assertNoMatch(pattern: SecretPattern, value: String) {
-        assertFalse("expected ${pattern.name} not to match '$value'", pattern.regex.containsMatchIn(value))
+        assertFalse(pattern.regex.containsMatchIn(value), "expected ${pattern.name} not to match '$value'")
     }
 
     @Test
