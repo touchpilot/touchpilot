@@ -13,7 +13,18 @@ data class WorkflowSkillCandidate(
     val successCriteria: List<String>,
 ) {
     fun toMarkdown(): String {
+        val skillId = WorkflowTraceSerializer.slugify(title)
         return buildString {
+            appendLine("---")
+            appendLine("id: ${yamlScalar(skillId)}")
+            appendLine("title: ${yamlScalar(title)}")
+            appendLine("description: ${yamlScalar(description)}")
+            appendLine("risk: ${risk.name.lowercase()}")
+            appendYamlList("allowed_tools", allowedTools)
+            appendYamlList("success_criteria", successCriteria)
+            appendYamlList("examples", examples)
+            appendLine("---")
+            appendLine()
             appendLine("# ${title}")
             appendLine()
             appendLine("## Description")
@@ -43,6 +54,21 @@ data class WorkflowSkillCandidate(
                 successCriteria.forEach { appendLine("- $it") }
             }
         }.trim()
+    }
+
+    private fun yamlScalar(value: String): String {
+        return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    }
+
+    private fun StringBuilder.appendYamlList(key: String, values: List<String>) {
+        if (values.isEmpty()) {
+            appendLine("$key: []")
+            return
+        }
+        appendLine("$key:")
+        values.forEach { value ->
+            appendLine("  - ${yamlScalar(value)}")
+        }
     }
 }
 
