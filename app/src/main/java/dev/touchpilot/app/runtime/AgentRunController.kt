@@ -233,7 +233,8 @@ class AgentRunController(
     fun startWorkflowReplay(
         definition: WorkflowDefinition,
         parameters: Map<String, String> = emptyMap(),
-        onFinished: ((success: Boolean, message: String) -> Unit)? = null,
+        captureWorkflowTrace: Boolean = false,
+        onFinished: ((success: Boolean, message: String, result: AgentRunResult?) -> Unit)? = null,
     ) {
         cancellationSignal.set(false)
         setRunState(AgentRunState.RUNNING)
@@ -320,12 +321,16 @@ class AgentRunController(
                 } else {
                     timelineBuilder.snapshot
                 }
+                val result = runOutcome.getOrNull()
+                val completedSuccessfully = result?.stopReason == AgentStepStopReason.COMPLETED
                 if (cancellationSignal.get()) {
                     setRunState(AgentRunState.CANCELLED)
+                } else if (completedSuccessfully) {
+                    setRunState(AgentRunState.COMPLETED)
                 } else if (runOutcome.isFailure) {
                     setRunState(AgentRunState.FAILED)
                 } else {
-                    setRunState(AgentRunState.COMPLETED)
+                    setRunState(AgentRunState.FAILED)
                 }
                 refreshStepTimeline(stepTimeline, steps, true)
                 finishAgentChatRun(
@@ -334,11 +339,12 @@ class AgentRunController(
                     workingIndex = workingIndex,
                     resumeOriginalTask = null,
                     timelineSteps = steps,
-                    shouldCaptureWorkflowTrace = false,
+                    shouldCaptureWorkflowTrace = captureWorkflowTrace && completedSuccessfully,
                 )
                 onFinished?.invoke(
-                    runOutcome.isSuccess,
-                    runOutcome.getOrNull()?.stopMessage ?: record.errorMessage.orEmpty()
+                    completedSuccessfully,
+                    result?.stopMessage ?: record.errorMessage.orEmpty(),
+                    result,
                 )
             }
         }.start()
@@ -387,17 +393,18 @@ class AgentRunController(
     ) {
         removeWorkingIndicator(workingIndex)
         mutableRunHistory += record
+        val result = runOutcome.getOrNull()
+        val completedSuccessfully = result?.stopReason == AgentStepStopReason.COMPLETED
         ToolExecutionLog.recordAction(
             name = "agent_run_finished",
             result = record.errorMessage ?: AgentRunDetailFormatter.compactSummary(record),
-            status = if (runOutcome.isSuccess) "complete" else "fail",
+            status = if (completedSuccessfully) "complete" else "fail",
             source = currentProviderMode().toLogSource(),
             details = "run_id=${record.id}"
         )
         refreshExecutionLog()
         refreshStatus()
 
-        val result = runOutcome.getOrNull()
         when {
             result?.stopReason == AgentStepStopReason.CLARIFICATION_NEEDED -> {
                 val structured = result.events.filterIsInstance<AgentEvent.Clarification>().lastOrNull()
@@ -443,7 +450,8 @@ class AgentRunController(
                     )
                 }
             }
-            result?.stopReason == AgentStepStopReason.COMPLETED &&
+            result != null &&
+                completedSuccessfully &&
                 isInformationalAssistantRun(result) -> {
                 val assistant = result.events.filterIsInstance<AgentEvent.AssistantMessage>().last()
                 conversation += ChatEvent.ScreenSummary(
@@ -456,7 +464,7 @@ class AgentRunController(
                     message = "${assistant.text}\n${assistant.detail}"
                 )
             }
-            runOutcome.isSuccess -> {
+            else -> {
                 record.result?.events
                     ?.let(ToolCallCardModel::fromEvents)
                     ?.forEach { card ->
@@ -471,36 +479,31 @@ class AgentRunController(
                     body = AgentRunDetailFormatter.compactSummary(record),
                     runId = record.id
                 )
-                val finalAnswer = result?.finalAnswer
-                val doneDetail = when {
-                    finalAnswer != null -> finalAnswer
-                    timelineSteps.isEmpty() -> "No steps recorded."
-                    else -> "Tap the timeline card to inspect tool calls, verification, and stop reason."
+                val detail = when {
+                    completedSuccessfully -> {
+                        val finalAnswer = result?.finalAnswer
+                        when {
+                            finalAnswer != null -> finalAnswer
+                            timelineSteps.isEmpty() -> "No steps recorded."
+                            else -> "Tap the timeline card to inspect tool calls, verification, and stop reason."
+                        }
+                    }
+                    result != null -> result.stopMessage.ifBlank {
+                        "Replay stopped before completion."
+                    }
+                    else -> record.errorMessage ?: "Unknown agent error"
                 }
-                conversation += ChatEvent.Agent("Done.", doneDetail)
+                conversation += ChatEvent.Agent(if (completedSuccessfully) "Done." else "Run failed.", detail)
                 ToolExecutionLog.recordChat(
                     name = "assistant_message",
                     actor = "TouchPilot",
-                    message = doneDetail,
-                    status = "complete"
+                    message = detail,
+                    status = if (completedSuccessfully) "complete" else "fail"
                 )
-                if (shouldCaptureWorkflowTrace) {
+                if (completedSuccessfully && shouldCaptureWorkflowTrace) {
                     captureWorkflowTrace(record)
                 }
                 captureDemonstration(demoCompletion, record.id)
-            }
-            else -> {
-                captureDemonstration(demoCompletion, record.id)
-                conversation += ChatEvent.Agent(
-                    "Run failed.",
-                    record.errorMessage ?: "Unknown agent error"
-                )
-                ToolExecutionLog.recordChat(
-                    name = "assistant_message",
-                    actor = "TouchPilot",
-                    message = record.errorMessage ?: "Unknown agent error",
-                    status = "fail"
-                )
             }
         }
         showChat()

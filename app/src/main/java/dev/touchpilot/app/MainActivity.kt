@@ -1,6 +1,7 @@
 package dev.touchpilot.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -19,6 +20,7 @@ import android.widget.TextView
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentStep
+import dev.touchpilot.app.agent.AgentStepStopReason
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
@@ -58,8 +60,10 @@ import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.settings.SkillDetailRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import dev.touchpilot.app.ui.workflows.WorkflowDetailRenderer
+import dev.touchpilot.app.workflow.WorkflowDefinition
 import dev.touchpilot.app.workflow.WorkflowLibraryEntry
 import dev.touchpilot.app.workflow.WorkflowLibrary
+import dev.touchpilot.app.workflow.WorkflowReplayRepairPlanner
 import dev.touchpilot.app.workflow.WorkflowSeedLoader
 import dev.touchpilot.app.workflow.WorkflowRunStatus
 import java.io.File
@@ -388,19 +392,81 @@ class MainActivity : Activity() {
 
     private fun runWorkflowFromProduct(workflowId: String) {
         val workflow = workflowLibrary.find(workflowId)?.definition ?: return
+        replayWorkflow(workflow)
+    }
+
+    private fun replayWorkflow(
+        definition: WorkflowDefinition,
+        captureWorkflowTrace: Boolean = false,
+    ) {
         agentRunController.startWorkflowReplay(
-            definition = workflow,
-            onFinished = { success, message ->
+            definition = definition,
+            captureWorkflowTrace = captureWorkflowTrace,
+            onFinished = { success, message, result ->
                 workflowLibrary.recordRun(
-                    workflowId = workflow.id,
+                    workflowId = definition.id,
                     status = if (success) WorkflowRunStatus.SUCCEEDED else WorkflowRunStatus.FAILED,
                     message = message,
                 )
+                if (!success &&
+                    result != null &&
+                    result.stopReason != AgentStepStopReason.USER_CANCELLED &&
+                    result.stopReason != AgentStepStopReason.CLARIFICATION_NEEDED
+                ) {
+                    showWorkflowRepairDialog(definition, result)
+                }
                 if (navigationController.activeSection == AppSection.PRODUCT) {
                     showSection(AppSection.PRODUCT)
                 }
             }
         )
+    }
+
+    private fun showWorkflowRepairDialog(
+        definition: WorkflowDefinition,
+        result: dev.touchpilot.app.agent.AgentRunResult,
+    ) {
+        val failedStepIndex = WorkflowReplayRepairPlanner.failedStepIndex(result)
+        val message = buildString {
+            append(result.stopMessage.ifBlank { "Workflow replay stopped before completion." })
+            failedStepIndex?.let { index ->
+                appendLine()
+                appendLine()
+                append("You can retry the failed step, skip it, or abort.")
+                appendLine()
+                append("Failed step: $index")
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Repair replay")
+            .setMessage(message)
+            .setPositiveButton("Retry step") { _, _ ->
+                replayWorkflow(definition, captureWorkflowTrace = true)
+            }
+            .setNeutralButton("Skip failed step") { _, _ ->
+                val stepIndex = failedStepIndex
+                if (stepIndex == null) {
+                    android.widget.Toast.makeText(
+                        this,
+                        "Unable to identify the failed step.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    return@setNeutralButton
+                }
+                val repaired = WorkflowReplayRepairPlanner.skipFailedStep(definition, stepIndex)
+                if (repaired == null) {
+                    android.widget.Toast.makeText(
+                        this,
+                        "Skipping that step would leave no replayable workflow.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    return@setNeutralButton
+                }
+                workflowLibrary.save(repaired)
+                replayWorkflow(repaired, captureWorkflowTrace = true)
+            }
+            .setNegativeButton("Abort replay", null)
+            .show()
     }
 
     private fun renameWorkflow(workflowId: String, newTitle: String): WorkflowLibraryEntry? {
