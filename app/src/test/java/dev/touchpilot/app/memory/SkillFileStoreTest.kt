@@ -41,5 +41,33 @@ class SkillFileStoreTest {
             root.deleteRecursively()
         }
     }
-}
 
+    @Test
+    fun invalidLocalSkillsDoNotProduceShadowIds() {
+        val root = createTempDirectory().toFile()
+        try {
+            val store = SkillFileStore(root, knownTools)
+            val skillDir = root.resolve("demo-skill").apply { mkdirs() }
+            skillDir.resolve("SKILL.md").writeText(
+                """
+                    ---
+                    id: demo-skill
+                    title: Demo Skill
+                    description: Broken on purpose.
+                    risk: low
+                    allowed_tools:
+                    ---
+                    body
+                """.trimIndent()
+            )
+
+            val load = store.loadDetailed()
+
+            assertTrue(load.skillIds.isEmpty())
+            assertEquals(1, load.load.invalid.size)
+            assertEquals("demo-skill", load.load.invalid.first().id)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+}
