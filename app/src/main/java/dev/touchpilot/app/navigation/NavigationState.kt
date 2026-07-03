@@ -7,4 +7,5 @@ data class NavigationState(
     val activeRunDetailId: String? = null,
     val activeSkillDetailId: String? = null,
     val activeWorkflowDetailId: String? = null,
+    val activeWorkflowEditorRunId: String? = null,
 )

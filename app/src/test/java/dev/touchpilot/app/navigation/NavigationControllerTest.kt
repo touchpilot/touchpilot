@@ -120,6 +120,36 @@ class NavigationControllerTest {
     }
 
     @Test
+    fun workflowEditorSurvivesChatAndLogsButClosesForOtherSections() {
+        val controller = NavigationController()
+
+        controller.openWorkflowEditor("run-1")
+        controller.showSection(AppSection.LOGS)
+
+        assertEquals("run-1", controller.activeWorkflowEditorRunId)
+
+        controller.showSection(AppSection.CHAT)
+
+        assertEquals("run-1", controller.activeWorkflowEditorRunId)
+
+        controller.showSection(AppSection.SETTINGS)
+
+        assertNull(controller.activeWorkflowEditorRunId)
+    }
+
+    @Test
+    fun closingWorkflowEditorKeepsCurrentSection() {
+        val controller = NavigationController()
+
+        controller.showSection(AppSection.LOGS)
+        controller.openWorkflowEditor("run-1")
+        controller.closeWorkflowEditor()
+
+        assertEquals(AppSection.LOGS, controller.activeSection)
+        assertNull(controller.activeWorkflowEditorRunId)
+    }
+
+    @Test
     fun closingSkillDetailKeepsSettingsSection() {
         val controller = NavigationController()
 

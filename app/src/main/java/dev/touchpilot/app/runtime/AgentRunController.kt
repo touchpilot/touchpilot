@@ -510,10 +510,11 @@ class AgentRunController(
     }
 
     /**
-     * Captures a successful run as a reusable [WorkflowTrace] (issue #289).
-     * Non-successful runs (errors, blocks, no tool actions) yield no trace, so
-     * this is a no-op for them. The trace is also persisted for demonstration
-     * recording history.
+     * Captures a successful run as a reusable [WorkflowTrace] (issue #289) and
+     * offers to save it as a workflow definition (issue #381). Non-successful
+     * runs (errors, blocks, no tool actions) yield no trace, so this is a
+     * no-op for them. The trace is also persisted for demonstration recording
+     * history.
      */
     private fun captureWorkflowTrace(record: AgentRunRecord) {
         val trace = WorkflowTrace.from(record) ?: return
@@ -530,9 +531,12 @@ class AgentRunController(
                 .put("summary", summary.toJson())
                 .toString(),
         )
-        conversation += ChatEvent.Agent(
-            "Workflow captured.",
-            summary.overview,
+        conversation += ChatEvent.WorkflowCaptureOffer(
+            runId = trace.runId,
+            title = trace.task.ifBlank { "Captured workflow" },
+            stepCount = trace.steps.size,
+            sensitiveStepCount = summary.stepSummaries.count { it.requiresApproval },
+            overview = summary.overview,
         )
     }
 

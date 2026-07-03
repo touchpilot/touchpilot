@@ -17,6 +17,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentStep
@@ -61,6 +62,7 @@ import dev.touchpilot.app.ui.settings.SettingsScreenRenderer
 import dev.touchpilot.app.ui.settings.SkillDetailRenderer
 import dev.touchpilot.app.ui.tools.ToolsScreenRenderer
 import dev.touchpilot.app.ui.workflows.WorkflowDetailRenderer
+import dev.touchpilot.app.ui.workflows.WorkflowEditorRenderer
 import dev.touchpilot.app.workflow.WorkflowDefinition
 import dev.touchpilot.app.workflow.WorkflowLibraryEntry
 import dev.touchpilot.app.workflow.WorkflowLibrary
@@ -208,6 +210,9 @@ class MainActivity : Activity() {
     }
 
     private fun pageTitleForCurrentScreen(): String {
+        if (navigationController.activeWorkflowEditorRunId != null) {
+            return "Save as workflow"
+        }
         if (navigationController.activeRunDetailId != null) {
             return "Run details"
         }
@@ -265,6 +270,7 @@ class MainActivity : Activity() {
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
             openSkillDetail = ::openSkillDetail,
+            openWorkflowEditor = ::openWorkflowEditor,
             refreshChatScreen = { showSection(AppSection.CHAT) },
             isDemonstrationRecording = { agentRunController.isDemonstrationRecording },
             demonstrationRecordingEnabled = {
@@ -274,6 +280,10 @@ class MainActivity : Activity() {
     }
 
     private fun renderChatScreen() {
+        if (navigationController.activeWorkflowEditorRunId != null) {
+            renderWorkflowEditorScreen()
+            return
+        }
         if (navigationController.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
@@ -533,6 +543,10 @@ class MainActivity : Activity() {
     }
 
     private fun renderLogsScreen() {
+        if (navigationController.activeWorkflowEditorRunId != null) {
+            renderWorkflowEditorScreen()
+            return
+        }
         if (navigationController.activeRunDetailId != null) {
             renderAgentRunDetailScreen()
             return
@@ -714,8 +728,39 @@ class MainActivity : Activity() {
             findAgentRun = ::findAgentRun,
             closeRunDetail = ::closeRunDetail,
             exportRunTrace = ::exportRunTrace,
-            saveSkillCandidate = ::saveSkillCandidate
+            saveSkillCandidate = ::saveSkillCandidate,
+            openWorkflowEditor = ::openWorkflowEditor,
         ).render()
+    }
+
+    private fun openWorkflowEditor(runId: String) {
+        navigationController.openWorkflowEditor(runId)
+        showSection(navigationController.activeSection)
+    }
+
+    private fun closeWorkflowEditor() {
+        navigationController.closeWorkflowEditor()
+        showSection(navigationController.activeSection)
+    }
+
+    private fun renderWorkflowEditorScreen() {
+        WorkflowEditorRenderer(
+            activity = this,
+            contentRoot = contentRoot,
+            runId = navigationController.activeWorkflowEditorRunId,
+            findTrace = workflowTraceStore::forRun,
+            uniqueWorkflowId = workflowLibrary::uniqueId,
+            closeWorkflowEditor = ::closeWorkflowEditor,
+            saveWorkflow = ::saveWorkflowFromEditor,
+        ).render()
+    }
+
+    private fun saveWorkflowFromEditor(definition: WorkflowDefinition) {
+        workflowLibrary.save(definition)
+        navigationController.closeWorkflowEditor()
+        navigationController.openWorkflowDetail(definition.id)
+        showSection(AppSection.PRODUCT)
+        Toast.makeText(this, "Workflow saved: ${definition.title}", Toast.LENGTH_SHORT).show()
     }
 
     private fun exportRunTrace(record: AgentRunRecord): File {

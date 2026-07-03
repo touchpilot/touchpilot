@@ -58,6 +58,19 @@ sealed class ChatEvent {
         val summary: String = "",
         val runId: String? = null,
     ) : ChatEvent()
+
+    /**
+     * Offers to capture a just-completed successful run as a reusable
+     * workflow definition (issue #381). [sensitiveStepCount] lets the card
+     * warn up front when steps will require approval on replay.
+     */
+    data class WorkflowCaptureOffer(
+        val runId: String,
+        val title: String,
+        val stepCount: Int,
+        val sensitiveStepCount: Int,
+        val overview: String,
+    ) : ChatEvent()
 }
 
 enum class ApprovalState { PENDING, APPROVED, REJECTED }

@@ -47,6 +47,21 @@ class WorkflowLibraryTest {
         assertTrue(reopened.all().isEmpty())
     }
 
+    @Test
+    fun uniqueIdAppendsSuffixOnlyWhenIdIsTaken() {
+        val root = createTempDir(prefix = "workflow-library-unique-id-test")
+        root.deleteOnExit()
+        val library = WorkflowLibrary(rootDir = root)
+
+        assertEquals("open-wifi-settings", library.uniqueId("open-wifi-settings"))
+
+        library.save(sampleWorkflow())
+        assertEquals("open-wifi-settings-2", library.uniqueId("open-wifi-settings"))
+
+        library.save(sampleWorkflow().copy(id = "open-wifi-settings-2"))
+        assertEquals("open-wifi-settings-3", library.uniqueId("open-wifi-settings"))
+    }
+
     private fun sampleWorkflow(): WorkflowDefinition {
         return WorkflowDefinition(
             id = "open-wifi-settings",

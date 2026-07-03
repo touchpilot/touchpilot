@@ -91,6 +91,21 @@ class WorkflowLibrary(
         return all().firstOrNull { it.definition.id == workflowId }
     }
 
+    /**
+     * Returns [base] unchanged if no saved workflow already uses it, otherwise
+     * appends the smallest `-2`, `-3`, ... suffix that is not already taken so a
+     * newly captured workflow never silently overwrites an existing one.
+     */
+    fun uniqueId(base: String): String {
+        val existingIds = all().map { it.definition.id }.toSet()
+        if (base !in existingIds) return base
+        var suffix = 2
+        while ("$base-$suffix" in existingIds) {
+            suffix += 1
+        }
+        return "$base-$suffix"
+    }
+
     fun save(definition: WorkflowDefinition): WorkflowLibraryEntry {
         val file = definitionFile(definition.id)
         file.writeText(definition.toJson().toString(2))
