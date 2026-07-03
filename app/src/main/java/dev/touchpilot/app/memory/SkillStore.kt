@@ -2,28 +2,33 @@ package dev.touchpilot.app.memory
 
 import android.content.Context
 import dev.touchpilot.app.tools.AndroidToolCatalog
+import java.io.File
 
 class SkillStore(
     context: Context,
     private val knownTools: Set<String> = AndroidToolCatalog.initialTools.map { it.name }.toSet()
 ) {
     private val assets = context.applicationContext.assets
+    private val localStore = SkillFileStore(File(context.filesDir, SkillsRoot), knownTools)
 
-    /** Valid bundled skills only. Kept for callers that do not need diagnostics. */
+    /** Valid skills only. Kept for callers that do not need diagnostics. */
     fun loadSkills(): List<Skill> = load().skills
 
-    /** Parses every bundled skill, separating valid skills from invalid files. */
+    /** Parses bundled skills plus local overrides, separating valid and invalid files. */
     fun load(): SkillLoad {
-        val results = runCatching {
+        val bundled = runCatching {
             assets.list(SkillsRoot).orEmpty()
                 .sorted()
                 .mapNotNull { id -> parseSkill(id) }
         }.getOrDefault(emptyList())
 
-        return SkillLoad(
-            skills = results.filterIsInstance<SkillParseResult.Valid>().map { it.skill },
-            invalid = results.filterIsInstance<SkillParseResult.Invalid>()
+        val bundledLoad = SkillLoad(
+            skills = bundled.filterIsInstance<SkillParseResult.Valid>().map { it.skill },
+            invalid = bundled.filterIsInstance<SkillParseResult.Invalid>()
         )
+        val localLoad = localStore.loadDetailed()
+
+        return SkillLoadMerger.merge(bundledLoad, localLoad.load, localLoad.skillIds)
     }
 
     private fun parseSkill(id: String): SkillParseResult? {

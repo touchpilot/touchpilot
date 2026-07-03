@@ -5,6 +5,7 @@ import dev.touchpilot.app.tools.AndroidToolCatalog
 import dev.touchpilot.app.tools.ToolRisk
 
 data class WorkflowSkillCandidate(
+    val id: String,
     val title: String,
     val description: String,
     val examples: List<String>,
@@ -12,7 +13,14 @@ data class WorkflowSkillCandidate(
     val risk: SkillRisk,
     val successCriteria: List<String>,
 ) {
-    fun toMarkdown(): String {
+    fun toMarkdown(
+        title: String = this.title,
+        description: String = this.description,
+        risk: SkillRisk = this.risk,
+        examples: List<String> = this.examples,
+        allowedTools: List<String> = this.allowedTools,
+        successCriteria: List<String> = this.successCriteria,
+    ): String {
         val skillId = WorkflowTraceSerializer.slugify(title)
         return buildString {
             appendLine("---")
@@ -81,6 +89,7 @@ object WorkflowSkillCandidateFormatter {
         val successCriteria = buildSuccessCriteria(trace)
 
         return WorkflowSkillCandidate(
+            id = WorkflowTraceSerializer.slugify(titleFromTrace(trace)),
             title = titleFromTrace(trace),
             description = descriptionFromTrace(trace),
             examples = examples,
@@ -139,5 +148,48 @@ object WorkflowSkillCandidateFormatter {
             hasMedium -> SkillRisk.MEDIUM
             else -> SkillRisk.LOW
         }
+    }
+}
+
+object WorkflowSkillCandidateMarkdown {
+    fun build(
+        id: String,
+        title: String,
+        description: String,
+        risk: SkillRisk,
+        aliases: List<String>,
+        allowedTools: List<String>,
+        examples: List<String>,
+        successCriteria: List<String>,
+        body: String
+    ): String {
+        return buildString {
+            appendLine("---")
+            appendLine("id: ${id.yamlScalar()}")
+            appendLine("title: ${title.yamlScalar()}")
+            appendLine("description: ${description.yamlScalar()}")
+            appendLine("risk: ${risk.name.lowercase()}")
+            if (aliases.isNotEmpty()) {
+                appendLine("aliases:")
+                aliases.forEach { appendLine("  - ${it.yamlScalar()}") }
+            }
+            appendLine("allowed_tools:")
+            allowedTools.forEach { appendLine("  - ${it.yamlScalar()}") }
+            if (successCriteria.isNotEmpty()) {
+                appendLine("success_criteria:")
+                successCriteria.forEach { appendLine("  - ${it.yamlScalar()}") }
+            }
+            if (examples.isNotEmpty()) {
+                appendLine("examples:")
+                examples.forEach { appendLine("  - ${it.yamlScalar()}") }
+            }
+            appendLine("---")
+            appendLine()
+            append(body.trim())
+        }.trim()
+    }
+
+    private fun String.yamlScalar(): String {
+        return "'${replace("'", "''")}'"
     }
 }
