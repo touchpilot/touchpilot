@@ -34,6 +34,29 @@ class LenientJsonTest {
     }
 
     @Test
+    fun normalizesCurlySingleQuoteDelimitersToDoubleQuotes() {
+        assertEquals("""{"a":"b"}""", LenientJson.repair("{‘a’:‘b’}"))
+    }
+
+    @Test
+    fun normalizesAsciiSingleQuoteDelimitersToDoubleQuotes() {
+        assertEquals("""{"a":"b"}""", LenientJson.repair("{'a':'b'}"))
+    }
+
+    @Test
+    fun preservesApostropheInsideDoubleQuotedString() {
+        // A curly apostrophe inside a value is content, not a delimiter.
+        assertEquals("{\"final\":\"I’ll go\"}", LenientJson.repair("{“final”:“I’ll go”}"))
+    }
+
+    @Test
+    fun escapesStraightQuoteWhenUpgradingSingleDelimiters() {
+        // Single-quoted content containing a double quote must be escaped once the
+        // delimiters become double quotes, or the string would terminate early.
+        assertEquals("""{"t":"say \"hi\""}""", LenientJson.repair("""{'t':'say "hi"'}"""))
+    }
+
+    @Test
     fun preservesCommaInsideStringValue() {
         // The comma inside "a,]" must survive; only the trailing comma is dropped.
         assertEquals("""{"t":"a,]"}""", LenientJson.repair("""{"t":"a,]",}"""))

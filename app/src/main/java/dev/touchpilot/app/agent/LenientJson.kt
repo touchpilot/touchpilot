@@ -4,67 +4,76 @@ package dev.touchpilot.app.agent
  * Best-effort repair of the JSON defects language models most often emit around
  * an otherwise valid command object:
  *
- *  - curly "smart" quotes (`“ ” ‘ ’`) used where JSON needs straight quotes,
+ *  - "smart" quotes — curly double (`“ ”`) or curly single (`‘ ’`) — used as
+ *    string delimiters where JSON requires straight double quotes,
  *  - a trailing comma directly before a closing `}` or `]`,
  *  - `//` line comments and `/* … */` block comments.
  *
  * [AgentCommandParser] applies this only as a fallback AFTER strict parsing has
- * already failed, so well-formed model output is never rewritten. The repair is
- * deliberately conservative: it only rewrites structure that lies OUTSIDE string
- * literals, so the contents of every string are preserved exactly as written —
- * a comma, brace, or `//` inside a `"…"` value is never touched.
+ * already failed, so well-formed model output is never rewritten.
+ *
+ * The repair is a single string-aware pass. It normalizes the *delimiters* of
+ * each string to straight double quotes (so single-quoted and smart-quoted
+ * payloads become valid JSON) while copying the *contents* verbatim — a comma,
+ * brace, `//`, or apostrophe inside a value is preserved. When a string's
+ * delimiters are upgraded to double quotes, a straight `"` appearing in its
+ * contents is escaped so it cannot terminate the string early.
  */
 object LenientJson {
 
+    /** Opening quote characters mapped to the character that closes them. */
+    private val OPENERS: Map<Char, Char> = mapOf(
+        '"' to '"',
+        '\'' to '\'',
+        '“' to '”', // curly double
+        '‘' to '’', // curly single
+    )
+
     /** Returns [text] with the common recoverable JSON defects repaired. */
-    fun repair(text: String): String = stripCommentsAndTrailingCommas(normalizeQuotes(text))
-
-    /** Replaces Unicode "smart" quotes with the ASCII quotes JSON requires. */
-    private fun normalizeQuotes(text: String): String {
-        val out = StringBuilder(text.length)
-        for (c in text) {
-            out.append(
-                when (c) {
-                    '“', '”', '„', '‟', '″' -> '"'
-                    '‘', '’', '‚', '‛', '′' -> '\''
-                    else -> c
-                }
-            )
-        }
-        return out.toString()
-    }
-
-    /**
-     * Single string-aware pass that removes comments and drops a comma that
-     * directly precedes a closing `}` or `]`. Text inside a string literal
-     * (double- or single-quoted, honouring backslash escapes) is copied verbatim.
-     */
-    private fun stripCommentsAndTrailingCommas(text: String): String {
+    fun repair(text: String): String {
         val out = StringBuilder(text.length)
         val n = text.length
         var i = 0
-        var stringDelim: Char? = null
+        var closer: Char? = null // closing char of the current string, or null when outside one
+        var escapeInnerQuote = false // true when the current string was opened by a non-double quote
 
         while (i < n) {
             val c = text[i]
 
-            if (stringDelim != null) {
-                // Inside a string: copy verbatim, keeping escaped pairs together.
+            if (closer != null) {
+                // Inside a string literal.
                 if (c == '\\' && i + 1 < n) {
+                    // Keep escape pairs intact.
                     out.append(c).append(text[i + 1])
                     i += 2
                     continue
                 }
-                out.append(c)
-                if (c == stringDelim) stringDelim = null
+                if (c == closer) {
+                    out.append('"') // normalize the closing delimiter
+                    closer = null
+                    i++
+                    continue
+                }
+                // Content. If we upgraded the delimiters to double quotes, a bare
+                // double quote in the content must be escaped so it does not end
+                // the string. Everything else (commas, braces, apostrophes, other
+                // curly quotes) is copied verbatim.
+                if (c == '"' && escapeInnerQuote) {
+                    out.append("\\\"")
+                } else {
+                    out.append(c)
+                }
                 i++
                 continue
             }
 
+            // Outside any string.
+            val open = OPENERS[c]
             when {
-                c == '"' || c == '\'' -> {
-                    stringDelim = c
-                    out.append(c)
+                open != null -> {
+                    out.append('"') // normalize the opening delimiter
+                    closer = open
+                    escapeInnerQuote = c != '"'
                     i++
                 }
 

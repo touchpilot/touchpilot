@@ -52,6 +52,35 @@ class AgentCommandParserLenientTest {
     }
 
     @Test
+    fun parsesToolWithCurlySingleQuotes() {
+        // End-to-end recovery of curly single-quote delimited output: the repair
+        // must yield valid double-quote JSON, not just ASCII single quotes.
+        val command = AgentCommandParser.parse(
+            "{‘tool’:‘open_app’,‘args’:{‘target’:‘Settings’}}"
+        )
+
+        assertEquals("open_app", command.tool)
+        assertEquals("Settings", command.args["target"])
+    }
+
+    @Test
+    fun parsesToolWithAsciiSingleQuotes() {
+        val command = AgentCommandParser.parse(
+            "{'tool':'tap','args':{'text':'Sign In'}}"
+        )
+
+        assertEquals("tap", command.tool)
+        assertEquals("Sign In", command.args["text"])
+    }
+
+    @Test
+    fun preservesApostropheInFinalAnswerContent() {
+        val command = AgentCommandParser.parse("{“final”:“I’ll open Settings.”}")
+
+        assertEquals("I’ll open Settings.", command.finalAnswer)
+    }
+
+    @Test
     fun parsesToolWithBlockComment() {
         val command = AgentCommandParser.parse(
             """{"tool":"tap"/* chosen target */,"args":{"text":"OK",}}"""
