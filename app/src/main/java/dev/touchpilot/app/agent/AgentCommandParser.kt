@@ -38,11 +38,19 @@ object AgentCommandParser {
             ?.groupValues
             ?.getOrNull(1)
             ?.trim()
+
+        // Strict pass first: well-formed model output is parsed unchanged.
         if (fenced != null) {
             findBestJsonObject(fenced)?.let { return it }
         }
-
         findBestJsonObject(trimmed)?.let { return it }
+
+        // Lenient fallback: repair the recoverable defects models emit around a
+        // valid command (smart quotes, trailing commas, comments) and retry.
+        if (fenced != null) {
+            findBestJsonObject(LenientJson.repair(fenced))?.let { return it }
+        }
+        findBestJsonObject(LenientJson.repair(trimmed))?.let { return it }
 
         error("Model did not return a JSON object: $raw")
     }
