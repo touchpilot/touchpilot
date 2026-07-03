@@ -48,6 +48,7 @@ object SkillDetailFormatter {
         return legacyDescription(skill.markdown)
     }
 
+    @Suppress("DEPRECATION")
     fun formatChip(skill: Skill): String {
         return when (skill.format) {
             SkillFormat.V2 -> "Skills v2"

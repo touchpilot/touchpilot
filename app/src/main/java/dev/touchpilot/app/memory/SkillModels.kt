@@ -31,6 +31,7 @@ enum class SkillFormat {
      * guarantee. Kept only for hand-authored, unmigrated third-party
      * `SKILL.md` files; slated for removal after 1.0.
      */
+    @Deprecated("Unstable, experimental pre-1.0 skill format. See docs/CONTRACTS.md.")
     LEGACY_V1,
 
     /** Skills v2 front matter (see docs/SKILLS.md). Frozen for 1.0. */
@@ -47,7 +48,9 @@ data class Skill(
     val aliases: List<String> = emptyList(),
     val examples: List<String> = emptyList(),
     val successCriteria: List<String> = emptyList(),
-    val format: SkillFormat = SkillFormat.LEGACY_V1
+    // Defaults to the frozen v2 format rather than the deprecated legacy one;
+    // SkillParser sets this explicitly based on how a file actually parsed.
+    val format: SkillFormat = SkillFormat.V2
 )
 
 /** Result of parsing a single `SKILL.md` file. */

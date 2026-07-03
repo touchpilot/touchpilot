@@ -201,6 +201,7 @@ object SkillParser {
         return out.toString()
     }
 
+    @Suppress("DEPRECATION")
     private fun parseLegacy(directoryId: String, markdown: String): Skill {
         return Skill(
             id = directoryId,

@@ -262,6 +262,7 @@ class SkillParserTest {
         assertTrue(result.errors.any { it.contains("unknown tool") }, result.errors.toString())
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun parsesLegacyV1WithoutToolValidation() {
         // The legacy path must stay permissive for older skill packs that still
