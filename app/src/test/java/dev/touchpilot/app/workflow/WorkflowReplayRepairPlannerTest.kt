@@ -70,6 +70,78 @@ class WorkflowReplayRepairPlannerTest {
     }
 
     @Test
+    fun retriesFromFailedStepAndKeepsOnlyRelevantParameters() {
+        val workflow = WorkflowDefinition(
+            id = "open-settings",
+            title = "Open Settings",
+            description = "Open the Settings app and toggle Wi-Fi.",
+            parameters = listOf(
+                WorkflowParameter(name = "target_label", default = "Wi-Fi"),
+                WorkflowParameter(name = "second_target", default = "Bluetooth"),
+                WorkflowParameter(name = "unused", default = "unused"),
+            ),
+            steps = listOf(
+                WorkflowStep(
+                    id = "open-app",
+                    tool = "open_app",
+                    args = mapOf("target" to "{target_label}"),
+                ),
+                WorkflowStep(
+                    id = "tap-toggle",
+                    tool = "tap",
+                    args = mapOf("text" to "{second_target}"),
+                ),
+            ),
+        )
+
+        val retried = WorkflowReplayRepairPlanner.retryFailedStep(workflow, failedStepIndex = 2)
+
+        assertNotNull(retried)
+        assertEquals(1, retried.steps.size)
+        assertEquals("reopen-settings-open-settings-repaired-retry-2", retried.id)
+        assertEquals("tap-toggle", retried.steps[0].id)
+        assertEquals("tap", retried.steps[0].tool)
+        assertEquals(listOf(WorkflowParameter(name = "second_target", default = "Bluetooth")), retried.parameters)
+        assertTrue(retried.description.contains("Repaired by retrying from failed step 2."))
+    }
+
+    @Test
+    fun doesNotReturnFailedStepForPolicyOrUserCancellation() {
+        val blocked = AgentRunResult(
+            transcript = "policy blocked",
+            finalAnswer = null,
+            stopReason = AgentStepStopReason.USER_CANCELLED,
+            stopMessage = "Replay stopped due to user cancellation.",
+            steps = listOf(
+                actStep(1, AgentStepStatus.BLOCKED),
+                stopStep(2, AgentStepStatus.FAILED),
+            ),
+        )
+
+        assertEquals(
+            null,
+            WorkflowReplayRepairPlanner.failedStepIndex(blocked)
+        )
+    }
+
+    @Test
+    fun mapsVerificationFailureToFailedWorkflowStep() {
+        val failed = AgentRunResult(
+            transcript = "failed",
+            finalAnswer = null,
+            stopReason = AgentStepStopReason.VERIFICATION_FAILED,
+            stopMessage = "Step 2 failed.",
+            steps = listOf(
+                actStep(1, AgentStepStatus.OK),
+                verifyStep(2, AgentStepStatus.FAILED),
+                stopStep(3, AgentStepStatus.FAILED),
+            ),
+        )
+
+        assertEquals(1, WorkflowReplayRepairPlanner.failedStepIndex(failed))
+    }
+
+    @Test
     fun doesNotCreateAnEmptyWorkflowWhenSkippingTheOnlyStep() {
         val workflow = WorkflowDefinition(
             id = "single-step",

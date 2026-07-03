@@ -410,10 +410,15 @@ class MainActivity : Activity() {
                 )
                 if (!success &&
                     result != null &&
+                    WorkflowReplayRepairPlanner.failedStepIndex(result) != null &&
                     result.stopReason != AgentStepStopReason.USER_CANCELLED &&
                     result.stopReason != AgentStepStopReason.CLARIFICATION_NEEDED
                 ) {
-                    showWorkflowRepairDialog(definition, result)
+                    showWorkflowRepairDialog(
+                        definition = definition,
+                        result = result,
+                        failedStepIndex = requireNotNull(WorkflowReplayRepairPlanner.failedStepIndex(result)),
+                    )
                 }
                 if (navigationController.activeSection == AppSection.PRODUCT) {
                     showSection(AppSection.PRODUCT)
@@ -425,35 +430,36 @@ class MainActivity : Activity() {
     private fun showWorkflowRepairDialog(
         definition: WorkflowDefinition,
         result: dev.touchpilot.app.agent.AgentRunResult,
+        failedStepIndex: Int,
     ) {
-        val failedStepIndex = WorkflowReplayRepairPlanner.failedStepIndex(result)
         val message = buildString {
             append(result.stopMessage.ifBlank { "Workflow replay stopped before completion." })
-            failedStepIndex?.let { index ->
-                appendLine()
-                appendLine()
-                append("You can retry the failed step, skip it, or abort.")
-                appendLine()
-                append("Failed step: $index")
-            }
+            appendLine()
+            appendLine()
+            append("You can retry the failed step, skip it, or abort.")
+            appendLine()
+            append("Failed step: $failedStepIndex")
         }
         AlertDialog.Builder(this)
             .setTitle("Repair replay")
             .setMessage(message)
             .setPositiveButton("Retry step") { _, _ ->
-                replayWorkflow(definition, captureWorkflowTrace = true)
-            }
-            .setNeutralButton("Skip failed step") { _, _ ->
-                val stepIndex = failedStepIndex
-                if (stepIndex == null) {
+                val retried = WorkflowReplayRepairPlanner.retryFailedStep(
+                    workflow = definition,
+                    failedStepIndex = failedStepIndex,
+                )
+                if (retried == null) {
                     android.widget.Toast.makeText(
                         this,
-                        "Unable to identify the failed step.",
+                        "Unable to build a workflow for retrying from that step.",
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
-                    return@setNeutralButton
+                    return@setPositiveButton
                 }
-                val repaired = WorkflowReplayRepairPlanner.skipFailedStep(definition, stepIndex)
+                replayWorkflow(retried, captureWorkflowTrace = true)
+            }
+            .setNeutralButton("Skip failed step") { _, _ ->
+                val repaired = WorkflowReplayRepairPlanner.skipFailedStep(definition, failedStepIndex)
                 if (repaired == null) {
                     android.widget.Toast.makeText(
                         this,
