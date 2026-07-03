@@ -233,6 +233,34 @@ expected states, or add policy requirements before replay.
 
 Invalid files return `WorkflowParseResult.Invalid` with every validation error.
 
+## Capture, Review, and Save (#381)
+
+After a successful agent run, `AgentRunController` derives a [WorkflowTrace]
+and posts a `WorkflowCaptureOffer` chat card ("Save as Workflow") that also
+surfaces up front how many captured steps will require approval on replay.
+The same offer is available later from the run's detail screen.
+
+Tapping "Save as Workflow" opens `WorkflowEditorRenderer`, which runs the
+trace through `WorkflowTraceSerializer.toDefinition()` to build a suggested
+definition, then lets the user:
+
+- edit the title and description,
+- edit each parameter's default value and whether it is required,
+- edit each step's expected screen text,
+- reorder or remove steps.
+
+Per-step approval policy is never user-editable in the editor — it is always
+carried through from the trace/serializer unchanged, so a captured workflow
+cannot be saved with a weaker approval requirement than the tool risk that
+produced it. `WorkflowSensitivity` computes which steps are approval-sensitive
+(policy hint, or tool risk MEDIUM/HIGH/BLOCKED) and drives both the chat
+offer's warning line and a warning banner at the top of the editor.
+
+Saving calls `WorkflowLibrary.save()`, so the result immediately appears in
+the Product screen's workflow list and the existing workflow detail/replay
+screen. `WorkflowLibrary.uniqueId()` appends a numeric suffix instead of
+silently overwriting a workflow that already uses the suggested id.
+
 ## Related Code
 
 ```text
@@ -242,10 +270,16 @@ app/src/main/java/dev/touchpilot/app/workflow/
   WorkflowModels.kt              WorkflowDefinition schema + JSON round-trip
   WorkflowDefinitionParser.kt    JSON loader + validation
   WorkflowTraceSerializer.kt     WorkflowTrace → WorkflowDefinition
+  WorkflowSensitivity.kt         approval-sensitive step detection (#381)
+  WorkflowLibrary.kt             local workflow storage + uniqueId() (#381)
+
+app/src/main/java/dev/touchpilot/app/ui/workflows/
+  WorkflowEditorRenderer.kt      review/edit/save screen (#381)
+  WorkflowDetailRenderer.kt      saved workflow detail/replay screen
 ```
 
 ## Out of Scope (Milestone 10 follow-ups)
 
-- Workflow replay engine execution
-- Trace capture UI and storage paths
-- Workflow review UI
+- Workflow export/import as user-facing files (Milestone 11 covers
+  skills import/export; workflow files are already plain JSON and can be
+  copied manually in the meantime)

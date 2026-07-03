@@ -13,6 +13,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import dev.touchpilot.app.R
 import dev.touchpilot.app.agent.AgentRunCompletionStatus
 import dev.touchpilot.app.agent.AgentRunCompletionSummary
 import dev.touchpilot.app.agent.AgentRunState
@@ -25,6 +26,7 @@ import dev.touchpilot.app.agent.timelineLabel
 import dev.touchpilot.app.ui.RuntimeIndicator
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.chatContextStrip
+import dev.touchpilot.app.ui.primaryButton
 import dev.touchpilot.app.ui.rounded
 import dev.touchpilot.app.ui.statusChip
 import dev.touchpilot.app.ui.timelineCard
@@ -41,6 +43,7 @@ class ChatScreenRenderer(
     private val cancelAgentRun: () -> Unit,
     private val openRunDetail: (String) -> Unit,
     private val openSkillDetail: (String) -> Unit,
+    private val openWorkflowEditor: (String) -> Unit,
     private val refreshChatScreen: () -> Unit,
     private val isDemonstrationRecording: () -> Boolean = { false },
     private val demonstrationRecordingEnabled: () -> Boolean = { false },
@@ -120,6 +123,7 @@ class ChatScreenRenderer(
                 refreshChatScreen = refreshChatScreen
             ).clarificationCard(event)
             is ChatEvent.DemonstrationRecording -> demonstrationRecordingCard(event)
+            is ChatEvent.WorkflowCaptureOffer -> workflowCaptureOfferCard(event)
         }
     }
 
@@ -520,6 +524,72 @@ class ChatScreenRenderer(
         }
         card.addView(content)
         return card.withMargins(top = 6, bottom = 6)
+    }
+
+    /**
+     * Offers to save a just-captured run as a reusable workflow (issue #381).
+     * The whole card still opens run details on tap; the primary button is the
+     * explicit "offer" the user acts on to start the review/edit/save flow.
+     */
+    private fun workflowCaptureOfferCard(event: ChatEvent.WorkflowCaptureOffer): View {
+        val card = MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = Theme.Accent
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { openRunDetail(event.runId) }
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        content.addView(
+            TextView(activity).apply {
+                text = "Workflow captured"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            }
+        )
+        content.addView(
+            TextView(activity).apply {
+                text = event.overview
+                textSize = 12f
+                setTextColor(Theme.BodyText)
+                setLineSpacing(3f, 1f)
+                setPadding(0, 6, 0, 0)
+            }
+        )
+        if (event.sensitiveStepCount > 0) {
+            content.addView(
+                TextView(activity).apply {
+                    val label = if (event.sensitiveStepCount == 1) "step" else "steps"
+                    text = "${event.sensitiveStepCount} $label will need approval on replay."
+                    textSize = 11.5f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Theme.Warning)
+                    setPadding(0, 6, 0, 0)
+                }
+            )
+        }
+        content.addView(
+            activity.primaryButton("Save as Workflow") {
+                openWorkflowEditor(event.runId)
+            }.apply { id = R.id.save_as_workflow_button }.withMargins(top = 10)
+        )
+        content.addView(
+            TextView(activity).apply {
+                text = "Tap for full run details"
+                textSize = 11.5f
+                setTextColor(Theme.Accent)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+        card.addView(content)
+        return card.withMargins(top = 6, right = 24, bottom = 6)
     }
 
     private fun completionSummaryCard(summary: AgentRunCompletionSummary, runId: String): View {

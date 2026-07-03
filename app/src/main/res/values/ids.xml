@@ -71,4 +71,9 @@
     <item name="skill_detail_clear_button" type="id" />
     <item name="workflow_detail_back_button" type="id" />
     <item name="workflow_rename_input" type="id" />
+    <item name="save_as_workflow_button" type="id" />
+    <item name="workflow_editor_back_button" type="id" />
+    <item name="workflow_editor_title_input" type="id" />
+    <item name="workflow_editor_description_input" type="id" />
+    <item name="workflow_editor_save_button" type="id" />
 </resources>

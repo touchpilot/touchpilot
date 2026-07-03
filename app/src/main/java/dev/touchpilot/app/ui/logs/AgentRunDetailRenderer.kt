@@ -38,6 +38,7 @@ class AgentRunDetailRenderer(
     private val closeRunDetail: () -> Unit,
     private val exportRunTrace: (AgentRunRecord) -> File,
     private val saveSkillCandidate: (String, String) -> Boolean,
+    private val openWorkflowEditor: (String) -> Unit,
 ) {
     fun render() {
         contentRoot.addView(
@@ -95,12 +96,17 @@ class AgentRunDetailRenderer(
             }.apply { id = R.id.export_run_trace_button }
         )
         WorkflowTrace.from(record)?.let { trace ->
+            contentRoot.addView(
+                activity.primaryButton("Save as Workflow") {
+                    openWorkflowEditor(record.id)
+                }.apply { id = R.id.save_as_workflow_button }.withMargins(top = 6, bottom = 8)
+            )
             val candidate = WorkflowSkillCandidateFormatter.fromTrace(trace)
             if (candidate != null) {
                 contentRoot.addView(
-                    activity.primaryButton("Review Skill Candidate") {
+                    activity.secondaryButton("Review Skill Candidate") {
                         showSkillCandidate(candidate)
-                    }.withMargins(top = 6, bottom = 8)
+                    }.withMargins(bottom = 8)
                 )
             }
         }
