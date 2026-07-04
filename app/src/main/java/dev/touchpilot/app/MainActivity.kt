@@ -367,6 +367,10 @@ class MainActivity : Activity() {
         agentRunController.startFromChat(task)
     }
 
+    private fun runSkill(skillId: String) {
+        runSkillFromProduct(skillId)
+    }
+
     private fun openWorkflowDetail(workflowId: String) {
         navigationController.openWorkflowDetail(workflowId)
         showSection(AppSection.PRODUCT)
