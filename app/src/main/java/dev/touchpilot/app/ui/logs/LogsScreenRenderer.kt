@@ -28,6 +28,7 @@ import dev.touchpilot.app.agent.AgentRunDetailFormatter.formatTimestamp
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.workflow.WorkflowTrace
+import dev.touchpilot.app.workflow.WorkflowTraceSummarizer
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.rowButtonParams
@@ -132,6 +133,12 @@ class LogsScreenRenderer(
             appendLine("Task: ${SensitiveTextRedactor.redact(trace.task).ifBlank { "(no task)" }}")
             appendLine("Steps: ${trace.steps.size}")
             append("Tools: ${trace.steps.joinToString(", ") { it.tool }}")
+            if (trace.screenSignals.isNotEmpty()) {
+                appendLine()
+                append("Screen context: ${WorkflowTraceSummarizer.summarize(trace).screenSignals.joinToString { signal ->
+                    "${signal.phase} (${signal.nodeCount} nodes${if (signal.containsSensitiveContent) ", redacted" else ""})"
+                }}")
+            }
         }
 
         val content = LinearLayout(activity).apply {
