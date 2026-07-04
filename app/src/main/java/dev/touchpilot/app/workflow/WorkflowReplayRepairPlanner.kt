@@ -52,6 +52,8 @@ object WorkflowReplayRepairPlanner {
                 appendLine()
             }
             append("Repaired by retrying from failed step $failedStepIndex.")
+            appendLine()
+            append("Original workflow preserved.")
         }
 
         return workflow.copy(
@@ -90,6 +92,8 @@ object WorkflowReplayRepairPlanner {
                 appendLine()
             }
             append("Repaired by skipping failed step $failedStepIndex.")
+            appendLine()
+            append("Original workflow preserved.")
         }
 
         return workflow.copy(

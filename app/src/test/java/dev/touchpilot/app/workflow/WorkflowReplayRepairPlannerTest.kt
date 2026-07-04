@@ -67,6 +67,7 @@ class WorkflowReplayRepairPlannerTest {
         assertEquals("tap", repaired.steps.single().tool)
         assertTrue(repaired.parameters.isEmpty())
         assertTrue(repaired.description.contains("Repaired by skipping failed step 1."))
+        assertTrue(repaired.description.contains("Original workflow preserved."))
     }
 
     @Test
@@ -103,6 +104,40 @@ class WorkflowReplayRepairPlannerTest {
         assertEquals("tap", retried.steps[0].tool)
         assertEquals(listOf(WorkflowParameter(name = "second_target", default = "Bluetooth")), retried.parameters)
         assertTrue(retried.description.contains("Repaired by retrying from failed step 2."))
+        assertTrue(retried.description.contains("Original workflow preserved."))
+    }
+
+    @Test
+    fun repairDoesNotMutateOriginalWorkflow() {
+        val workflow = WorkflowDefinition(
+            id = "open-settings",
+            title = "Open Settings",
+            description = "Open the Settings app and toggle Wi-Fi.",
+            parameters = listOf(
+                WorkflowParameter(name = "target_label", default = "Wi-Fi"),
+            ),
+            steps = listOf(
+                WorkflowStep(
+                    id = "open-app",
+                    tool = "open_app",
+                    args = mapOf("target" to "{target_label}"),
+                ),
+                WorkflowStep(
+                    id = "tap-toggle",
+                    tool = "tap",
+                    args = mapOf("text" to "Toggle"),
+                ),
+            ),
+        )
+
+        val repaired = WorkflowReplayRepairPlanner.skipFailedStep(workflow, failedStepIndex = 1)
+
+        assertNotNull(repaired)
+        assertEquals("Open Settings", workflow.title)
+        assertEquals("Open the Settings app and toggle Wi-Fi.", workflow.description)
+        assertEquals(2, workflow.steps.size)
+        assertEquals("open-settings", workflow.id)
+        assertTrue(repaired.id != workflow.id)
     }
 
     @Test
