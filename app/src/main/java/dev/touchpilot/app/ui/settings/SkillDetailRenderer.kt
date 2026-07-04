@@ -29,6 +29,7 @@ class SkillDetailRenderer(
     private val selectedSkillId: () -> String?,
     private val closeSkillDetail: () -> Unit,
     private val commitSelectedSkill: (String?) -> Unit,
+    private val runSkill: (String) -> Unit,
     private val refreshSettingsScreen: () -> Unit
 ) {
     fun render() {
@@ -77,6 +78,13 @@ class SkillDetailRenderer(
                 ).withMargins(top = 6, bottom = 6)
             )
         }
+
+        contentRoot.addView(
+            activity.primaryButton("Run skill") {
+                runSkill(skill.id)
+            }.apply { id = R.id.skill_detail_run_button }
+                .withMargins(top = 8, bottom = 4)
+        )
 
         if (!isActive) {
             contentRoot.addView(
