@@ -175,3 +175,18 @@ TouchPilot separates local command production from tool execution:
 All command producers share the same policy boundary. A local model can suggest
 a tool call, but only the tool router, skill allowlist, and safety policy decide
 whether it can execute.
+
+## Local Extension Boundary
+
+TouchPilot treats local extension tools as a separate boundary from the built-in
+Android tool catalog:
+
+- local extensions are registered on device and stored locally,
+- each extension has its own external capability grant in Settings > MCP,
+- extension calls go through the `mcp` package and the external capability
+  policy path, not the Android `ToolSource` / `PolicyEngine` path,
+- Android control permissions never authorize extension tools by themselves.
+
+This boundary is intentionally narrower than the external MCP protocol surface.
+The app can talk to an external MCP server and can also host or load a local
+extension endpoint, but those are reviewed and granted separately.

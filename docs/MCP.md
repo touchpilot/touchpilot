@@ -8,6 +8,17 @@ merged into the main agent loop. See
 
 Phase 4 adds a small MCP client to the Android app.
 
+## Local Extension Boundary
+
+Local extension tools are the on-device side of the MCP boundary. They are
+registered into TouchPilot storage, but they are not Android tools and they do
+not inherit Android tool permissions.
+
+Each local extension must be granted explicitly in Settings > MCP before it can
+list or call tools. The grant is keyed to the extension identity, and any
+feature flags declared in the manifest are reviewed separately from the Android
+policy system.
+
 The client uses HTTP JSON-RPC and implements the core lifecycle needed to
 interoperate with tool servers:
 
