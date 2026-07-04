@@ -17,7 +17,7 @@ import org.robolectric.shadows.ShadowAccessibilityNodeInfo
  * discarded [AccessibilityNodeInfo] children during agent automation traversals.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [26])
+@Config(sdk = [28])
 class AccessibilityNodeLifecycleTest {
 
     @Test
@@ -74,7 +74,7 @@ class AccessibilityNodeLifecycleTest {
             currentDepth = 0,
             maxDepth = depth,
             branchingFactor = branchingFactor,
-            pathToTarget = targetPath,
+            remainingTargetPath = targetPath,
         )
     }
 
@@ -82,31 +82,32 @@ class AccessibilityNodeLifecycleTest {
         currentDepth: Int,
         maxDepth: Int,
         branchingFactor: Int,
-        pathToTarget: List<Int>?,
+        remainingTargetPath: List<Int>?,
     ): AccessibilityNodeInfo {
-        val node = AccessibilityNodeInfo()
+        val node = AccessibilityNodeInfo.obtain()
         val shadow = shadowOf(node) as ShadowAccessibilityNodeInfo
 
         if (currentDepth == maxDepth) {
-            node.text = if (pathToTarget != null && pathToTarget.isEmpty()) "target" else "leaf"
+            node.text = if (remainingTargetPath != null) "target" else "leaf"
             return node
         }
 
-        val targetChild = pathToTarget?.firstOrNull()
-        val remainingPath = pathToTarget?.drop(1)
-
         repeat(branchingFactor) { index ->
-            val childPath = when {
-                pathToTarget == null -> null
-                index == targetChild -> remainingPath
-                else -> null
+            val childRemaining = when (remainingTargetPath) {
+                null -> null
+                else -> when {
+                    remainingTargetPath.isEmpty() ->
+                        if (index == 0) emptyList() else null
+                    index == remainingTargetPath.first() -> remainingTargetPath.drop(1)
+                    else -> null
+                }
             }
             shadow.addChild(
                 buildLevel(
                     currentDepth = currentDepth + 1,
                     maxDepth = maxDepth,
                     branchingFactor = branchingFactor,
-                    pathToTarget = childPath,
+                    remainingTargetPath = childRemaining,
                 )
             )
         }
