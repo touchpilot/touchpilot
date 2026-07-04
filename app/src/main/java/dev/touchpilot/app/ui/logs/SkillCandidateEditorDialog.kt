@@ -10,6 +10,7 @@ import android.widget.ScrollView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import dev.touchpilot.app.memory.SkillRisk
+import dev.touchpilot.app.tools.ToolExecutionLog
 import dev.touchpilot.app.ui.detailSectionView
 import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.editText
@@ -91,11 +92,20 @@ class SkillCandidateEditorDialog(
         val dialog = AlertDialog.Builder(activity)
             .setTitle("Review skill candidate")
             .setView(scrollView)
-            .setNegativeButton("Discard", null)
-            .setPositiveButton("Save skill", null)
+            .setNegativeButton("Discard candidate", null)
+            .setPositiveButton("Approve skill", null)
             .create()
 
         dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                ToolExecutionLog.recordChat(
+                    name = "skill_candidate_discarded",
+                    actor = "TouchPilot",
+                    message = "Discarded skill candidate ${candidate.id}",
+                    status = "info",
+                )
+                dialog.dismiss()
+            }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val id = idField.text.toString().trim()
                 val title = titleField.text.toString().trim()
@@ -125,6 +135,12 @@ class SkillCandidateEditorDialog(
                     body = body,
                 )
                 if (onSave(id, markdown)) {
+                    ToolExecutionLog.recordChat(
+                        name = "skill_candidate_approved",
+                        actor = "TouchPilot",
+                        message = "Approved skill candidate $id as ${title.ifBlank { candidate.title }}",
+                        status = "info",
+                    )
                     dialog.dismiss()
                 }
             }
