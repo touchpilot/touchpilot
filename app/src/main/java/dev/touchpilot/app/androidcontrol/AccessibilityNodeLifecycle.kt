@@ -56,21 +56,13 @@ internal inline fun walkUpFrom(
 internal fun AccessibilityNodeInfo.findNodeRecycling(
     predicate: (AccessibilityNodeInfo) -> Boolean
 ): AccessibilityNodeInfo? {
-    if (predicate(this)) return this
-
-    for (index in 0 until childCount) {
-        val child = getChild(index) ?: continue
-        val found = try {
-            child.findNodeRecycling(predicate)
-        } catch (e: Exception) {
-            child.recycleSafely()
-            throw e
-        }
-        if (found != null) return found
-        child.recycleSafely()
-    }
-
-    return null
+    return depthFirstFindRecycling(
+        node = this,
+        childCount = { childCount },
+        getChild = { index -> getChild(index) },
+        recycle = { recycleSafely() },
+        predicate = predicate,
+    )
 }
 
 /**
@@ -82,15 +74,72 @@ internal fun AccessibilityNodeInfo.collectNodesRecycling(
     predicate: (AccessibilityNodeInfo) -> Boolean,
     result: MutableList<AccessibilityNodeInfo>
 ): Boolean {
-    val matchesSelf = predicate(this)
-    if (matchesSelf) result.add(this)
+    return depthFirstCollectRecycling(
+        node = this,
+        childCount = { childCount },
+        getChild = { index -> getChild(index) },
+        recycle = { recycleSafely() },
+        predicate = predicate,
+        result = result,
+    )
+}
+
+/**
+ * Generic depth-first find used by [AccessibilityNodeInfo.findNodeRecycling].
+ * Kept separate so the recycle-on-discard contract can be unit-tested on the JVM.
+ */
+internal fun <N> depthFirstFindRecycling(
+    node: N,
+    childCount: (N) -> Int,
+    getChild: (N, Int) -> N?,
+    recycle: (N) -> Unit,
+    predicate: (N) -> Boolean,
+): N? {
+    if (predicate(node)) return node
+
+    for (index in 0 until childCount(node)) {
+        val child = getChild(node, index) ?: continue
+        val found = try {
+            depthFirstFindRecycling(child, childCount, getChild, recycle, predicate)
+        } catch (e: Exception) {
+            recycle(child)
+            throw e
+        }
+        if (found != null) return found
+        recycle(child)
+    }
+
+    return null
+}
+
+/**
+ * Generic depth-first collect used by [AccessibilityNodeInfo.collectNodesRecycling].
+ * Kept separate so the recycle-on-discard contract can be unit-tested on the JVM.
+ */
+internal fun <N> depthFirstCollectRecycling(
+    node: N,
+    childCount: (N) -> Int,
+    getChild: (N, Int) -> N?,
+    recycle: (N) -> Unit,
+    predicate: (N) -> Boolean,
+    result: MutableList<N>,
+): Boolean {
+    val matchesSelf = predicate(node)
+    if (matchesSelf) result.add(node)
 
     var subtreeHasMatch = matchesSelf
-    for (index in 0 until childCount) {
-        val child = getChild(index) ?: continue
-        val childHasMatch = child.collectNodesRecycling(predicate, result)
+    for (index in 0 until childCount(node)) {
+        val child = getChild(node, index) ?: continue
+        val childHasMatch = depthFirstCollectRecycling(
+            child,
+            childCount,
+            getChild,
+            recycle,
+            predicate,
+            result,
+        )
         if (!childHasMatch) {
-            child.recycleSafely()
+            recycle(child)
         }
         subtreeHasMatch = subtreeHasMatch || childHasMatch
     }
