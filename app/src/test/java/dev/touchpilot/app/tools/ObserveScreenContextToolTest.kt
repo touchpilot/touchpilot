@@ -72,6 +72,29 @@ class ObserveScreenContextToolTest {
     }
 
     @Test
+    fun redactsPasswordFieldContentThatDoesNotMatchTextHeuristics() {
+        val context = ScreenContext(
+            packageName = "com.example.bank",
+            windowTitle = "Login",
+            nodes = listOf(
+                ScreenNode(
+                    nodeId = "0.1",
+                    role = NodeRole.INPUT,
+                    text = ScreenText.of("MySecret1", forceSensitive = true),
+                    isInputField = true,
+                    sensitive = true
+                )
+            )
+        )
+
+        val json = context.toRedactedJson()
+
+        assertTrue(json.contains("[REDACTED]"), json)
+        assertFalse(json.contains("MySecret1"), "password field content leaked: $json")
+        assertTrue(JSONObject(json).getBoolean("containsSensitiveContent"))
+    }
+
+    @Test
     fun redactsSensitiveTextByDefault() {
         val context = ScreenContext(
             packageName = "com.example.bank",

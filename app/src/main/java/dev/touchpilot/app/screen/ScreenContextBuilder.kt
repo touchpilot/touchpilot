@@ -70,7 +70,7 @@ class ScreenContextBuilder(
         return ScreenNode(
             nodeId = node.nodeId,
             role = roleFor(node),
-            text = ScreenText.of(rawText),
+            text = ScreenText.of(rawText, forceSensitive = node.password),
             bounds = node.bounds,
             clickable = node.clickable,
             longClickable = node.longClickable,
@@ -82,7 +82,9 @@ class ScreenContextBuilder(
             sensitive = node.password,
             viewIdResourceName = node.viewIdResourceName,
             className = node.className,
-            contentDescription = rawContentDescription?.let { ScreenText.of(it) }
+            contentDescription = rawContentDescription?.let {
+                ScreenText.of(it, forceSensitive = node.password)
+            }
         )
     }
 

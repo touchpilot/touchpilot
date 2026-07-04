@@ -126,9 +126,17 @@ data class ScreenNode(
 
     fun redactedCopy(): ScreenNode {
         return copy(
-            text = text.redactedCopy(),
-            contentDescription = contentDescription?.redactedCopy()
+            text = redactText(text),
+            contentDescription = contentDescription?.let { redactText(it) }
         )
+    }
+
+    private fun redactText(field: ScreenText): ScreenText {
+        return if (sensitive && !field.isSensitive) {
+            field.copy(displaySafe = "[REDACTED]", isSensitive = true)
+        } else {
+            field.redactedCopy()
+        }
     }
 
     companion object {
@@ -217,7 +225,8 @@ data class NodeBounds(
  * tool-execution paths that need the literal label (e.g. tap-by-text).
  *
  * [isSensitive] is true whenever [SensitiveTextRedactor.containsSensitiveText]
- * matches the raw text. Builders can additionally set
+ * matches the raw text or the caller passes [forceSensitive] because the
+ * source view is a password or secret field. Builders can additionally set
  * [ScreenNode.sensitive] when they know the underlying view is a password or
  * secret field — that flag participates in
  * [ScreenContext.containsSensitiveContent] independently of [isSensitive].
@@ -247,9 +256,9 @@ data class ScreenText(
     companion object {
         val Empty: ScreenText = ScreenText(raw = "", displaySafe = "", isSensitive = false)
 
-        fun of(raw: String): ScreenText {
+        fun of(raw: String, forceSensitive: Boolean = false): ScreenText {
             if (raw.isEmpty()) return Empty
-            val sensitive = SensitiveTextRedactor.containsSensitiveText(raw)
+            val sensitive = forceSensitive || SensitiveTextRedactor.containsSensitiveText(raw)
             val displaySafe = if (sensitive) "[REDACTED]" else SensitiveTextRedactor.redact(raw)
             return ScreenText(raw = raw, displaySafe = displaySafe, isSensitive = sensitive)
         }

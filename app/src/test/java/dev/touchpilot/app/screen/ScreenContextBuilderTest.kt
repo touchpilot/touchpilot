@@ -109,6 +109,30 @@ class ScreenContextBuilderTest {
     }
 
     @Test
+    fun passwordFieldTypedContentIsRedactedInExportEvenWhenBenign() {
+        val passwordInput = AccessibilityNodeSnapshot(
+            nodeId = "0.0",
+            className = "android.widget.EditText",
+            text = "MySecret1",
+            editable = true,
+            password = true,
+            focused = true,
+            bounds = bounds(0, 100, 1000, 200)
+        )
+        val context = builder.build(container(id = "0", children = listOf(passwordInput)))
+        val node = assertNotNull(context.inputFields.singleOrNull())
+
+        assertTrue(node.sensitive)
+        assertTrue(node.text.isSensitive)
+        assertEquals("MySecret1", node.text.raw)
+        assertEquals("[REDACTED]", node.text.displaySafe)
+
+        val json = context.toRedactedJson()
+        assertTrue(json.contains("[REDACTED]"), json)
+        assertFalse(json.contains("MySecret1"), "password field content leaked: $json")
+    }
+
+    @Test
     fun scrollableContainerIsRetainedWithScrollableRole() {
         val list = AccessibilityNodeSnapshot(
             nodeId = "0",

@@ -63,6 +63,36 @@ class ScreenContextTest {
     }
 
     @Test
+    fun screenTextForceSensitiveRedactsBenignLookingLabel() {
+        val text = ScreenText.of("MySecret1", forceSensitive = true)
+        assertEquals("MySecret1", text.raw)
+        assertEquals("[REDACTED]", text.displaySafe)
+        assertTrue(text.isSensitive)
+    }
+
+    @Test
+    fun screenTextForceSensitiveRedactedJsonDoesNotLeakRaw() {
+        val json = ScreenText.of("1234", forceSensitive = true).toJson(redacted = true)
+        assertEquals("[REDACTED]", json.getString("raw"))
+        assertEquals("[REDACTED]", json.getString("displaySafe"))
+        assertTrue(json.getBoolean("isSensitive"))
+    }
+
+    @Test
+    fun screenNodeRedactedCopyHonorsExplicitSensitiveFlag() {
+        val node = ScreenNode(
+            role = NodeRole.INPUT,
+            text = ScreenText.of("1234"),
+            isInputField = true,
+            sensitive = true
+        )
+        val redacted = node.redactedCopy()
+        assertEquals("[REDACTED]", redacted.text.displaySafe)
+        assertTrue(redacted.text.isSensitive)
+        assertFalse(redacted.toJson().toString().contains("1234"))
+    }
+
+    @Test
     fun screenTextOfFlagsEmbeddedEmailAsSensitive() {
         // SensitiveTextRedactor.containsSensitiveText treats embedded emails
         // (and other value-pattern matches like long digit runs or OTP-shaped
