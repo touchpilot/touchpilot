@@ -58,8 +58,8 @@ internal fun AccessibilityNodeInfo.findNodeRecycling(
 ): AccessibilityNodeInfo? {
     return depthFirstFindRecycling(
         node = this,
-        childCount = { childCount },
-        getChild = { index -> getChild(index) },
+        childCount = { it.childCount },
+        getChild = { _, index -> getChild(index) },
         recycle = { recycleSafely() },
         predicate = predicate,
     )
@@ -76,8 +76,8 @@ internal fun AccessibilityNodeInfo.collectNodesRecycling(
 ): Boolean {
     return depthFirstCollectRecycling(
         node = this,
-        childCount = { childCount },
-        getChild = { index -> getChild(index) },
+        childCount = { it.childCount },
+        getChild = { _, index -> getChild(index) },
         recycle = { recycleSafely() },
         predicate = predicate,
         result = result,
