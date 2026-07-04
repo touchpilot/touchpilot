@@ -608,6 +608,12 @@ class SettingsScreenRenderer(
                     )
                 )
                 contentRoot.addView(
+                    activity.secondaryButton("Revoke permissions") {
+                        permissionStore.revoke(extensionTarget)
+                        refreshSettingsScreen()
+                    }
+                )
+                contentRoot.addView(
                     activity.secondaryButton("Remove ${tool.name}") {
                         extensionStore.remove(tool.name, tool.endpoint)
                         permissionStore.revoke(extensionTarget)
