@@ -47,7 +47,6 @@ class SkillLoadMergerTest {
         assertEquals(1, merged.invalid.size)
         assertTrue(merged.invalid.first().errors.first().contains("local invalid"))
     }
-
     private fun skill(id: String, title: String): Skill {
         return Skill(
             id = id,

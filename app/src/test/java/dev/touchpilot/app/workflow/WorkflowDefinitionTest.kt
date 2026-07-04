@@ -247,13 +247,17 @@ class WorkflowTraceSerializerTest {
     assertEquals("Generated skill candidate", candidate?.title)
     assertTrue(candidate?.examples?.isEmpty() == true)
     assertEquals(listOf("open_settings_panel", "tap"), candidate?.allowedTools)
-    val markdown = candidate?.toMarkdown()
-    assertTrue(markdown?.contains("examples: []") == true)
+    assertTrue(candidate?.toMarkdown()?.contains("## Success Criteria") == true)
+    assertTrue(candidate?.toMarkdown()?.contains("He said \"yes\" and path C:\\temp") == true)
+    val skillMarkdown = candidate?.toSkillMarkdown()
+    assertTrue(skillMarkdown?.contains("id: \"generated-skill-candidate\"") == true)
+    assertTrue(skillMarkdown?.contains("allowed_tools:") == true)
+    assertTrue(skillMarkdown?.contains("success_criteria:") == true)
 
     val parsed = parsedSkill(
       SkillParser.parse(
         WorkflowTraceSerializer.slugify(candidate!!.title),
-        markdown!!,
+        skillMarkdown!!,
         setOf("open_settings_panel", "tap"),
       )
     )

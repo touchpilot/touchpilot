@@ -21,18 +21,7 @@ data class WorkflowSkillCandidate(
         allowedTools: List<String> = this.allowedTools,
         successCriteria: List<String> = this.successCriteria,
     ): String {
-        val skillId = WorkflowTraceSerializer.slugify(title)
         return buildString {
-            appendLine("---")
-            appendLine("id: ${yamlScalar(skillId)}")
-            appendLine("title: ${yamlScalar(title)}")
-            appendLine("description: ${yamlScalar(description)}")
-            appendLine("risk: ${risk.name.lowercase()}")
-            appendYamlList("allowed_tools", allowedTools)
-            appendYamlList("success_criteria", successCriteria)
-            appendYamlList("examples", examples)
-            appendLine("---")
-            appendLine()
             appendLine("# ${title}")
             appendLine()
             appendLine("## Description")
@@ -64,19 +53,18 @@ data class WorkflowSkillCandidate(
         }.trim()
     }
 
-    private fun yamlScalar(value: String): String {
-        return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
-    }
-
-    private fun StringBuilder.appendYamlList(key: String, values: List<String>) {
-        if (values.isEmpty()) {
-            appendLine("$key: []")
-            return
-        }
-        appendLine("$key:")
-        values.forEach { value ->
-            appendLine("  - ${yamlScalar(value)}")
-        }
+    fun toSkillMarkdown(aliases: List<String> = emptyList()): String {
+        return WorkflowSkillCandidateMarkdown.build(
+            id = id,
+            title = title,
+            description = description,
+            risk = risk,
+            aliases = aliases,
+            allowedTools = allowedTools,
+            examples = examples,
+            successCriteria = successCriteria,
+            body = toMarkdown()
+        )
     }
 }
 
@@ -190,6 +178,6 @@ object WorkflowSkillCandidateMarkdown {
     }
 
     private fun String.yamlScalar(): String {
-        return "'${replace("'", "''")}'"
+        return "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
     }
 }

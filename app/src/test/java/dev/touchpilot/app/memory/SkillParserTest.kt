@@ -108,6 +108,26 @@ class SkillParserTest {
     }
 
     @Test
+    fun unescapesQuotedApostrophes() {
+        val markdown = """
+            ---
+            id: demo
+            title: 'Kid''s Demo'
+            description: 'It''s ready.'
+            risk: low
+            allowed_tools:
+              - tap
+            ---
+            body
+        """.trimIndent()
+
+        val skill = valid(SkillParser.parse("demo", markdown, knownTools))
+
+        assertEquals("Kid's Demo", skill.title)
+        assertEquals("It's ready.", skill.description)
+    }
+
+    @Test
     fun parsesEscapedQuotedValuesAndInlineEmptyLists() {
         val markdown = """
             ---
@@ -132,26 +152,6 @@ class SkillParserTest {
         assertTrue(skill.aliases.isEmpty())
         assertTrue(skill.examples.isEmpty())
         assertEquals(listOf("He said \"yes\" and path C:\\temp"), skill.successCriteria)
-    }
-
-    @Test
-    fun unescapesQuotedApostrophes() {
-        val markdown = """
-            ---
-            id: demo
-            title: 'Kid''s Demo'
-            description: 'It''s ready.'
-            risk: low
-            allowed_tools:
-              - tap
-            ---
-            body
-        """.trimIndent()
-
-        val skill = valid(SkillParser.parse("demo", markdown, knownTools))
-
-        assertEquals("Kid's Demo", skill.title)
-        assertEquals("It's ready.", skill.description)
     }
 
     @Test
