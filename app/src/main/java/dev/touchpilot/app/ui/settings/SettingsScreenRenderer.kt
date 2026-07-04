@@ -506,14 +506,8 @@ class SettingsScreenRenderer(
                             endpoint = manifest.endpoint,
                             name = manifest.name,
                         )
-                        val requiredFlags = policy.requiredFlagsForExtension(manifest.featureFlags)
-                        permissionStore.grant(
-                            target = extensionTarget,
-                            actions = emptySet(),
-                            featureFlags = requiredFlags,
-                        )
                         recordMcpResult(
-                            "Registered ${manifest.name}. Review extension permissions below and grant list/call access before use."
+                            "Registered ${manifest.name}. Review extension permissions below and grant list/call access, plus any required feature flags, before use."
                         )
                         refreshSettingsScreen()
                     }
