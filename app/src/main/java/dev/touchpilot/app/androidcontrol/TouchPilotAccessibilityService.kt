@@ -224,10 +224,10 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return useActiveRoot { root ->
             val focusedFromFocus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
             if (focusedFromFocus != null) {
-                if (!focusedFromFocus.isEnabled || !focusedFromFocus.isEditableTarget()) {
-                    return@useActiveRoot false
-                }
                 try {
+                    if (!focusedFromFocus.isEnabled || !focusedFromFocus.isEditableTarget()) {
+                        return@useActiveRoot false
+                    }
                     setNodeText(focusedFromFocus, "")
                 } finally {
                     focusedFromFocus.recycleSafely()

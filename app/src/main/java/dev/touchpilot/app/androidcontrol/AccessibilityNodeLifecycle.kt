@@ -32,7 +32,7 @@ internal fun AccessibilityNodeInfo.recycleSafely() {
  * every [getChild] node on the winning path (including the match when it is not
  * [this] root).
  */
-internal inline fun <T> AccessibilityNodeInfo.useFoundNode(
+internal fun <T> AccessibilityNodeInfo.useFoundNode(
     predicate: (AccessibilityNodeInfo) -> Boolean,
     block: (AccessibilityNodeInfo) -> T
 ): T? {
@@ -49,7 +49,7 @@ internal inline fun <T> AccessibilityNodeInfo.useFoundNode(
  * Resolve a dotted node id (for example `"0.2.1"`), run [block] on the target,
  * then recycle every intermediate [getChild] node acquired along the path.
  */
-internal inline fun <T> AccessibilityNodeInfo.useNodeById(
+internal fun <T> AccessibilityNodeInfo.useNodeById(
     nodeId: String,
     block: (AccessibilityNodeInfo) -> T
 ): T? {
@@ -94,7 +94,7 @@ internal inline fun <T> AccessibilityNodeInfo.useNodeById(
  * Collect all nodes matching [predicate], run [block] on the matches, then
  * recycle every [getChild] node retained during the traversal.
  */
-internal inline fun <T> AccessibilityNodeInfo.useMatchingNodes(
+internal fun <T> AccessibilityNodeInfo.useMatchingNodes(
     predicate: (AccessibilityNodeInfo) -> Boolean,
     block: (List<AccessibilityNodeInfo>) -> T
 ): T {
@@ -171,7 +171,7 @@ private fun AccessibilityNodeInfo.collectNodesForUse(
         val childHasMatch = child.collectNodesForUse(predicate, matches, retained)
         if (!childHasMatch) {
             child.recycleSafely()
-            retained.remove(child)
+            retained.removeAll { it === child }
         }
         subtreeHasMatch = subtreeHasMatch || childHasMatch
     }
@@ -281,7 +281,7 @@ internal fun <N> depthFirstCollectRecycling(
 /**
  * Generic counterpart to [AccessibilityNodeInfo.useFoundNode] for JVM tests.
  */
-internal inline fun <N, T> useFoundNodeGeneric(
+internal fun <N, T> useFoundNodeGeneric(
     root: N,
     childCount: (N) -> Int,
     getChild: (N, Int) -> N?,
@@ -308,7 +308,7 @@ internal inline fun <N, T> useFoundNodeGeneric(
 /**
  * Generic counterpart to [AccessibilityNodeInfo.useMatchingNodes] for JVM tests.
  */
-internal inline fun <N, T> useMatchingNodesGeneric(
+internal fun <N, T> useMatchingNodesGeneric(
     root: N,
     childCount: (N) -> Int,
     getChild: (N, Int) -> N?,
@@ -396,7 +396,7 @@ private fun <N> depthFirstCollectForUse(
         )
         if (!childHasMatch) {
             recycle(child)
-            retained.remove(child)
+            retained.removeAll { it === child }
         }
         subtreeHasMatch = subtreeHasMatch || childHasMatch
     }
