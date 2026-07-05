@@ -56,15 +56,6 @@ class ApprovalPromptLifecycleTest {
     @Test
     fun cancelDuringApprovalReleasesBlockedAgentLoop() {
         val approvalShown = CountDownLatch(1)
-        val cancelApplied = CountDownLatch(1)
-        val approvalProvider = dev.touchpilot.app.security.ToolApprovalProvider { _ ->
-            approvalShown.countDown()
-            assertTrue(
-                cancelApplied.await(500, TimeUnit.MILLISECONDS),
-                "Expected cancel to reject the pending approval promptly"
-            )
-            false
-        }
         val conversation = mutableListOf<ChatEvent>()
         val signal = AtomicBoolean(false)
 
@@ -74,19 +65,22 @@ class ApprovalPromptLifecycleTest {
                 cancellationSignal = signal,
                 request = sampleApprovalRequest(),
                 runOnUiThread = { block -> block() },
+                onPromptPosted = { approvalShown.countDown() },
             )
             assertFalse(approved)
         }
 
         agentThread.start()
-        assertTrue(approvalShown.await(500, TimeUnit.MILLISECONDS))
+        assertTrue(
+            approvalShown.await(500, TimeUnit.MILLISECONDS),
+            "Expected approval prompt to be posted before cancel"
+        )
 
         signal.set(true)
         rejectPendingApprovalPrompts(conversation)
-        cancelApplied.countDown()
 
         agentThread.join(1_000)
-        assertFalse(agentThread.isAlive)
+        assertFalse(agentThread.isAlive, "Agent thread should unblock promptly after cancel")
         assertEquals(ApprovalState.REJECTED, (conversation.single() as ChatEvent.ApprovalPrompt).state)
     }
 
@@ -95,6 +89,7 @@ class ApprovalPromptLifecycleTest {
         cancellationSignal: AtomicBoolean,
         request: ToolApprovalRequest,
         runOnUiThread: (() -> Unit) -> Unit,
+        onPromptPosted: () -> Unit = {},
     ): Boolean {
         val latch = CountDownLatch(1)
         val approved = AtomicBoolean(false)
@@ -108,6 +103,7 @@ class ApprovalPromptLifecycleTest {
                 }
             )
             conversation += prompt
+            onPromptPosted()
         }
 
         val approvedByUser = latch.await(5 * 60 * 1000L, TimeUnit.MILLISECONDS) && approved.get()
