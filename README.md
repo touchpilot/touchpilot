@@ -6,6 +6,9 @@ TouchPilot is inspired by OpenClaw and PicoClaw, but it is scoped around one
 hard problem first: letting an AI agent operate an Android device through
 explicit, permissioned, inspectable tools.
 
+Repository note: this project was moved gracefully into the Gittensor (sn74)
+sub-repository and is maintained by the Gittensor community.
+
 <img width="1536" height="1024" alt="touchpilot" src="https://github.com/user-attachments/assets/4099bf82-1504-4443-9b42-cc2d18e92b02" />
 
 ## Goals
