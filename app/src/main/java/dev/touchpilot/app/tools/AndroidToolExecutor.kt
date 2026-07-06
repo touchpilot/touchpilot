@@ -207,6 +207,9 @@ class AndroidToolExecutor(
             "long_press" -> {
                 executeLongPress(args)
             }
+            "double_tap" -> {
+                executeDoubleTap(args)
+            }
             "type_text" -> {
                 executeTypeText(args)
             }
@@ -426,6 +429,17 @@ class AndroidToolExecutor(
             dispatchByBounds = AccessibilityBridge::longPressByBounds,
             successMessage = "longPress",
             failureVerb = "long-press"
+        )
+    }
+
+    private fun executeDoubleTap(args: Map<String, String>): ToolResult {
+        return executeResolvedPress(
+            toolName = "double_tap",
+            args = args,
+            dispatchByNodeId = AccessibilityBridge::doubleTapByNodeId,
+            dispatchByBounds = AccessibilityBridge::doubleTapByBounds,
+            successMessage = "doubleTap",
+            failureVerb = "double-tap"
         )
     }
 

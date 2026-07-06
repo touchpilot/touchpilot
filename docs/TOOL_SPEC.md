@@ -29,6 +29,9 @@ Tools are the only way an agent may affect the Android device.
 - `tap`: tap a semantic target by visible text, stable `node_id`, or bounds.
 - `long_press`: long-press a semantic target by visible text, stable `node_id`,
   bounds, or view ID.
+- `double_tap`: double-tap a semantic target by visible text, stable `node_id`,
+  bounds, or view ID — for double-tap-to-zoom, double-tap-to-like, and word
+  selection.
 - `type_text`: type text into the focused field or selected target.
 - `scroll`: scroll the current view.
 - `scroll_to_element`: scroll a container or the active screen until a node
@@ -50,7 +53,7 @@ Tools are the only way an agent may affect the Android device.
 - `dismiss_keyboard`: hide the soft keyboard if it is visible.
 
 The app implements `observe_screen`, `observe_screen_context`, `open_app`,
-`open_settings_panel`, `tap`, `long_press`, `type_text`, `scroll`, `swipe`, `press_back`,
+`open_settings_panel`, `tap`, `long_press`, `double_tap`, `type_text`, `scroll`, `swipe`, `press_back`,
 `press_home`, `recent_apps`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`,
 `wait_for_element`, `focus_input`, `clear_text`, and `dismiss_keyboard` from
 the Android Tools screen and the agent command-provider loop.
@@ -91,6 +94,16 @@ setting.
 `view_id`. Like `tap`, it resolves the target through the shared selector
 resolver before dispatching. Ambiguous or missing targets fail safely instead
 of guessing.
+
+`double_tap` accepts exactly one selector (`text`, `node_id`, `bounds`, or
+`view_id`) and resolves it through the same shared selector resolver as `tap`
+and `long_press`. It dispatches two brief taps at the resolved target's center
+separated by a short gap that keeps the pair inside the platform double-tap
+timeout, so surfaces recognize it as a double-tap (zoom, like, word selection)
+rather than two independent taps. There is no double-click accessibility action,
+so `double_tap` always uses a dispatched gesture rather than `ACTION_CLICK`. It
+is MEDIUM risk, retries like other navigation actions, and its verifier passes
+only when the screen or focus changed. Ambiguous or missing targets fail safely.
 
 `scroll_to_element` is a composite tool built on `scroll` and the `find_element`
 matcher. It accepts the `find_element` query filters (`text`,
