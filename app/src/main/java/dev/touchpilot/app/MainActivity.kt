@@ -27,6 +27,7 @@ import dev.touchpilot.app.agent.AgentStepStopReason
 import dev.touchpilot.app.agent.DefaultLocalReasoningCore
 import dev.touchpilot.app.agent.LocalReasoningContext
 import dev.touchpilot.app.agent.LocalReasoningCore
+import dev.touchpilot.app.logging.DebugTraceExporter.BugReportRedactionLevel
 import dev.touchpilot.app.agent.defaultAgentRunInvocation
 import dev.touchpilot.app.workflow.buildWorkflowReplayEngine
 import dev.touchpilot.app.androidcontrol.AccessibilityBridge
@@ -121,7 +122,8 @@ class MainActivity : Activity() {
         debugTraceExporter = DebugTraceExporter(
             context = this,
             accessibilityConnected = { AccessibilityBridge.isConnected() },
-            observeScreen = { toolExecutor.observeScreen() }
+            observeScreen = { toolExecutor.observeScreen() },
+            foregroundAppSummary = { AccessibilityBridge.getForegroundApp().summarize() }
         )
         demonstrationManager = dev.touchpilot.app.demonstration.DemonstrationSessionManager(
             config = dev.touchpilot.app.demonstration.DemonstrationPreferences.recordingConfig(preferences),
@@ -701,7 +703,7 @@ class MainActivity : Activity() {
         return LogsScreenRenderer(
             activity = this,
             contentRoot = contentRoot,
-            exportDebugTrace = ::exportDebugTrace,
+            exportBugReport = ::exportBugReport,
             listWorkflowTraces = workflowTraceStore::all,
             deleteWorkflowTrace = workflowTraceStore::delete,
             refreshLogsScreen = { showSection(AppSection.LOGS) },
@@ -903,8 +905,8 @@ class MainActivity : Activity() {
         return debugTraceExporter.exportRunTrace(record)
     }
 
-    private fun exportDebugTrace(): File {
-        return debugTraceExporter.exportDebugTrace()
+    private fun exportBugReport(redactionLevel: BugReportRedactionLevel = BugReportRedactionLevel.Safe): File {
+        return debugTraceExporter.exportBugReport(redactionLevel)
     }
 
     private fun replayDemonstration(sessionId: String) {

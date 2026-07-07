@@ -52,6 +52,10 @@ adb shell monkey -p dev.touchpilot.app 1
 - [ ] Foreground service notification appears when the agent loop is active.
 - [ ] Battery optimization is disabled or a documented OEM workaround is applied
       (see [Known Limitations](KNOWN_LIMITATIONS.md)).
+- [ ] Foreground service persistence review:
+  - [ ] Run an agent task, background the app, and wait 5 minutes.
+  - [ ] Return to app and confirm tool execution still works.
+  - [ ] Document OEM settings path used to verify service persistence.
 - [ ] `Export Debug Trace` writes a file under the app files directory.
 
 ## 2. Core tool execution

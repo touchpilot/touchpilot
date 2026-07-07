@@ -36,6 +36,24 @@ Each limitation includes:
    - exact tool/action and prompt
    - accessibility service and app permissions state
 
+## Battery and foreground-service review matrix
+
+This table tracks manual compatibility review across Android versions and OEM skins.
+
+### Milestone 13 review checkpoints
+
+| Profile | Android / API | Battery optimization | Foreground-service behavior | Tracking |
+|---------|---------------|----------------------|----------------------------|----------|
+| Pixel (stock) | 31+ | not fully reviewed | not fully reviewed | Add matrix entry |
+| Samsung One UI | 31+ | not fully reviewed | not fully reviewed | Add matrix entry |
+| Xiaomi MIUI / HyperOS | 31+ | not fully reviewed | not fully reviewed | Add matrix entry |
+| Oppo / Realme ColorOS | 31+ | not fully reviewed | not fully reviewed | Add matrix entry |
+| OnePlus OxygenOS | 31+ | not fully reviewed | not fully reviewed | Add matrix entry |
+
+Populate each row with explicit test notes (keep the app open, put it in background,
+re-open after 10+ minutes, and report whether a live session can resume). Include
+at least one exported bug report and a screenshot of the device settings page used.
+
 ## Emulator and stock Android
 
 ### Weak or empty accessibility trees
