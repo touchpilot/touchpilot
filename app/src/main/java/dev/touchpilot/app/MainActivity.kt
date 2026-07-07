@@ -7,7 +7,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.provider.Settings
 import android.view.View
 import android.view.ViewTreeObserver
@@ -54,7 +56,10 @@ import dev.touchpilot.app.ui.RuntimeIndicator
 import dev.touchpilot.app.ui.label
 import dev.touchpilot.app.ui.welcomeDetail
 import dev.touchpilot.app.ui.workingDetail
+import dev.touchpilot.app.ui.chat.ActiveSkillHeader
 import dev.touchpilot.app.ui.chat.ChatEvent
+import dev.touchpilot.app.onboarding.DeviceCompatibilitySummary
+import dev.touchpilot.app.onboarding.CompatibilityOnboarding
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
@@ -95,8 +100,10 @@ class MainActivity : Activity() {
 
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
+    private var isCompatibilityGateDialogShowing: Boolean = false
     private val conversation = mutableListOf<ChatEvent>()
     private lateinit var demonstrationManager: dev.touchpilot.app.demonstration.DemonstrationSessionManager
+    private var localSkillIds: Set<String> = emptySet()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -255,6 +262,7 @@ class MainActivity : Activity() {
     private fun submitChatMessage() {
         val task = chatTaskInput.text.toString().trim()
         if (task.isEmpty()) return
+        if (!isDeviceReadyForRun()) return
         hideKeyboard(chatTaskInput)
         chatTaskInput.text.clear()
         agentRunController.startFromChat(task)
@@ -269,6 +277,8 @@ class MainActivity : Activity() {
             agentRunState = { agentRunController.runState },
             runtimeIndicator = ::currentRuntimeIndicator,
             skillTitle = { selectedSkill()?.title ?: "No skill selected" },
+            activeSkill = { selectedSkill()?.let { ActiveSkillHeader.from(it) } },
+            clearActiveSkill = ::clearActiveSkill,
             cancelAgentRun = agentRunController::cancelRun,
             openRunDetail = ::openRunDetail,
             openSkillDetail = ::openSkillDetail,
@@ -357,20 +367,45 @@ class MainActivity : Activity() {
                 navigationController.openSettingsPanel(SettingsPanel.TOOLS)
                 showSection(AppSection.SETTINGS)
             },
-            runSkill = ::runSkillFromProduct,
+            runSkill = ::openSkillInChat,
             openWorkflowDetail = ::openWorkflowDetail,
         ).render()
     }
 
-    private fun runSkillFromProduct(skillId: String) {
+    /**
+     * Turns a Use-page skill card into an entry point into chat (#386): activate
+     * the skill, open chat with it visibly active, and prefill a starter prompt
+     * so the user runs it in context rather than triggering a surprise run.
+     */
+    private fun openSkillInChat(skillId: String) {
         val skill = skillRegistry.allSkills().firstOrNull { it.id == skillId } ?: return
+        if (!isDeviceReadyForRun()) return
         skillRegistry.setActiveSkill(skill.id)
-        val task = skill.examples.firstOrNull()?.takeIf { it.isNotBlank() } ?: skill.title
-        agentRunController.startFromChat(task)
+        val starter = skill.examples.firstOrNull { it.isNotBlank() }.orEmpty()
+        showSection(AppSection.CHAT)
+        prefillChatInput(starter)
+    }
+
+    private fun clearActiveSkill() {
+        skillRegistry.setActiveSkill(null)
+        showSection(AppSection.CHAT)
+    }
+
+    private fun prefillChatInput(text: String) {
+        if (!::chatTaskInput.isInitialized) return
+        chatTaskInput.setText(text)
+        chatTaskInput.setSelection(chatTaskInput.text?.length ?: 0)
+        chatTaskInput.requestFocus()
+        if (text.isNotEmpty()) showKeyboard(chatTaskInput)
+    }
+
+    private fun showKeyboard(anchor: View) {
+        val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        manager.showSoftInput(anchor, InputMethodManager.SHOW_IMPLICIT)
     }
 
     private fun runSkill(skillId: String) {
-        runSkillFromProduct(skillId)
+        openSkillInChat(skillId)
     }
 
     private fun openWorkflowDetail(workflowId: String) {
@@ -410,6 +445,7 @@ class MainActivity : Activity() {
         definition: WorkflowDefinition,
         captureWorkflowTrace: Boolean = false,
     ) {
+        if (!isDeviceReadyForRun()) return
         agentRunController.startWorkflowReplay(
             definition = definition,
             captureWorkflowTrace = captureWorkflowTrace,
@@ -572,6 +608,7 @@ class MainActivity : Activity() {
             contentRoot = contentRoot,
             preferences = preferences,
             skills = skillRegistry.allSkills(),
+            isLocalSkill = { skillId -> localSkillIds.contains(skillId.lowercase()) },
             localModelRuntime = localModelRuntime,
             activeSettingsPanel = { navigationController.activeSettingsPanel },
             openSettingsPanel = navigationController::openSettingsPanel,
@@ -592,6 +629,9 @@ class MainActivity : Activity() {
             toolExecutionController = toolExecutionController(),
             recordMcpResult = mcpResultStore::recordMcpResult,
             mcpResult = mcpResultStore::forMcp,
+            openAppInfoSettings = ::openAppInfoSettings,
+            openBatteryOptimizationSettings = ::openBatteryOptimizationSettings,
+            compatibilitySummary = ::compatibilitySummary,
             refreshSettingsScreen = { showSection(AppSection.SETTINGS) },
             demonstrationRecordingEnabled = {
                 dev.touchpilot.app.demonstration.DemonstrationPreferences.isRecordingEnabled(preferences)
@@ -705,12 +745,103 @@ class MainActivity : Activity() {
         manager.hideSoftInputFromWindow(anchor.windowToken, 0)
     }
 
+    private fun compatibilitySummary(): DeviceCompatibilitySummary {
+        return CompatibilityOnboarding.buildSummary(this, AccessibilityBridge.isConnected())
+    }
+
+    private fun isDeviceReadyForRun(): Boolean {
+        val summary = compatibilitySummary()
+        if (summary.isReadyForRun) return true
+
+        showCompatibilityGateDialog(summary)
+        return false
+    }
+
+    private fun showCompatibilityGateDialog(summary: DeviceCompatibilitySummary) {
+        if (isCompatibilityGateDialogShowing) return
+        isCompatibilityGateDialogShowing = true
+
+        val requiredBlocks = summary.checks.filter { it.required && !it.passed }
+        val message = buildString {
+            appendLine("TouchPilot is not ready for automated runs yet.")
+            appendLine()
+            appendLine("Blocking checks:")
+            requiredBlocks.forEachIndexed { index, check ->
+                appendLine("${index + 1}. ${check.title}: ${check.details}")
+            }
+            appendLine()
+            append("Open Compatibility to complete onboarding.")
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Compatibility check failed")
+            .setMessage(message)
+            .setPositiveButton("Open compatibility") { _, _ ->
+                navigationController.openSettingsPanel(SettingsPanel.COMPATIBILITY)
+                showSection(AppSection.SETTINGS)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        dialog.setOnDismissListener {
+            isCompatibilityGateDialogShowing = false
+        }
+    }
+
     private fun openAccessibilitySettings() {
         startActivity(
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         )
+    }
+
+    private fun openAppInfoSettings() {
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure {
+            Toast.makeText(
+                this,
+                "Unable to open app details settings.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            Toast.makeText(
+                this,
+                "Battery optimization settings are not user-configurable on this Android version.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.fromParts("package", packageName, null)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching {
+            startActivity(intent)
+        }.onFailure {
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }.onFailure {
+                Toast.makeText(
+                    this,
+                    "Unable to open battery optimization settings.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     private fun openRunDetail(runId: String) {
@@ -793,6 +924,7 @@ class MainActivity : Activity() {
     }
 
     private fun reloadSkills() {
+        localSkillIds = skillFileStore.skillIds()
         val skillLoad = skillStore.load()
         skillRegistry = SkillRegistry(skillLoad.skills, SharedPreferencesSkillStore(preferences))
         skillLoad.invalid.forEach { invalid ->

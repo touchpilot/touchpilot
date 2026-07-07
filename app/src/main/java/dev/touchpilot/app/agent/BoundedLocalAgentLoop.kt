@@ -72,7 +72,7 @@ class BoundedLocalAgentLoop(
                 publishSteps()
                 return stopped(transcript, events, steps, AgentStepStopReason.NO_VALID_ACTION)
             }
-            transcript.appendLine("Model: $raw")
+            transcript.appendLine("Model: ${SensitiveTextRedactor.redact(raw)}")
 
             val command = runCatching {
                 AgentCommandParser.parse(raw)
@@ -83,7 +83,7 @@ class BoundedLocalAgentLoop(
                 return stopped(transcript, events, steps, AgentStepStopReason.NO_VALID_ACTION)
             }
             if (command.finalAnswer != null) {
-                transcript.appendLine("Final: ${command.finalAnswer}")
+                transcript.appendLine("Final: ${SensitiveTextRedactor.redact(command.finalAnswer)}")
                 emit(AgentEvent.FinalAnswer(command.finalAnswer))
                 steps += AgentStepFactory.stop(
                     sequenceNumber = stepIndex,

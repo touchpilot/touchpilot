@@ -32,6 +32,7 @@ internal object AccessibilityNodeSnapshotAdapter {
                 for (index in 0 until node.childCount) {
                     val child = node.getChild(index) ?: continue
                     add(from(child, "$nodeId.$index", depth + 1, maxDepth))
+                    child.recycleSafely()
                 }
             }
         } else {

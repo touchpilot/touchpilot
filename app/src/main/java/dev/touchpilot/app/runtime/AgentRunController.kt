@@ -26,7 +26,6 @@ import dev.touchpilot.app.workflow.WorkflowDefinition
 import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.workflow.WorkflowTraceSummarizer
-import dev.touchpilot.app.ui.chat.ApprovalState
 import dev.touchpilot.app.ui.chat.ChatEvent
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -68,6 +67,11 @@ class AgentRunController(
 
     fun startFromChat(task: String) {
         val pending = pendingClarification
+        if (pending == null && isAgentRunInProgress(runState)) {
+            rejectOverlappingRunStart()
+            return
+        }
+
         val originalTask = pending?.originalTask
         val agentTask = if (pending != null) {
             pendingClarification = null
@@ -197,15 +201,18 @@ class AgentRunController(
                     stopReason = stopReason,
                     errorMessage = record.errorMessage,
                 )
-                if (cancellationSignal.get()) {
-                    setRunState(AgentRunState.CANCELLED)
-                } else if (runOutcome.isFailure ||
-                    (record.result?.events?.any { it is AgentEvent.ToolFailed || it is AgentEvent.PolicyBlocked } == true)
-                ) {
-                    setRunState(AgentRunState.FAILED)
+                val runFailed = chatRunFailed(
+                    runOutcomeFailed = runOutcome.isFailure,
+                    resultEvents = record.result?.events,
+                )
+                val terminalState = resolveChatRunTerminalState(
+                    cancelled = cancellationSignal.get(),
+                    runFailed = runFailed,
+                    stopReason = stopReason,
+                )
+                setRunState(terminalState)
+                if (terminalState == AgentRunState.FAILED) {
                     rejectPendingApprovals()
-                } else {
-                    setRunState(AgentRunState.COMPLETED)
                 }
                 refreshStepTimeline(stepTimeline, steps, true)
                 finishAgentChatRun(
@@ -236,6 +243,13 @@ class AgentRunController(
         captureWorkflowTrace: Boolean = false,
         onFinished: ((success: Boolean, message: String, result: AgentRunResult?) -> Unit)? = null,
     ) {
+        if (isAgentRunInProgress(runState)) {
+            val message = overlappingRunStartMessage()
+            onFinished?.invoke(false, message, null)
+            rejectOverlappingRunStart()
+            return
+        }
+
         cancellationSignal.set(false)
         setRunState(AgentRunState.RUNNING)
 
@@ -323,15 +337,13 @@ class AgentRunController(
                 }
                 val result = runOutcome.getOrNull()
                 val completedSuccessfully = result?.stopReason == AgentStepStopReason.COMPLETED
-                if (cancellationSignal.get()) {
-                    setRunState(AgentRunState.CANCELLED)
-                } else if (completedSuccessfully) {
-                    setRunState(AgentRunState.COMPLETED)
-                } else if (runOutcome.isFailure) {
-                    setRunState(AgentRunState.FAILED)
-                } else {
-                    setRunState(AgentRunState.FAILED)
-                }
+                setRunState(
+                    resolveWorkflowReplayTerminalState(
+                        cancelled = cancellationSignal.get(),
+                        runFailed = runOutcome.isFailure,
+                        stopReason = result?.stopReason,
+                    )
+                )
                 refreshStepTimeline(stepTimeline, steps, true)
                 finishAgentChatRun(
                     record = record,
@@ -353,6 +365,7 @@ class AgentRunController(
     fun cancelRun() {
         cancellationSignal.set(true)
         demonstrationManager?.cancelRun()
+        pendingClarification = null
         setRunState(AgentRunState.CANCELLED)
         rejectPendingApprovals()
         conversation += ChatEvent.Agent("Run cancelled.", "Stopped by user request.")
@@ -364,6 +377,7 @@ class AgentRunController(
         val approved = AtomicBoolean(false)
 
         runOnUiThread {
+            setRunState(AgentRunState.WAITING_APPROVAL)
             val prompt = ChatEvent.ApprovalPrompt(
                 request = request,
                 onDecision = { decision ->
@@ -375,7 +389,13 @@ class AgentRunController(
             showChat()
         }
 
-        return latch.await(APPROVAL_TIMEOUT_MS, TimeUnit.MILLISECONDS) && approved.get()
+        val approvedByUser = latch.await(APPROVAL_TIMEOUT_MS, TimeUnit.MILLISECONDS) && approved.get()
+        runOnUiThread {
+            if (!cancellationSignal.get() && runState == AgentRunState.WAITING_APPROVAL) {
+                setRunState(AgentRunState.RUNNING)
+            }
+        }
+        return approvedByUser
     }
 
     fun findRun(runId: String): AgentRunRecord? {
@@ -404,6 +424,11 @@ class AgentRunController(
         )
         refreshExecutionLog()
         refreshStatus()
+
+        if (result?.stopReason == AgentStepStopReason.USER_CANCELLED && cancellationSignal.get()) {
+            showChat()
+            return
+        }
 
         when {
             result?.stopReason == AgentStepStopReason.CLARIFICATION_NEEDED -> {
@@ -566,17 +591,29 @@ class AgentRunController(
         )
     }
 
+    private fun rejectOverlappingRunStart() {
+        val detail = overlappingRunStartMessage()
+        conversation += ChatEvent.Agent("Run already in progress.", detail)
+        ToolExecutionLog.recordChat(
+            name = "run_start_rejected",
+            actor = "TouchPilot",
+            message = detail,
+            status = "blocked",
+        )
+        showChat()
+    }
+
+    private fun overlappingRunStartMessage(): String {
+        return "Wait for the current run to finish or tap Stop before starting another one."
+    }
+
     private fun setRunState(state: AgentRunState) {
         runState = state
         showChat()
     }
 
     private fun rejectPendingApprovals() {
-        conversation.forEach { event ->
-            if (event is ChatEvent.ApprovalPrompt && event.state == ApprovalState.PENDING) {
-                event.state = ApprovalState.REJECTED
-            }
-        }
+        rejectPendingApprovalPrompts(conversation)
     }
 
     private fun removeWorkingIndicator(workingIndex: Int) {

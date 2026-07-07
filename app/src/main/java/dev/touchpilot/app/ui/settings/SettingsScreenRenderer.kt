@@ -14,6 +14,7 @@ import com.google.android.material.card.MaterialCardView
 import dev.touchpilot.app.R
 import dev.touchpilot.app.agent.AgentProviderMode
 import dev.touchpilot.app.localinference.LiteRtCommandModelRuntime
+import dev.touchpilot.app.logging.DeveloperLogEntry
 import dev.touchpilot.app.mcp.ExternalCapabilityInvoker
 import dev.touchpilot.app.mcp.ExternalCapabilityInvokeResult
 import dev.touchpilot.app.mcp.LocalExtensionTool
@@ -40,6 +41,7 @@ import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
 import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.tools.ToolExecutionLog
+import dev.touchpilot.app.onboarding.DeviceCompatibilitySummary
 import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.RuntimeIndicator
@@ -65,6 +67,7 @@ class SettingsScreenRenderer(
     private val contentRoot: LinearLayout,
     private val preferences: SharedPreferences,
     private val skills: List<Skill>,
+    private val isLocalSkill: (String) -> Boolean = { false },
     private val localModelRuntime: LiteRtCommandModelRuntime,
     private val toolExecutionController: ToolExecutionController,
     private val activeSettingsPanel: () -> SettingsPanel?,
@@ -77,12 +80,15 @@ class SettingsScreenRenderer(
     private val openSkillDetail: (String) -> Unit,
     private val currentProviderMode: () -> AgentProviderMode,
     private val openAccessibilitySettings: () -> Unit,
+    private val openAppInfoSettings: () -> Unit,
+    private val openBatteryOptimizationSettings: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
     private val bindKeyboardScrollSpacer: (View) -> Unit,
     private val getFocusSelectorIndex: () -> Int,
     private val setFocusSelectorIndex: (Int) -> Unit,
     private val getLastFocusInputArgs: () -> Map<String, String>?,
     private val setLastFocusInputArgs: (Map<String, String>?) -> Unit,
+    private val compatibilitySummary: () -> DeviceCompatibilitySummary,
     private val recordMcpResult: (String) -> Unit,
     private val mcpResult: () -> String,
     private val refreshSettingsScreen: () -> Unit,
@@ -138,8 +144,10 @@ class SettingsScreenRenderer(
         contentRoot.addView(settingsIntro(panel.intro))
         contentRoot.addView(settingsGoBackButton())
         when (panel) {
+            SettingsPanel.COMPATIBILITY -> renderCompatibilityPanel()
             SettingsPanel.SKILLS -> renderSkillsPanel()
             SettingsPanel.TOOLS -> renderToolsPanel()
+            SettingsPanel.HELP -> renderHelpPanel()
             SettingsPanel.MCP -> renderMcpPanel()
             SettingsPanel.CLOUD -> renderCloudPanel()
             SettingsPanel.RUNTIME -> renderRuntimePanel()
@@ -162,6 +170,7 @@ class SettingsScreenRenderer(
                 activity.timelineCard(
                     title = "Active skill scope",
                     body = buildString {
+                        appendLine("Source: ${skillSourceLabel(active)}")
                         appendLine(SkillDetailFormatter.displayDescription(active))
                         appendLine()
                         append("${active.allowedTools.size} allowed tools")
@@ -181,11 +190,15 @@ class SettingsScreenRenderer(
 
         skills.forEach { skill ->
             val enabled = isSkillEnabled(skill.id)
-            val description = SkillDetailFormatter.displayDescription(skill)
+            val description = buildString {
+                append(SkillDetailFormatter.displayDescription(skill).ifBlank { "No description provided" })
+                appendLine()
+                append("${skillSourceLabel(skill)} · ${skill.allowedTools.size} allowed tool${if (skill.allowedTools.size == 1) "" else "s"}")
+            }
             contentRoot.addView(
                 skillSelectRow(
                     title = skill.title,
-                    subtitle = description.ifBlank { "No description provided" },
+                    subtitle = description.trimEnd(),
                     badge = SkillDetailFormatter.formatLabel(skill.risk),
                     enabled = enabled,
                     selected = selectedSkillId() == skill.id,
@@ -283,6 +296,51 @@ class SettingsScreenRenderer(
         ).render()
     }
 
+    private fun renderHelpPanel() {
+        contentRoot.addView(
+            activity.summaryCard(
+                title = "Known limitations",
+                value = "Updated for real-device beta",
+                chipText = "v1",
+                chipAccent = true,
+            )
+        )
+
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Before filing a bug",
+                body = "Use this order: verify your OEM profile, then check known issue and workaround, then file an issue only if no existing entry applies."
+            )
+        )
+        contentRoot.addView(
+            activity.formLabel("Common real-device limitations")
+        )
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Accessibility tree sparsity",
+                body = "Some custom drawables / WebView-heavy screens do not expose full accessibility elements. Retry with `wait_for_idle` and OCR fallback."
+            )
+        )
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Background service suspension",
+                body = "Some OEMs aggressively stop AccessibilityService in background. Disable battery optimization and verify permissions before long automation sessions."
+            )
+        )
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Settings panel targets",
+                body = "Certain OEM `Settings` launchers open a generic panel. Use explicit navigation paths (open app settings manually first) and report launcher package details."
+            )
+        )
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "If missing",
+                body = "Open the Device Compatibility Checklist and append a result log under `docs/compatibility/results/` so this page can be updated."
+            )
+        )
+    }
+
     private fun renderRecordingPanel() {
         val enabled = demonstrationRecordingEnabled()
         val autoExport = demonstrationAutoExportEnabled()
@@ -342,25 +400,17 @@ class SettingsScreenRenderer(
         contentRoot.addView(activity.formLabel("Recording mode"))
         contentRoot.addView(
             skillSelectRow(
-                title = "Record demonstrations",
-                subtitle = "Capture tool calls and screen state for each agent action",
-                badge = if (enabled) "on" else null,
+                title = "Demonstration mode",
+                subtitle = if (enabled) {
+                    "Demonstration capture is live for this run session. You can stop at any time."
+                } else {
+                    "Enable capture before running an agent task."
+                },
+                badge = if (enabled) "recording" else "off",
                 enabled = true,
                 selected = enabled,
-                onSelect = { onDemonstrationRecordingToggled(true) },
-                onToggleEnabled = null,
-                onViewDetails = null,
-            )
-        )
-        contentRoot.addView(
-            skillSelectRow(
-                title = "Do not record",
-                subtitle = "Run agents without capturing demonstration data",
-                badge = if (!enabled) "active" else null,
-                enabled = true,
-                selected = !enabled,
-                onSelect = { onDemonstrationRecordingToggled(false) },
-                onToggleEnabled = null,
+                onSelect = null,
+                onToggleEnabled = { onDemonstrationRecordingToggled(!enabled) },
                 onViewDetails = null,
             )
         )
@@ -567,6 +617,8 @@ class SettingsScreenRenderer(
         if (extensionTools.isEmpty()) {
             contentRoot.addView(activity.timelineCard("No extension tools registered", "Add a local MCP tool above to store it here."))
         } else {
+            val extensionAuditEntries = ToolExecutionLog.recentEntries()
+                .filter { it.type == "capability" && it.source == "local_extension" }
             extensionTools.forEach { tool ->
                 val extensionTarget = ExternalCapabilityTarget(
                     kind = ExternalCapabilityKind.LOCAL_EXTENSION,
@@ -575,10 +627,12 @@ class SettingsScreenRenderer(
                 )
                 val grant = permissionStore.findGrant(extensionTarget)
                 val requiredFlags = policy.requiredFlagsForExtension(tool.manifest.featureFlags)
+                val extensionLastUsed = lastExtensionUsageFor(tool, extensionAuditEntries)
                 contentRoot.addView(
                     activity.timelineCard(
                         title = tool.name,
                         body = buildString {
+                            appendLine("Permission scope: local extension")
                             appendLine(tool.description.ifBlank { "No description provided." })
                             appendLine("api_version: ${tool.manifest.apiVersion}")
                             appendLine("Endpoint: ${tool.endpoint}")
@@ -592,6 +646,7 @@ class SettingsScreenRenderer(
                                     appendLine("- $flag: ${permissionLabel(grant?.allowsFeature(flag) == true)}")
                                 }
                             }
+                            appendLine("Last used: ${extensionLastUsed}")
                         },
                         actionHint = "Grant extension permissions",
                         onClick = {
@@ -772,6 +827,20 @@ class SettingsScreenRenderer(
 
     private fun permissionLabel(granted: Boolean): String = if (granted) "granted" else "denied (default)"
 
+    private fun skillSourceLabel(skill: Skill): String {
+        return if (isLocalSkill(skill.id.lowercase())) "Imported" else "Bundled"
+    }
+
+    private fun lastExtensionUsageFor(tool: LocalExtensionTool, entries: List<DeveloperLogEntry>): String {
+        val match = entries.firstOrNull {
+            it.type == "capability" &&
+                it.source == "local_extension" &&
+                it.target.contains(tool.endpoint, ignoreCase = true) &&
+                it.target.contains(tool.name, ignoreCase = true)
+        } ?: return "never"
+        return "recent at ${DeveloperLogEntry.formatShortTimestamp(match.timestampMillis)}"
+    }
+
     private fun invokeExternalCapability(
         endpoint: String,
         action: ExternalCapabilityAction,
@@ -849,10 +918,12 @@ class SettingsScreenRenderer(
                 id = when (panel) {
                     SettingsPanel.SKILLS -> R.id.settings_panel_skills_button
                     SettingsPanel.TOOLS -> R.id.settings_panel_tools_button
+                    SettingsPanel.HELP -> R.id.settings_panel_help_button
                     SettingsPanel.MCP -> R.id.settings_panel_mcp_button
                     SettingsPanel.CLOUD -> R.id.settings_panel_cloud_button
                     SettingsPanel.RUNTIME -> R.id.settings_panel_runtime_button
                     SettingsPanel.RECORDING -> R.id.settings_panel_recording_button
+                    SettingsPanel.COMPATIBILITY -> R.id.settings_panel_compatibility_button
                 }
             }
             val content = LinearLayout(activity).apply {
@@ -879,6 +950,71 @@ class SettingsScreenRenderer(
             container.addView(row.withMargins(top = 4, bottom = 6))
         }
         return container.withMargins(bottom = 12)
+    }
+
+    private fun renderCompatibilityPanel() {
+        val summary = compatibilitySummary()
+        val ready = if (summary.isReadyForRun) "ready" else "not ready"
+
+        contentRoot.addView(
+            activity.summaryCard(
+                title = "Real-device onboarding",
+                value = summary.deviceLabel,
+                chipText = ready,
+                chipAccent = summary.isReadyForRun,
+            )
+        )
+
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Required checks",
+                body = summary.checks.joinToString("\n\n") { check ->
+                    "${check.title}: ${check.status}\n${check.details}${if (check.required && !check.passed) "\nAction required." else ""}"
+                }
+            )
+        )
+
+        if (!summary.isReadyForRun) {
+            contentRoot.addView(activity.formLabel("Required setup actions"))
+            val actions = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+
+            actions.addView(activity.primaryButton("Open Accessibility Settings") { openAccessibilitySettings() })
+            actions.addView(activity.secondaryButton("Open app details") { openAppInfoSettings() })
+            actions.addView(
+                activity.secondaryButton("Battery optimization settings") {
+                    openBatteryOptimizationSettings()
+                }
+            )
+
+            contentRoot.addView(actions)
+        }
+
+        contentRoot.addView(activity.formLabel("Real-device beta checklist"))
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Compatibility validation",
+                body = buildString {
+                    appendLine("1) Install app and launch on physical device.")
+                    appendLine("2) Enable TouchPilot accessibility service.")
+                    appendLine("3) Confirm accessibility works in Settings and touch operations.")
+                    appendLine("4) Disable battery optimization if automation drops in background.")
+                    appendLine("5) Export debug trace after failures for local review.")
+                }
+            )
+        )
+
+        contentRoot.addView(activity.formLabel("Known limitations"))
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Known limitations",
+                body = buildString {
+                    appendLine("- OEM-specific Settings screens can differ by skin and may show different options.")
+                    appendLine("- Accessibility trees may be sparse in custom-drawn or WebView-heavy apps.")
+                    appendLine("- Background tasks can be killed aggressively on some vendor ROMs.")
+                    appendLine("- Use local logs and device-specific notes to report compatibility gaps.")
+                }
+            )
+        )
     }
 
     private fun skillSelectRow(

@@ -118,13 +118,17 @@ future module-split direction.
 TouchPilot 1.0 freezes the tool, skill, workflow, and policy contracts a
 maintainer or third-party author builds against (issue #389):
 
+- [User Guide](docs/USER_GUIDE.md) — setup and day-0 workflow for beta testing
+- [Skill Authoring Guide](docs/SKILL_AUTHORING_GUIDE.md) — local skill creation and review checklist
 - [Contracts](docs/CONTRACTS.md) — audit checklist, version registry, and
   changelog since Milestone 14
+- [Safety Model](docs/SAFETY_MODEL.md) — policy boundary, approval behavior, redaction scope, and verification checks
 - [Tool Spec](docs/TOOL_SPEC.md), [Skills](docs/SKILLS.md),
   [Workflows](docs/WORKFLOWS.md), [Policy](docs/POLICY.md) — per-contract
   schema docs
 - [Local Inference](docs/LOCAL_INFERENCE.md) — LiteRT command router manifest
   contract
+- [Changelog](docs/CHANGELOG.md) — stable 1.0 candidate milestones and release notes
 
 ## Compatibility Testing
 
@@ -142,5 +146,8 @@ Run the instrumentation smoke test on a connected device or emulator:
   --tests 'dev.touchpilot.app.compatibility.DeviceCompatibilitySmokeLiveTest'
 ```
 
-## Community
-https://discord.gg/TvXwsNbx
+## Gittensor & SN74
+TouchPilot is part of the Gittensor and SN74 community. This project has been integrated into the Gittensor (SN74) ecosystem. Community feedback, testing, and contributions are encouraged and appreciated.
+
+Join the community discussion on Discord:
+https://discord.gg/Tvp5NNYTQ

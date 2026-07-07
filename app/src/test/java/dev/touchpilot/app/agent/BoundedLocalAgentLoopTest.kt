@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class BoundedLocalAgentLoopTest {
     @Test
@@ -44,6 +45,18 @@ class BoundedLocalAgentLoopTest {
         assertEquals(AgentStepStopReason.MAX_STEPS, result.stopReason)
         assertEquals(2, result.steps.size)
         assertEquals(listOf(AgentStepStatus.OK, AgentStepStatus.OK), result.steps.map { it.status })
+    }
+
+    @Test
+    fun modelOutputIsRedactedInTranscript() {
+        val result = loop(
+            commands = listOf("""{"tool":"type_text","args":{"text":"password=hunter2"}}"""),
+            results = emptyList()
+        ).run("enter password", AgentRunLimits(maxSteps = 2))
+
+        assertEquals(AgentStepStopReason.POLICY_BLOCKED, result.stopReason)
+        assertTrue(result.transcript.contains("Model:"))
+        assertFalse("hunter2" in result.transcript, "secret leaked in transcript: ${result.transcript}")
     }
 
     @Test

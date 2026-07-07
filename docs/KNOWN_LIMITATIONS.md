@@ -1,8 +1,16 @@
-# Known Limitations
+# Known Limitations (Real-Device Beta)
 
 Documented incompatibilities, OEM-specific behavior, and workarounds for
-TouchPilot on real Android devices. This page is a Milestone 13 deliverable
-(issue #387). Update it whenever compatibility testing finds new breakage.
+TouchPilot on real Android devices. This page is a milestone deliverable for
+issue #388 and is intended to be the first place to check before filing a new
+bug report.
+
+| Field | Value |
+|-------|-------|
+| **Status** | Living compatibility index for real-device beta |
+| **Last updated** | 2026-07-07 |
+| **Scope** | Android 31+ device automation with AccessibilityService |
+| **Revision marker** | `known-limitations@v1` |
 
 Before filing a bug, check whether your device profile is already listed here.
 When reporting a new issue, link to the relevant limitation entry if one exists.
@@ -16,6 +24,17 @@ Each limitation includes:
 - **Affected tools** — tool names from [Tool Spec](TOOL_SPEC.md)
 - **Workaround** — steps that restore expected behavior, if any
 - **Tracking** — GitHub issue or result log path
+
+## User workflow
+
+1. A tester experiences unexpected behavior.
+2. Open **Settings → Help** in-app and review **Known limitations** first.
+3. Find the matching OEM/profile entry and review known workarounds.
+4. If missing, file a new issue and include:
+   - device manufacturer and model
+   - Android version + build number
+   - exact tool/action and prompt
+   - accessibility service and app permissions state
 
 ## Battery and foreground-service review matrix
 
@@ -41,7 +60,7 @@ at least one exported bug report and a screenshot of the device settings page us
 
 | Field | Value |
 |-------|-------|
-| Profile | All devices; worst on WebView-heavy or custom-drawn UIs |
+| Profile | All devices (most common on WebView-heavy or custom-drawn UIs) |
 | Symptom | `observe_screen` returns sparse trees; tap/type targets missing |
 | Affected tools | `observe_screen`, `tap`, `type_text`, `scroll` |
 | Workaround | Retry after `wait_for_idle`; OCR fallback path documented in [OCR Fallback](OCR_FALLBACK.md) |
@@ -51,7 +70,7 @@ at least one exported bug report and a screenshot of the device settings page us
 
 | Field | Value |
 |-------|-------|
-| Profile | OEM launchers whose package name does not contain `launcher` |
+| Profile | OEM launchers where package name does not contain `launcher` |
 | Symptom | Tool executes but post-action verification may report inconclusive |
 | Affected tools | `press_home` |
 | Workaround | Confirm visually; file a matrix result with launcher package name |
@@ -74,7 +93,7 @@ at least one exported bug report and a screenshot of the device settings page us
 | Field | Value |
 |-------|-------|
 | Profile | Samsung One UI, API 31+ |
-| Symptom | Accessibility service disconnects after screen off or aggressive sleep |
+| Symptom | Accessibility service disconnects after screen-off or aggressive sleep |
 | Affected tools | All tools requiring an active AccessibilityService |
 | Workaround | Disable battery optimization for TouchPilot; add to "Never sleeping apps" in Device care |
 | Tracking | Matrix row not yet validated — see [Compatibility Matrix](COMPATIBILITY_MATRIX.md) |
@@ -124,6 +143,16 @@ at least one exported bug report and a screenshot of the device settings page us
 | Affected tools | MCP client UI only |
 | Workaround | Manual MCP server for exploratory testing |
 | Tracking | [LIVE_TESTING.md](LIVE_TESTING.md) follow-up |
+
+### In-app troubleshooting support
+
+| Field | Value |
+|-------|-------|
+| Profile | All |
+| Symptom | Users open ticket without checking documented incompatibility first |
+| Affected tools | N/A |
+| Workaround | Add a shortcut to open this page from the app help flow before new issue filing |
+| Tracking | `SettingsPanel.HELP` in app |
 
 ## Adding a new limitation
 

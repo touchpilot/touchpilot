@@ -90,6 +90,7 @@ class AndroidToolRetryPolicy(
                 "open_settings_panel" to action,
                 "tap" to action,
                 "long_press" to action,
+                "double_tap" to action,
                 "type_text" to action,
                 "scroll" to action,
                 // Single attempt: scroll_to_element already runs its own bounded
@@ -97,6 +98,7 @@ class AndroidToolRetryPolicy(
                 // scroll budget for no benefit.
                 "scroll_to_element" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "swipe" to action,
+                "drag_and_drop" to action,
                 "press_back" to action,
                 "press_home" to action,
                 "recent_apps" to action,
@@ -104,6 +106,7 @@ class AndroidToolRetryPolicy(
                 "wait_for_idle" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "wait_for_app" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "wait_for_element" to ToolRetryConfig(maxAttempts = 1, retryable = false),
+                "wait_for_element_gone" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "focus_input" to action,
                 "get_foreground_app" to ToolRetryConfig(maxAttempts = 1, retryable = false),
                 "find_element" to ToolRetryConfig(maxAttempts = 1, retryable = false),

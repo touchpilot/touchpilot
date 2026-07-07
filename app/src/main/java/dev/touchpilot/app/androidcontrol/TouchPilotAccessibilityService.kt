@@ -50,30 +50,35 @@ class TouchPilotAccessibilityService : AccessibilityService() {
     }
 
     fun observeScreen(): String {
-        val root = rootInActiveWindow ?: return "No active window is available."
-        return buildString {
-            appendLine("TouchPilot screen snapshot")
-            appendNode(root, depth = 0, maxDepth = 8, nodeId = "0")
-        }
+        return useActiveRoot { root ->
+            buildString {
+                appendLine("TouchPilot screen snapshot")
+                appendNode(root, depth = 0, maxDepth = 8, nodeId = "0")
+            }
+        } ?: "No active window is available."
     }
 
     fun getForegroundApp(): ForegroundAppInfo {
         val root = rootInActiveWindow
-        val rootPackage = root?.packageName?.toString()
-        val packageName = rootPackage?.takeIf { it.isNotBlank() } ?: lastWindowPackage
-        val windowTitle = root?.window?.title?.toString()?.takeIf { it.isNotBlank() }
-        val activityClass = lastWindowActivity
-            ?.takeIf { it.isNotBlank() }
-            ?.takeIf { lastWindowPackage == null || lastWindowPackage == packageName }
-            ?: root?.className?.toString()?.takeIf { it.isNotBlank() }
-        val appLabel = packageName?.let { loadAppLabel(it) }
-        return ForegroundAppInfo(
-            packageName = packageName,
-            appLabel = appLabel,
-            windowTitle = windowTitle,
-            activityClass = activityClass,
-            accessibilityConnected = true,
-        )
+        return try {
+            val rootPackage = root?.packageName?.toString()
+            val packageName = rootPackage?.takeIf { it.isNotBlank() } ?: lastWindowPackage
+            val windowTitle = root?.window?.title?.toString()?.takeIf { it.isNotBlank() }
+            val activityClass = lastWindowActivity
+                ?.takeIf { it.isNotBlank() }
+                ?.takeIf { lastWindowPackage == null || lastWindowPackage == packageName }
+                ?: root?.className?.toString()?.takeIf { it.isNotBlank() }
+            val appLabel = packageName?.let { loadAppLabel(it) }
+            ForegroundAppInfo(
+                packageName = packageName,
+                appLabel = appLabel,
+                windowTitle = windowTitle,
+                activityClass = activityClass,
+                accessibilityConnected = true,
+            )
+        } finally {
+            root?.recycleSafely()
+        }
     }
 
     private fun loadAppLabel(packageName: String): String? {
@@ -85,31 +90,35 @@ class TouchPilotAccessibilityService : AccessibilityService() {
     }
 
     fun observeScreenContext(): ScreenContext {
-        val root = rootInActiveWindow ?: return ScreenContext.Empty
-        val snapshot = AccessibilityNodeSnapshotAdapter.from(root)
-        return ScreenContextBuilder().build(
-            root = snapshot,
-            packageName = root.packageName?.toString(),
-            windowTitle = root.window?.title?.toString()
-        )
+        return useActiveRoot { root ->
+            val snapshot = AccessibilityNodeSnapshotAdapter.from(root)
+            ScreenContextBuilder().build(
+                root = snapshot,
+                packageName = root.packageName?.toString(),
+                windowTitle = root.window?.title?.toString()
+            )
+        } ?: ScreenContext.Empty
     }
 
     fun tapByText(text: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val node = findNode(root) { candidate ->
-            val label = candidate.text?.toString()
-                ?: candidate.contentDescription?.toString()
-                ?: ""
-            label.contains(text, ignoreCase = true)
-        } ?: return false
-
-        return clickNodeOrParent(node)
+        return useActiveRoot { root ->
+            root.useFoundNode({ candidate ->
+                val label = candidate.text?.toString()
+                    ?: candidate.contentDescription?.toString()
+                    ?: ""
+                label.contains(text, ignoreCase = true)
+            }) { node ->
+                clickNodeOrParent(node)
+            } ?: false
+        } ?: false
     }
 
     fun tapByNodeId(nodeId: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val node = findNodeById(root, nodeId) ?: return false
-        return clickNodeOrParent(node) || tapNodeCenter(node)
+        return useActiveRoot { root ->
+            root.useNodeById(nodeId) { node ->
+                clickNodeOrParent(node) || tapNodeCenter(node)
+            } ?: false
+        } ?: false
     }
 
     fun tapByBounds(boundsText: String): Boolean {
@@ -123,11 +132,12 @@ class TouchPilotAccessibilityService : AccessibilityService() {
      * plan a full-screen direction swipe when no container target is given.
      */
     fun activeWindowBounds(): NodeBounds? {
-        val root = rootInActiveWindow ?: return null
-        val bounds = Rect()
-        root.getBoundsInScreen(bounds)
-        if (bounds.isEmpty) return null
-        return NodeBounds(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        return useActiveRoot { root ->
+            val bounds = Rect()
+            root.getBoundsInScreen(bounds)
+            if (bounds.isEmpty) return@useActiveRoot null
+            NodeBounds(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        }
     }
 
     /**
@@ -169,10 +179,84 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return completed.get()
     }
 
+    /**
+     * Double-tap a node's center. Unlike [tapByNodeId] this never uses the
+     * accessibility `ACTION_CLICK` — there is no double-click accessibility
+     * action — so it always dispatches the real two-tap gesture at the node
+     * center, which is what surfaces such as image/map zoom, "double-tap to
+     * like", and word selection listen for.
+     */
+    fun doubleTapByNodeId(nodeId: String): Boolean {
+        return useActiveRoot { root ->
+            root.useNodeById(nodeId) { node -> doubleTapNodeCenter(node) } ?: false
+        } ?: false
+    }
+
+    fun doubleTapByBounds(boundsText: String): Boolean {
+        val bounds = parseBounds(boundsText) ?: return false
+        if (bounds.isEmpty) return false
+        return doubleTap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
+    /**
+     * Dispatch a drag-and-drop: press and hold at (startX, startY) for [holdMs]
+     * so the surface enters drag mode, then travel to (endX, endY) over [moveMs]
+     * and release.
+     *
+     * Implemented as a single *continued* gesture — a dwell stroke with
+     * `willContinue = true` followed by a move stroke created via
+     * [GestureDescription.StrokeDescription.continueStroke] — so the contact
+     * point is never lifted between pickup and travel. A plain [swipe] lifts and
+     * re-plants too quickly to pick up reorderable list rows or draggable
+     * widgets, which is why drag needs its own gesture rather than reusing swipe.
+     */
+    fun drag(startX: Int, startY: Int, endX: Int, endY: Int, holdMs: Long, moveMs: Long): Boolean {
+        val hold = holdMs.coerceIn(MinDragHoldMs, MaxDragHoldMs)
+        val move = moveMs.coerceIn(MinSwipeDurationMs, MaxSwipeDurationMs)
+
+        val dwellPath = Path().apply { moveTo(startX.toFloat(), startY.toFloat()) }
+        val movePath = Path().apply {
+            moveTo(startX.toFloat(), startY.toFloat())
+            lineTo(endX.toFloat(), endY.toFloat())
+        }
+
+        val pickup = GestureDescription.StrokeDescription(dwellPath, 0L, hold, true)
+        val travel = pickup.continueStroke(movePath, hold, move, false)
+        val gesture = GestureDescription.Builder()
+            .addStroke(pickup)
+            .addStroke(travel)
+            .build()
+
+        val completed = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    completed.set(true)
+                    latch.countDown()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    completed.set(false)
+                    latch.countDown()
+                }
+            },
+            null
+        )
+
+        if (!dispatched) return false
+        latch.await(hold + move + GestureCallbackTimeoutMs, TimeUnit.MILLISECONDS)
+        return completed.get()
+    }
+
     fun longPressByNodeId(nodeId: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val node = findNodeById(root, nodeId) ?: return false
-        return longClickNodeOrParent(node) || longPressNodeCenter(node)
+        return useActiveRoot { root ->
+            root.useNodeById(nodeId) { node ->
+                longClickNodeOrParent(node) || longPressNodeCenter(node)
+            } ?: false
+        } ?: false
     }
 
     fun longPressByBounds(boundsText: String): Boolean {
@@ -182,64 +266,86 @@ class TouchPilotAccessibilityService : AccessibilityService() {
     }
 
     fun typeIntoFocusedField(text: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            ?: findNode(root) { it.isFocused }
-            ?: return false
-
-        return setNodeText(focused, text)
+        return useActiveRoot { root ->
+            val focusedFromFocus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focusedFromFocus != null) {
+                try {
+                    setNodeText(focusedFromFocus, text)
+                } finally {
+                    focusedFromFocus.recycleSafely()
+                }
+            } else {
+                root.useFoundNode({ it.isFocused }) { focused ->
+                    setNodeText(focused, text)
+                } ?: false
+            }
+        } ?: false
     }
 
     fun typeIntoNode(nodeId: String, text: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val node = findNodeById(root, nodeId) ?: return false
-        if (!node.isEnabled || !node.isEditableTarget()) return false
-        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        return setNodeText(node, text)
+        return useActiveRoot { root ->
+            root.useNodeById(nodeId) { node ->
+                if (!node.isEnabled || !node.isEditableTarget()) return@useNodeById false
+                node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                setNodeText(node, text)
+            } ?: false
+        } ?: false
     }
 
     fun clearFocusedField(): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            ?: findNode(root) { it.isFocused }
-            ?: return false
-        if (!focused.isEnabled || !focused.isEditableTarget()) return false
-        return setNodeText(focused, "")
+        return useActiveRoot { root ->
+            val focusedFromFocus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focusedFromFocus != null) {
+                try {
+                    if (!focusedFromFocus.isEnabled || !focusedFromFocus.isEditableTarget()) {
+                        return@useActiveRoot false
+                    }
+                    setNodeText(focusedFromFocus, "")
+                } finally {
+                    focusedFromFocus.recycleSafely()
+                }
+            } else {
+                root.useFoundNode({ it.isFocused }) { focused ->
+                    if (!focused.isEnabled || !focused.isEditableTarget()) return@useFoundNode false
+                    setNodeText(focused, "")
+                } ?: false
+            }
+        } ?: false
     }
 
     fun clearNode(nodeId: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val node = findNodeById(root, nodeId) ?: return false
-        if (!node.isEnabled || !node.isEditableTarget()) return false
-        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        return setNodeText(node, "")
+        return useActiveRoot { root ->
+            root.useNodeById(nodeId) { node ->
+                if (!node.isEnabled || !node.isEditableTarget()) return@useNodeById false
+                node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                setNodeText(node, "")
+            } ?: false
+        } ?: false
     }
 
     fun focusInput(text: String, nodeId: String, bounds: String, viewId: String): FocusResult {
-        val root = rootInActiveWindow ?: return FocusResult(false, "No active window is available.")
-
-        val candidates: List<AccessibilityNodeInfo> = when {
-            nodeId.isNotBlank() -> {
-                val node = findNodeById(root, nodeId)
-                    ?: return FocusResult(false, "No matching input target found.")
-                listOf(node)
-            }
-            bounds.isNotBlank() -> {
-                val targetBounds = parseBounds(bounds)
-                    ?: return FocusResult(false, "Invalid bounds format.")
-                findAllNodes(root) { candidate ->
-                    val b = Rect()
-                    candidate.getBoundsInScreen(b)
-                    b == targetBounds
+        return useActiveRoot { root ->
+            when {
+                nodeId.isNotBlank() -> root.useNodeById(nodeId) { node ->
+                    focusInputFromCandidates(listOf(node))
+                } ?: FocusResult(false, "No matching input target found.")
+                bounds.isNotBlank() -> {
+                    val targetBounds = parseBounds(bounds)
+                        ?: return@useActiveRoot FocusResult(false, "Invalid bounds format.")
+                    root.useMatchingNodes({ candidate ->
+                        val b = Rect()
+                        candidate.getBoundsInScreen(b)
+                        b == targetBounds
+                    }) { candidates ->
+                        focusInputFromCandidates(candidates)
+                    }
                 }
-            }
-            viewId.isNotBlank() -> {
-                findAllNodes(root) { candidate ->
+                viewId.isNotBlank() -> root.useMatchingNodes({ candidate ->
                     candidate.viewIdResourceName == viewId
+                }) { candidates ->
+                    focusInputFromCandidates(candidates)
                 }
-            }
-            else -> {
-                findAllNodes(root) { candidate ->
+                else -> root.useMatchingNodes({ candidate ->
                     if (candidate.isEditable) {
                         // Match editable fields by hint/label, not current typed content.
                         val hint = candidate.hintText?.toString() ?: ""
@@ -251,11 +357,17 @@ class TouchPilotAccessibilityService : AccessibilityService() {
                             ?: ""
                         label.contains(text, ignoreCase = true)
                     }
+                }) { candidates ->
+                    focusInputFromCandidates(candidates)
                 }
             }
-        }
+        } ?: FocusResult(false, "No active window is available.")
+    }
 
-        if (candidates.isEmpty()) return FocusResult(false, "No matching input target found.")
+    private fun focusInputFromCandidates(candidates: List<AccessibilityNodeInfo>): FocusResult {
+        if (candidates.isEmpty()) {
+            return FocusResult(false, "No matching input target found.")
+        }
 
         val editable = candidates.filter { it.isEditable }
 
@@ -273,31 +385,29 @@ class TouchPilotAccessibilityService : AccessibilityService() {
     }
 
     fun scroll(forward: Boolean): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val action = scrollAction(forward)
-
-        val scrollable = findNode(root) { candidate ->
-            candidate.isScrollable || candidate.actionList.any { it.id == action }
-        } ?: return false
-
-        return scrollable.performAction(action)
+        return useActiveRoot { root ->
+            val action = scrollAction(forward)
+            root.useFoundNode({ candidate ->
+                candidate.isScrollable || candidate.actionList.any { it.id == action }
+            }) { scrollable ->
+                scrollable.performAction(action)
+            } ?: false
+        } ?: false
     }
 
     fun scrollNode(nodeId: String, forward: Boolean): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val target = findNodeById(root, nodeId) ?: return false
-        val action = scrollAction(forward)
-        // Walk up the tree until we find an ancestor that actually accepts the
-        // scroll action. Some apps mark a list item as scrollable through its
-        // parent ListView/RecyclerView rather than on the item itself.
-        var current: AccessibilityNodeInfo? = target
-        while (current != null) {
-            if (current.isScrollable || current.actionList.any { it.id == action }) {
-                return current.performAction(action)
-            }
-            current = current.parent
-        }
-        return false
+        return useActiveRoot { root ->
+            root.useNodeById(nodeId) { target ->
+                val action = scrollAction(forward)
+                // Walk up the tree until we find an ancestor that actually accepts the
+                // scroll action. Some apps mark a list item as scrollable through its
+                // parent ListView/RecyclerView rather than on the item itself.
+                walkUpFrom(target) { current ->
+                    (current.isScrollable || current.actionList.any { it.id == action }) &&
+                        current.performAction(action)
+                }
+            } ?: false
+        } ?: false
     }
 
     private fun scrollAction(forward: Boolean): Int {
@@ -367,9 +477,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         val deadline = System.currentTimeMillis() + timeoutMs.coerceIn(250L, 30_000L)
         while (System.currentTimeMillis() < deadline) {
             val root = rootInActiveWindow
-            if (root != null && containsText(root, text)) {
-                return true
+            val found = if (root != null) {
+                try {
+                    containsText(root, text)
+                } finally {
+                    root.recycleSafely()
+                }
+            } else {
+                false
             }
+            if (found) return true
             Thread.sleep(150L)
         }
         return false
@@ -381,9 +498,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         var stableCount = 0
 
         while (System.currentTimeMillis() < deadline) {
-            val snapshot = rootInActiveWindow?.let { root ->
-                buildString { appendNode(root, depth = 0, maxDepth = 4, nodeId = "0") }
-            }.orEmpty()
+            val root = rootInActiveWindow
+            val snapshot = if (root != null) {
+                try {
+                    buildString { appendNode(root, depth = 0, maxDepth = 4, nodeId = "0") }
+                } finally {
+                    root.recycleSafely()
+                }
+            } else {
+                ""
+            }
 
             if (snapshot.isNotBlank() && snapshot == previousSnapshot) {
                 stableCount += 1
@@ -429,81 +553,30 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         for (index in 0 until node.childCount) {
             val child = node.getChild(index) ?: continue
             appendNode(child, depth + 1, maxDepth, "$nodeId.$index")
+            child.recycleSafely()
         }
     }
 
-    private fun findNode(
-        node: AccessibilityNodeInfo,
-        predicate: (AccessibilityNodeInfo) -> Boolean
-    ): AccessibilityNodeInfo? {
-        if (predicate(node)) return node
-
-        for (index in 0 until node.childCount) {
-            val child = node.getChild(index) ?: continue
-            val found = findNode(child, predicate)
-            if (found != null) return found
-        }
-
-        return null
+    private fun containsText(node: AccessibilityNodeInfo, text: String): Boolean {
+        return node.useFoundNode({ candidate ->
+            val label = candidate.text?.toString()
+                ?: candidate.contentDescription?.toString()
+                ?: ""
+            label.contains(text, ignoreCase = true)
+        }) { true } != null
     }
-
-    private fun findAllNodes(
-        node: AccessibilityNodeInfo,
-        predicate: (AccessibilityNodeInfo) -> Boolean
-    ): List<AccessibilityNodeInfo> {
-        val result = mutableListOf<AccessibilityNodeInfo>()
-        collectNodes(node, predicate, result)
-        return result
-    }
-
-    private fun collectNodes(
-        node: AccessibilityNodeInfo,
-        predicate: (AccessibilityNodeInfo) -> Boolean,
-        result: MutableList<AccessibilityNodeInfo>
-    ) {
-        if (predicate(node)) result.add(node)
-        for (index in 0 until node.childCount) {
-            val child = node.getChild(index) ?: continue
-            collectNodes(child, predicate, result)
-        }
-    }
-
-    private fun findNodeById(root: AccessibilityNodeInfo, nodeId: String): AccessibilityNodeInfo? {
-        if (!nodeId.matches(Regex("\\d+(?:\\.\\d+)*"))) return null
-
-        var current: AccessibilityNodeInfo = root
-        val path = nodeId.split(".").mapNotNull { it.toIntOrNull() }
-        if (path.firstOrNull() != 0) return null
-
-        for (index in path.drop(1)) {
-            current = current.getChild(index) ?: return null
-        }
-
-        return current
-    }
-
     private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
-        var current: AccessibilityNodeInfo? = node
-        while (current != null) {
-            if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                return true
-            }
-            current = current.parent
+        return walkUpFrom(node) { current ->
+            current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         }
-        return false
     }
 
     private fun longClickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
-        var current: AccessibilityNodeInfo? = node
-        while (current != null) {
+        return walkUpFrom(node) { current ->
             val supportsLongClick = current.isLongClickable ||
                 current.actionList.any { it.id == AccessibilityNodeInfo.ACTION_LONG_CLICK }
-            if (supportsLongClick && current.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) {
-                return true
-            }
-            current = current.parent
+            supportsLongClick && current.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
         }
-        return false
     }
 
     private fun setNodeText(node: AccessibilityNodeInfo, text: String): Boolean {
@@ -535,8 +608,54 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return longPress(bounds.centerX().toFloat(), bounds.centerY().toFloat())
     }
 
+    private fun doubleTapNodeCenter(node: AccessibilityNodeInfo): Boolean {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return false
+        return doubleTap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
     private fun tap(x: Float, y: Float): Boolean {
         return dispatchPressGesture(x = x, y = y, durationMs = 60L, timeoutMs = 1_000L)
+    }
+
+    /**
+     * Dispatch a double-tap at (x, y): two brief taps at the same point,
+     * separated by a gap that keeps the pair inside the platform double-tap
+     * timeout so surfaces recognize it as a double-tap rather than two
+     * independent taps. Both taps are strokes in a single [GestureDescription],
+     * the second offset by its start time.
+     */
+    private fun doubleTap(x: Float, y: Float): Boolean {
+        val firstPath = Path().apply { moveTo(x, y) }
+        val secondPath = Path().apply { moveTo(x, y) }
+        val secondStart = DoubleTapTapMs + DoubleTapGapMs
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(firstPath, 0L, DoubleTapTapMs))
+            .addStroke(GestureDescription.StrokeDescription(secondPath, secondStart, DoubleTapTapMs))
+            .build()
+        val completed = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    completed.set(true)
+                    latch.countDown()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    completed.set(false)
+                    latch.countDown()
+                }
+            },
+            null
+        )
+
+        if (!dispatched) return false
+        latch.await(secondStart + DoubleTapTapMs + GestureCallbackTimeoutMs, TimeUnit.MILLISECONDS)
+        return completed.get()
     }
 
     private fun longPress(x: Float, y: Float): Boolean {
@@ -585,21 +704,28 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return Rect(values[0], values[1], values[2], values[3])
     }
 
-    private fun containsText(node: AccessibilityNodeInfo, text: String): Boolean {
-        return findNode(node) { candidate ->
-            val label = candidate.text?.toString()
-                ?: candidate.contentDescription?.toString()
-                ?: ""
-            label.contains(text, ignoreCase = true)
-        } != null
-    }
-
     private companion object {
         /** Lower bound so a swipe still registers as a gesture rather than a tap. */
         const val MinSwipeDurationMs = 50L
 
         /** Upper bound so a runaway duration cannot hold the gesture indefinitely. */
         const val MaxSwipeDurationMs = 5_000L
+
+        /** Duration of each individual tap within a double-tap. */
+        const val DoubleTapTapMs = 50L
+
+        /**
+         * Gap between the two taps of a double-tap. Kept short so the pair
+         * lands inside the platform double-tap timeout (~300 ms) and registers
+         * as a double-tap rather than two separate taps.
+         */
+        const val DoubleTapGapMs = 120L
+
+        /** Lower bound on a drag pickup dwell so the gesture stays a valid stroke. */
+        const val MinDragHoldMs = 50L
+
+        /** Upper bound on a drag pickup dwell so a runaway value cannot stall dispatch. */
+        const val MaxDragHoldMs = 3_000L
 
         /** Extra time beyond the gesture duration to wait for the result callback. */
         const val GestureCallbackTimeoutMs = 1_000L

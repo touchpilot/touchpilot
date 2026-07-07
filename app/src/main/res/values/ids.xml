@@ -58,10 +58,12 @@
     <item name="approval_reject_button" type="id" />
     <item name="settings_panel_skills_button" type="id" />
     <item name="settings_panel_tools_button" type="id" />
+    <item name="settings_panel_help_button" type="id" />
     <item name="settings_panel_mcp_button" type="id" />
     <item name="settings_panel_cloud_button" type="id" />
     <item name="settings_panel_runtime_button" type="id" />
     <item name="settings_panel_recording_button" type="id" />
+    <item name="settings_panel_compatibility_button" type="id" />
     <item name="save_cloud_api_button" type="id" />
     <item name="export_run_trace_button" type="id" />
     <item name="delete_workflow_recording_button" type="id" />

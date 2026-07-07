@@ -5,6 +5,21 @@ plugins {
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+fun signingProperty(name: String): String? {
+    return (findProperty(name) as String?)?.takeIf { it.isNotBlank() } ?: System.getenv(name)
+}
+
+val releaseKeystorePath = signingProperty("TOUCHPILOT_KEYSTORE_PATH")
+val releaseKeystorePassword = signingProperty("TOUCHPILOT_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingProperty("TOUCHPILOT_KEY_ALIAS")
+val releaseKeyPassword = signingProperty("TOUCHPILOT_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "dev.touchpilot.app"
     compileSdk = 35
@@ -19,11 +34,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("releaseSigned") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword!!
+                keyAlias = releaseKeyAlias!!
+                keyPassword = releaseKeyPassword!!
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Development-only: make release APKs installable on emulators.
-            // Replace this with a real release key before any public release.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("releaseSigned")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = false
         }
     }
@@ -39,6 +67,7 @@ dependencies {
     implementation("com.google.ai.edge.litert:litert:1.4.2")
     testImplementation("org.json:json:20250517")
     testImplementation(kotlin("test"))
+    testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
