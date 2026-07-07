@@ -21,6 +21,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import dev.touchpilot.app.agent.AgentProviderMode
+import dev.touchpilot.app.agent.HostSessionState
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.AgentStepStopReason
@@ -278,6 +279,9 @@ class MainActivity : Activity() {
             activeSkill = { selectedSkill()?.let { ActiveSkillHeader.from(it) } },
             clearActiveSkill = ::clearActiveSkill,
             cancelAgentRun = agentRunController::cancelRun,
+            pauseHostRun = agentRunController::pauseHostRun,
+            resumeHostSession = agentRunController::resumeHostSession,
+            hostSession = agentRunController::currentHostSession,
             openRunDetail = ::openRunDetail,
             openSkillDetail = ::openSkillDetail,
             openWorkflowEditor = ::openWorkflowEditor,
@@ -714,12 +718,49 @@ class MainActivity : Activity() {
 
     private fun refreshStatus() {
         if (::statusView.isInitialized) {
-            statusView.text = if (AccessibilityBridge.isConnected()) {
-                "Accessibility service: connected"
-            } else {
-                "Accessibility service: not connected"
+            val accessibilityConnected = AccessibilityBridge.isConnected()
+            val summary = compatibilitySummary()
+            val permissionCheck = summary.checks.firstOrNull { it.title == "Required permissions" }
+            val batteryCheck = summary.checks.firstOrNull { it.title == "Battery optimization" }
+            val hostSession = agentRunController.currentHostSession
+
+            val hostState = when (hostSession?.state) {
+                HostSessionState.ACTIVE -> "Host session: running (${hostSession.scope})"
+                HostSessionState.PAUSED -> "Host session: paused (${hostSession.scope})"
+                HostSessionState.CANCELLED -> "Host session: stopped"
+                HostSessionState.COMPLETED -> "Host session: completed"
+                HostSessionState.FAILED -> "Host session: failed"
+                HostSessionState.BLOCKED -> "Host session: blocked"
+                null -> "Host session: idle"
             }
-            statusView.setTextColor(if (AccessibilityBridge.isConnected()) Theme.Accent else Theme.MutedText)
+            val serviceState = if (accessibilityConnected) {
+                "Control service: connected"
+            } else {
+                "Control service: not connected"
+            }
+            val permissionState = if (permissionCheck?.passed == true) {
+                "Permissions ready"
+            } else {
+                permissionCheck?.status ?: "Permissions unknown"
+            }
+            val batteryState = if (batteryCheck?.status == "PASS") {
+                "Battery optimization ignored"
+            } else {
+                "Battery optimization warning"
+            }
+
+            statusView.text = listOf(hostState, serviceState, permissionState, batteryState).joinToString("\n")
+            statusView.setTextColor(
+                if (hostSession?.state == HostSessionState.ACTIVE) {
+                    Theme.Accent
+                } else if (hostSession?.state == HostSessionState.PAUSED) {
+                    Color.rgb(255, 193, 7)
+                } else if (accessibilityConnected) {
+                    Theme.Accent
+                } else {
+                    Theme.MutedText
+                }
+            )
         }
     }
 

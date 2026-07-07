@@ -8,6 +8,10 @@ import dev.touchpilot.app.agent.AgentRunIds
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentRunResult
 import dev.touchpilot.app.agent.AgentRunState
+import dev.touchpilot.app.agent.HostSessionMode
+import dev.touchpilot.app.agent.HostSessionState
+import dev.touchpilot.app.agent.HostSessionSummary
+import dev.touchpilot.app.agent.isResumable
 import dev.touchpilot.app.agent.AgentScreenRecord
 import dev.touchpilot.app.agent.AgentStep
 import dev.touchpilot.app.agent.AgentStepStopReason
@@ -46,8 +50,10 @@ class AgentRunController(
     private val workflowTraceStore: WorkflowTraceStore,
 ) {
     private var pendingClarification: PendingClarification? = null
+    private var pauseRequested = false
     private var cancellationSignal: AtomicBoolean = AtomicBoolean(false)
     private val mutableRunHistory = mutableListOf<AgentRunRecord>()
+    private var hostSession: HostSessionSummary? = null
     var runState: AgentRunState = AgentRunState.IDLE
         private set
 
@@ -65,7 +71,26 @@ class AgentRunController(
     val isDemonstrationRecording: Boolean
         get() = demonstrationManager?.isRecording == true
 
+    val currentHostSession: HostSessionSummary?
+        get() = hostSession
+
+    fun hasPausedHostSession(): Boolean {
+        return hostSession?.state == HostSessionState.PAUSED && hostSession?.resumableTask != null
+    }
+
     fun startFromChat(task: String) {
+        startFromChat(
+            task = task,
+            recordUserMessage = true,
+            scope = task,
+        )
+    }
+
+    private fun startFromChat(
+        task: String,
+        recordUserMessage: Boolean,
+        scope: String,
+    ) {
         val pending = pendingClarification
         if (pending == null && isAgentRunInProgress(runState)) {
             rejectOverlappingRunStart()
@@ -80,7 +105,9 @@ class AgentRunController(
             task
         }
 
-        conversation += ChatEvent.User(task)
+        if (recordUserMessage) {
+            conversation += ChatEvent.User(task)
+        }
         ToolExecutionLog.recordChat(
             name = if (pending != null) "clarification_reply" else "user_message",
             actor = "User",
@@ -101,13 +128,20 @@ class AgentRunController(
 
         val workingIndex = conversation.size
         cancellationSignal.set(false)
+        pauseRequested = false
+        beginHostSession(
+            sessionId = AgentRunIds.next(),
+            scope = scope,
+            mode = HostSessionMode.CHAT_TASK,
+            resumableTask = agentTask,
+        )
         setRunState(AgentRunState.RUNNING)
         conversation += ChatEvent.Working("Working on it.", runtimeWorkingDetail())
         val stepTimeline = ChatEvent.StepTimeline()
         conversation += stepTimeline
         showChat()
 
-        val runId = AgentRunIds.next()
+        val runId = hostSession?.sessionId ?: AgentRunIds.next()
         val startedAtMillis = System.currentTimeMillis()
         val taskForRecord = originalTask ?: task
         ToolExecutionLog.recordAction(
@@ -211,6 +245,10 @@ class AgentRunController(
                     stopReason = stopReason,
                 )
                 setRunState(terminalState)
+                finalizeHostSession(
+                    terminalState = terminalState,
+                    stopReason = stopReason,
+                )
                 if (terminalState == AgentRunState.FAILED) {
                     rejectPendingApprovals()
                 }
@@ -251,6 +289,13 @@ class AgentRunController(
         }
 
         cancellationSignal.set(false)
+        pauseRequested = false
+        beginHostSession(
+            sessionId = AgentRunIds.next(),
+            mode = HostSessionMode.WORKFLOW_REPLAY,
+            scope = definition.title,
+            resumableTask = null,
+        )
         setRunState(AgentRunState.RUNNING)
 
         conversation += ChatEvent.User("Replay workflow: ${definition.title}")
@@ -266,7 +311,7 @@ class AgentRunController(
         conversation += stepTimeline
         showChat()
 
-        val runId = AgentRunIds.next()
+        val runId = hostSession?.sessionId ?: AgentRunIds.next()
         val startedAtMillis = System.currentTimeMillis()
         ToolExecutionLog.recordAction(
             name = "workflow_replay_started",
@@ -344,6 +389,14 @@ class AgentRunController(
                         stopReason = result?.stopReason,
                     )
                 )
+                finalizeHostSession(
+                    terminalState = resolveWorkflowReplayTerminalState(
+                        cancelled = cancellationSignal.get(),
+                        runFailed = runOutcome.isFailure,
+                        stopReason = result?.stopReason,
+                    ),
+                    stopReason = result?.stopReason,
+                )
                 refreshStepTimeline(stepTimeline, steps, true)
                 finishAgentChatRun(
                     record = record,
@@ -363,13 +416,103 @@ class AgentRunController(
     }
 
     fun cancelRun() {
+        cancelActiveHostSession(
+            pauseRequested = false,
+            statusMessage = "Run cancelled.",
+            statusDetail = "Stopped by user request.",
+        )
+    }
+
+    fun pauseHostRun() {
+        val session = hostSession ?: return
+        if (!hasPausingCapability() || session.state != HostSessionState.ACTIVE) {
+            return
+        }
+        cancelActiveHostSession(
+            pauseRequested = true,
+            statusMessage = "Host session paused.",
+            statusDetail = "Paused \"${session.scope}\". Tap Resume to continue the same task.",
+        )
+    }
+
+    fun resumeHostSession() {
+        val session = hostSession ?: return
+        if (!session.isResumable) {
+            return
+        }
+
+        hostSession = null
+        pauseRequested = false
+        startFromChat(
+            task = session.resumableTask.orEmpty(),
+            recordUserMessage = false,
+            scope = session.scope,
+        )
+        conversation += ChatEvent.Agent("Host session resumed.", "Resuming: ${session.scope}")
+        showChat()
+    }
+
+    private fun hasPausingCapability(): Boolean {
+        return hostSession?.state == HostSessionState.ACTIVE &&
+            hostSession?.resumableTask?.isNotBlank() == true &&
+            isAgentRunInProgress(runState)
+    }
+
+    private fun beginHostSession(
+        sessionId: String,
+        mode: HostSessionMode,
+        scope: String,
+        resumableTask: String?,
+    ) {
+        hostSession = HostSessionSummary(
+            sessionId = sessionId,
+            mode = mode,
+            scope = scope,
+            state = HostSessionState.ACTIVE,
+            startedAtMillis = System.currentTimeMillis(),
+            resumableTask = resumableTask,
+        )
+        refreshStatus()
+    }
+
+    private fun finalizeHostSession(
+        terminalState: AgentRunState,
+        stopReason: AgentStepStopReason?,
+    ) {
+        val current = hostSession ?: return
+
+        hostSession = when {
+            pauseRequested -> current.copy(
+                state = HostSessionState.PAUSED,
+                resumableTask = current.resumableTask,
+            )
+            terminalState == AgentRunState.WAITING_CLARIFICATION -> current.copy(
+                state = HostSessionState.ACTIVE,
+            )
+            terminalState == AgentRunState.RUNNING -> current.copy(
+                state = HostSessionState.ACTIVE,
+            )
+            else -> null
+        }
+
+        pauseRequested = false
+        refreshStatus()
+    }
+
+    private fun cancelActiveHostSession(
+        pauseRequested: Boolean,
+        statusMessage: String,
+        statusDetail: String,
+    ) {
+        this.pauseRequested = pauseRequested
         cancellationSignal.set(true)
         demonstrationManager?.cancelRun()
         pendingClarification = null
         setRunState(AgentRunState.CANCELLED)
         rejectPendingApprovals()
-        conversation += ChatEvent.Agent("Run cancelled.", "Stopped by user request.")
+        conversation += ChatEvent.Agent(statusMessage, statusDetail)
         showChat()
+        refreshStatus()
     }
 
     fun approveTool(request: ToolApprovalRequest): Boolean {
@@ -610,6 +753,7 @@ class AgentRunController(
     private fun setRunState(state: AgentRunState) {
         runState = state
         showChat()
+        refreshStatus()
     }
 
     private fun rejectPendingApprovals() {
