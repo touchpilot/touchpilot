@@ -67,6 +67,11 @@ class AgentRunController(
 
     fun startFromChat(task: String) {
         val pending = pendingClarification
+        if (pending == null && isAgentRunInProgress(runState)) {
+            rejectOverlappingRunStart()
+            return
+        }
+
         val originalTask = pending?.originalTask
         val agentTask = if (pending != null) {
             pendingClarification = null
@@ -235,6 +240,13 @@ class AgentRunController(
         captureWorkflowTrace: Boolean = false,
         onFinished: ((success: Boolean, message: String, result: AgentRunResult?) -> Unit)? = null,
     ) {
+        if (isAgentRunInProgress(runState)) {
+            val message = overlappingRunStartMessage()
+            onFinished?.invoke(false, message, null)
+            rejectOverlappingRunStart()
+            return
+        }
+
         cancellationSignal.set(false)
         setRunState(AgentRunState.RUNNING)
 
@@ -575,6 +587,22 @@ class AgentRunController(
             "Demonstration captured.",
             DemonstrationSummaryFormatter.completionMessage(session),
         )
+    }
+
+    private fun rejectOverlappingRunStart() {
+        val detail = overlappingRunStartMessage()
+        conversation += ChatEvent.Agent("Run already in progress.", detail)
+        ToolExecutionLog.recordChat(
+            name = "run_start_rejected",
+            actor = "TouchPilot",
+            message = detail,
+            status = "blocked",
+        )
+        showChat()
+    }
+
+    private fun overlappingRunStartMessage(): String {
+        return "Wait for the current run to finish or tap Stop before starting another one."
     }
 
     private fun setRunState(state: AgentRunState) {
