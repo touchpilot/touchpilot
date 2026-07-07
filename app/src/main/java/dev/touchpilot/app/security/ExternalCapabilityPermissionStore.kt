@@ -1,5 +1,6 @@
 package dev.touchpilot.app.security
 
+import dev.touchpilot.app.tools.ToolExecutionLog
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -41,6 +42,17 @@ class ExternalCapabilityPermissionStore(
         )
         grants += grant
         save(grants)
+        ToolExecutionLog.recordPermissionChange(
+            category = permissionCategory(target),
+            change = PermissionChangeKind.GRANT,
+            targetLabel = target.displayLabel(),
+            details = buildString {
+                append("actions=${actions.joinToString { it.name }}")
+                if (featureFlags.isNotEmpty()) {
+                    append("; feature_flags=${featureFlags.sorted().joinToString()}")
+                }
+            },
+        )
         return grant
     }
 
@@ -48,6 +60,11 @@ class ExternalCapabilityPermissionStore(
         val grants = allGrants()
         if (grants.none { it.target.id == target.id }) return false
         save(grants.filterNot { it.target.id == target.id })
+        ToolExecutionLog.recordPermissionChange(
+            category = permissionCategory(target),
+            change = PermissionChangeKind.REVOKE,
+            targetLabel = target.displayLabel(),
+        )
         return true
     }
 
@@ -60,6 +77,13 @@ class ExternalCapabilityPermissionStore(
         val removed = grants.size - remaining.size
         if (removed > 0) save(remaining)
         return removed
+    }
+
+    private fun permissionCategory(target: ExternalCapabilityTarget): PermissionCategory {
+        return when (target.kind) {
+            ExternalCapabilityKind.MCP_SERVER -> PermissionCategory.MCP_SERVER
+            ExternalCapabilityKind.LOCAL_EXTENSION -> PermissionCategory.LOCAL_EXTENSION
+        }
     }
 
     private fun save(grants: List<ExternalCapabilityPermissionGrant>) {

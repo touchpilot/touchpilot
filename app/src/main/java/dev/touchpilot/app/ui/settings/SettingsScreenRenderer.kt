@@ -128,6 +128,13 @@ class SettingsScreenRenderer(
         )
     }
 
+    private fun androidToolPermissionStore(): AndroidToolPermissionStore {
+        return AndroidToolPermissionStore(
+            readJson = { preferences.getString("android_tool_revocations", "").orEmpty() },
+            writeJson = { preferences.edit().putString("android_tool_revocations", it).apply() }
+        )
+    }
+
     private fun externalCapabilityInvoker(): ExternalCapabilityInvoker {
         val store = externalCapabilityPermissionStore()
         return ExternalCapabilityInvoker(ExternalCapabilityPolicy(store))
@@ -145,6 +152,7 @@ class SettingsScreenRenderer(
         contentRoot.addView(settingsGoBackButton())
         when (panel) {
             SettingsPanel.COMPATIBILITY -> renderCompatibilityPanel()
+            SettingsPanel.PERMISSIONS -> renderPermissionsPanel()
             SettingsPanel.SKILLS -> renderSkillsPanel()
             SettingsPanel.TOOLS -> renderToolsPanel()
             SettingsPanel.HELP -> renderHelpPanel()
@@ -153,6 +161,21 @@ class SettingsScreenRenderer(
             SettingsPanel.RUNTIME -> renderRuntimePanel()
             SettingsPanel.RECORDING -> renderRecordingPanel()
         }
+    }
+
+    private fun renderPermissionsPanel() {
+        PermissionsPanelRenderer(
+            activity = activity,
+            contentRoot = contentRoot,
+            skills = skills,
+            isSkillEnabled = isSkillEnabled,
+            setSkillEnabled = setSkillEnabled,
+            selectedSkillId = selectedSkillId,
+            commitSelectedSkill = commitSelectedSkill,
+            androidToolPermissionStore = androidToolPermissionStore(),
+            externalCapabilityPermissionStore = externalCapabilityPermissionStore(),
+            refreshSettingsScreen = refreshSettingsScreen,
+        ).render()
     }
 
     private fun renderSkillsPanel() {
@@ -917,6 +940,7 @@ class SettingsScreenRenderer(
                 }
                 id = when (panel) {
                     SettingsPanel.SKILLS -> R.id.settings_panel_skills_button
+                    SettingsPanel.PERMISSIONS -> R.id.settings_panel_permissions_button
                     SettingsPanel.TOOLS -> R.id.settings_panel_tools_button
                     SettingsPanel.HELP -> R.id.settings_panel_help_button
                     SettingsPanel.MCP -> R.id.settings_panel_mcp_button
