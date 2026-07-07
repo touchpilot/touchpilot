@@ -23,6 +23,7 @@ import dev.touchpilot.app.mcp.LocalExtensionToolStore
 import dev.touchpilot.app.mcp.PluginApiManifest
 import dev.touchpilot.app.security.AesGcmSecretCipher
 import dev.touchpilot.app.security.AndroidKeystoreSecretKeyProvider
+import dev.touchpilot.app.security.AndroidToolPermissionStore
 import dev.touchpilot.app.security.EncryptedSecretStore
 import dev.touchpilot.app.security.ExternalCapabilityAction
 import dev.touchpilot.app.security.ExternalCapabilityInvocation
