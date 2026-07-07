@@ -25,7 +25,7 @@ needed to start a reliable session.
    **Known limitations**.
 2. Compare your device against the published matrix.
 3. Re-run with a narrow prompt and verify accessibility permissions.
-4. Open a bug report only if behavior is not already documented.
+4. Open **Logs → Export Bug Report** and attach the file only if behavior is not already documented.
 
 ## What to expect from this beta
 

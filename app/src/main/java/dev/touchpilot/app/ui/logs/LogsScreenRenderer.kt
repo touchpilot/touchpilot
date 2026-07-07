@@ -51,7 +51,7 @@ class LogsScreenRenderer(
 ) {
     fun render(): LinearLayout {
         contentRoot.addView(
-            activity.primaryButton("Export Debug Trace") {
+            activity.primaryButton("Export Bug Report") {
                 val file = exportDebugTrace()
                 Toast.makeText(
                     activity,

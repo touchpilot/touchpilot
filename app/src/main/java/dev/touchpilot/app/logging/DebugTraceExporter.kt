@@ -1,6 +1,9 @@
 package dev.touchpilot.app.logging
 
 import android.content.Context
+import android.os.Build
+import android.os.PowerManager
+import dev.touchpilot.app.BuildConfig
 import dev.touchpilot.app.agent.AgentRunDetailFormatter
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -31,8 +34,14 @@ class DebugTraceExporter(
         val file = File(traceDirectory(), "touchpilot-trace-$timestamp.txt")
         file.writeText(
             buildString {
-                appendLine("TouchPilot debug trace")
+                appendLine("TouchPilot bug report")
                 appendLine("timestamp=$timestamp")
+                appendLine("app_version=${BuildConfig.VERSION_NAME}")
+                appendLine("app_package=${context.packageName}")
+                appendLine("android_version=${Build.VERSION.RELEASE}")
+                appendLine("sdk=${Build.VERSION.SDK_INT}")
+                appendLine("device=${Build.BRAND}/${Build.MANUFACTURER}/${Build.MODEL}")
+                appendLine("battery_optimization=${batteryOptimizationStatus()}")
                 appendLine()
                 appendLine("Accessibility connected=${accessibilityConnected()}")
                 appendLine()
@@ -41,6 +50,8 @@ class DebugTraceExporter(
                 appendLine()
                 appendLine("Current screen")
                 appendLine(SensitiveTextRedactor.redact(observeScreen()))
+                appendLine()
+                appendLine("Bug report intent: user-initiated local export only")
             }
         )
         return file
@@ -49,6 +60,19 @@ class DebugTraceExporter(
     private fun traceDirectory(): File {
         return File(context.getExternalFilesDir(null), "debug-traces").apply {
             mkdirs()
+        }
+    }
+
+    private fun batteryOptimizationStatus(): String {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            ?: return "unavailable"
+
+        return if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            "not_applicable"
+        } else if (powerManager.isIgnoringBatteryOptimizations(context.packageName)) {
+            "ignored_by_system"
+        } else {
+            "managed_by_system"
         }
     }
 }
