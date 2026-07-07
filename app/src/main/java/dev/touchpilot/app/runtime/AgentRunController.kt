@@ -26,6 +26,7 @@ import dev.touchpilot.app.workflow.WorkflowDefinition
 import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.workflow.WorkflowTraceSummarizer
+import dev.touchpilot.app.agent.StepVerificationCardModel
 import dev.touchpilot.app.ui.chat.ChatEvent
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -290,6 +291,20 @@ class AgentRunController(
                     timeline = timelineBuilder,
                     listener = AgentEventListener { event ->
                         runOnUiThread {
+                            when (event) {
+                                is AgentEvent.WorkflowStepVerificationPassed -> {
+                                    conversation += ChatEvent.StepVerification(
+                                        StepVerificationCardModel.from(event)
+                                    )
+                                    showChat()
+                                }
+                                is AgentEvent.WorkflowStepVerificationFailed -> {
+                                    conversation += ChatEvent.StepVerification(
+                                        StepVerificationCardModel.from(event)
+                                    )
+                                    showChat()
+                                }
+                            }
                             refreshStepTimeline(stepTimeline, timelineBuilder.snapshot, false)
                         }
                     },

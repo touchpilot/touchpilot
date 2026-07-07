@@ -36,6 +36,8 @@ data class WorkflowReplayResult(
     val stopReason: AgentStepStopReason,
     val stopMessage: String,
     val completedStepCount: Int,
+    val totalStepCount: Int = completedStepCount,
+    val durationMs: Long = 0L,
     val verificationCards: List<StepVerificationCardModel> = emptyList(),
 )
 
@@ -57,6 +59,7 @@ class WorkflowReplayEngine(
         listener: AgentEventListener = AgentEventListener {},
         onStepsUpdated: ((List<AgentStep>) -> Unit)? = null,
     ): WorkflowReplayResult {
+        val replayStartedAtMillis = System.currentTimeMillis()
         val resolvedParameters = WorkflowParameterSubstitutor.resolveParameters(workflow, parameters)
         val events = mutableListOf<AgentEvent>()
         val steps = mutableListOf<AgentStep>()
@@ -106,6 +109,7 @@ class WorkflowReplayEngine(
                     steps = steps,
                     verificationCards = verificationCards,
                     emit = ::emit,
+                    replayStartedAtMillis = replayStartedAtMillis,
                     emitStepCompleted = false,
                 )
             }
@@ -139,6 +143,37 @@ class WorkflowReplayEngine(
             AgentEvent.toolRequested(command, source)?.let(::emit)
             publishSteps()
 
+            WorkflowReplayPolicy.skillScopeViolation(workflow, step)?.let { scopeError ->
+                steps.replaceLastAct(
+                    status = AgentStepStatus.BLOCKED,
+                    message = scopeError,
+                    stopReason = AgentStepStopReason.POLICY_BLOCKED,
+                )
+                publishSteps()
+                return terminalFailure(
+                    workflow = workflow,
+                    stepNumber = stepNumber,
+                    totalSteps = totalSteps,
+                    tool = step.tool,
+                    message = scopeError,
+                    stopReason = AgentStepStopReason.POLICY_BLOCKED,
+                    completedStepCount = completedSteps,
+                    events = events,
+                    steps = steps,
+                    verificationCards = verificationCards,
+                    emit = ::emit,
+                    replayStartedAtMillis = replayStartedAtMillis,
+                    publishSteps = ::publishSteps,
+                    extraSteps = listOf(
+                        stopStep(
+                            stepNumber = stepNumber + 1,
+                            reason = AgentStepStopReason.POLICY_BLOCKED,
+                            message = scopeError,
+                        )
+                    ),
+                )
+            }
+
             val validationError = tools.validate(step.tool, resolvedArgs)
             val spec = tools.findTool(step.tool)
             if (validationError != null) {
@@ -160,6 +195,7 @@ class WorkflowReplayEngine(
                     steps = steps,
                     verificationCards = verificationCards,
                     emit = ::emit,
+                    replayStartedAtMillis = replayStartedAtMillis,
                     publishSteps = ::publishSteps,
                     extraSteps = listOf(
                         stopStep(
@@ -172,7 +208,7 @@ class WorkflowReplayEngine(
             }
 
             if (spec != null) {
-                val decision = policy.evaluate(
+                val baseDecision = policy.evaluate(
                     ToolPolicyRequest(
                         tool = spec,
                         args = resolvedArgs,
@@ -181,6 +217,7 @@ class WorkflowReplayEngine(
                         foregroundApp = foregroundApp,
                     )
                 )
+                val decision = WorkflowReplayPolicy.applyStepPolicyFloor(baseDecision, step, spec)
                 when (decision) {
                     is PolicyDecision.Allow -> Unit
                     is PolicyDecision.RequireApproval -> {
@@ -213,6 +250,7 @@ class WorkflowReplayEngine(
                                 steps = steps,
                                 verificationCards = verificationCards,
                                 emit = ::emit,
+                                replayStartedAtMillis = replayStartedAtMillis,
                                 publishSteps = ::publishSteps,
                                 extraSteps = listOf(
                                     stopStep(
@@ -244,6 +282,7 @@ class WorkflowReplayEngine(
                             steps = steps,
                             verificationCards = verificationCards,
                             emit = ::emit,
+                            replayStartedAtMillis = replayStartedAtMillis,
                             publishSteps = ::publishSteps,
                             extraSteps = listOf(
                                 stopStep(
@@ -284,6 +323,7 @@ class WorkflowReplayEngine(
                     steps = steps,
                     verificationCards = verificationCards,
                     emit = ::emit,
+                    replayStartedAtMillis = replayStartedAtMillis,
                     publishSteps = ::publishSteps,
                     alreadyEmittedToolFailure = true,
                     extraSteps = listOf(
@@ -318,6 +358,7 @@ class WorkflowReplayEngine(
                     steps = steps,
                     verificationCards = verificationCards,
                     emit = ::emit,
+                    replayStartedAtMillis = replayStartedAtMillis,
                     publishSteps = ::publishSteps,
                     alreadyEmittedToolFailure = true,
                     extraSteps = listOf(
@@ -425,6 +466,7 @@ class WorkflowReplayEngine(
                         steps = steps,
                         verificationCards = verificationCards,
                         emit = ::emit,
+                        replayStartedAtMillis = replayStartedAtMillis,
                         publishSteps = ::publishSteps,
                         stopMessage = failedEvent.userMessage,
                     )
@@ -444,7 +486,19 @@ class WorkflowReplayEngine(
             }
         }
 
-        val finalMessage = "Workflow \"${workflow.title}\" replayed successfully."
+        val finalMessage = WorkflowReplayDiffSummary.completionMessage(
+            replayResult(
+                workflow = workflow,
+                events = events,
+                steps = steps,
+                stopReason = AgentStepStopReason.COMPLETED,
+                completedStepCount = completedSteps,
+                totalStepCount = totalSteps,
+                durationMs = System.currentTimeMillis() - replayStartedAtMillis,
+                verificationCards = verificationCards,
+                stopMessage = "Workflow \"${workflow.title}\" replayed successfully.",
+            )
+        )
         emit(
             AgentEvent.WorkflowReplayDone(
                 workflowId = workflow.id,
@@ -468,6 +522,8 @@ class WorkflowReplayEngine(
             steps = steps,
             stopReason = AgentStepStopReason.COMPLETED,
             completedStepCount = completedSteps,
+            totalStepCount = totalSteps,
+            durationMs = System.currentTimeMillis() - replayStartedAtMillis,
             verificationCards = verificationCards,
             stopMessage = finalMessage,
         )
@@ -497,6 +553,7 @@ class WorkflowReplayEngine(
         steps: MutableList<AgentStep>,
         verificationCards: List<StepVerificationCardModel>,
         emit: (AgentEvent) -> Unit,
+        replayStartedAtMillis: Long,
         publishSteps: (() -> Unit)? = null,
         alreadyEmittedToolFailure: Boolean = false,
         emitStepCompleted: Boolean = true,
@@ -540,6 +597,8 @@ class WorkflowReplayEngine(
             steps = steps,
             stopReason = stopReason,
             completedStepCount = completedStepCount,
+            totalStepCount = totalSteps,
+            durationMs = System.currentTimeMillis() - replayStartedAtMillis,
             verificationCards = verificationCards,
             stopMessage = stopMessage,
         )
@@ -551,6 +610,8 @@ class WorkflowReplayEngine(
         steps: List<AgentStep>,
         stopReason: AgentStepStopReason,
         completedStepCount: Int,
+        totalStepCount: Int,
+        durationMs: Long,
         verificationCards: List<StepVerificationCardModel>,
         stopMessage: String = stopReason.userMessage,
     ): WorkflowReplayResult {
@@ -562,6 +623,8 @@ class WorkflowReplayEngine(
             stopReason = stopReason,
             stopMessage = stopMessage,
             completedStepCount = completedStepCount,
+            totalStepCount = totalStepCount,
+            durationMs = durationMs,
             verificationCards = verificationCards,
         )
     }

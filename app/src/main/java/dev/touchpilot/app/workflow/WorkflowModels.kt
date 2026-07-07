@@ -322,17 +322,37 @@ sealed class ExpectedState {
     abstract fun describe(): String
     abstract fun toJson(): JSONObject
 
-    data class TextPresent(val text: String) : ExpectedState() {
+    data class TextPresent(val text: String, val exact: Boolean = false) : ExpectedState() {
         init {
             require(text.isNotBlank()) { "text_present requires non-blank text" }
         }
 
-        override fun describe(): String = "Text \"$text\" is present on screen"
+        override fun describe(): String = if (exact) {
+            "Text \"$text\" exactly matches a visible label"
+        } else {
+            "Text \"$text\" is present on screen"
+        }
 
         override fun toJson(): JSONObject {
             return JSONObject().apply {
                 put("type", "text_present")
                 put("text", text)
+                if (exact) put("exact", true)
+            }
+        }
+    }
+
+    data class WindowTitle(val title: String) : ExpectedState() {
+        init {
+            require(title.isNotBlank()) { "window_title requires non-blank title" }
+        }
+
+        override fun describe(): String = "Window title contains \"$title\""
+
+        override fun toJson(): JSONObject {
+            return JSONObject().apply {
+                put("type", "window_title")
+                put("title", title)
             }
         }
     }
@@ -399,7 +419,11 @@ sealed class ExpectedState {
     companion object {
         fun fromJson(json: JSONObject): ExpectedState {
             return when (json.getString("type")) {
-                "text_present" -> TextPresent(json.getString("text"))
+                "text_present" -> TextPresent(
+                    text = json.getString("text"),
+                    exact = json.optBoolean("exact", false),
+                )
+                "window_title" -> WindowTitle(json.getString("title"))
                 "keyboard_visible" -> KeyboardVisible(visible = true)
                 "keyboard_hidden" -> KeyboardVisible(visible = false)
                 "foreground_package" -> ForegroundPackage(json.getString("package"))
@@ -421,11 +445,15 @@ sealed class ExpectedState {
 fun WorkflowExpectedState.toExpectedState(): ExpectedState? {
     val conditions = mutableListOf<ExpectedState>()
     packageName?.takeIf { it.isNotBlank() }?.let { conditions += ExpectedState.ForegroundPackage(it) }
+    windowTitle?.takeIf { it.isNotBlank() }?.let { conditions += ExpectedState.WindowTitle(it) }
     screenTextContains.filter { it.isNotBlank() }.forEach { conditions += ExpectedState.TextPresent(it) }
     elementPresent.forEach { predicate ->
-        predicate.text?.takeIf { it.isNotBlank() }?.let { conditions += ExpectedState.TextPresent(it) }
+        val exact = predicate.match == WorkflowTextMatch.EXACT
+        predicate.text?.takeIf { it.isNotBlank() }?.let {
+            conditions += ExpectedState.TextPresent(it, exact = exact)
+        }
         predicate.contentDescription?.takeIf { it.isNotBlank() }?.let {
-            conditions += ExpectedState.TextPresent(it)
+            conditions += ExpectedState.TextPresent(it, exact = exact)
         }
     }
     return when (conditions.size) {
@@ -438,22 +466,30 @@ fun WorkflowExpectedState.toExpectedState(): ExpectedState? {
 fun ExpectedState.toWorkflowExpectedState(): WorkflowExpectedState {
     return when (this) {
         is ExpectedState.TextPresent -> WorkflowExpectedState(screenTextContains = listOf(text))
+        is ExpectedState.WindowTitle -> WorkflowExpectedState(windowTitle = title)
         is ExpectedState.ForegroundPackage -> WorkflowExpectedState(packageName = packageName)
         is ExpectedState.ForegroundApp -> WorkflowExpectedState(screenTextContains = listOf(appLabel))
         is ExpectedState.KeyboardVisible -> WorkflowExpectedState()
         is ExpectedState.All -> {
             val texts = mutableListOf<String>()
             var pkg: String? = null
+            var window: String? = null
             conditions.forEach { condition ->
                 when (condition) {
                     is ExpectedState.TextPresent -> texts += condition.text
+                    is ExpectedState.WindowTitle -> window = condition.title
                     is ExpectedState.ForegroundPackage -> pkg = condition.packageName
                     is ExpectedState.ForegroundApp -> texts += condition.appLabel
                     is ExpectedState.KeyboardVisible -> Unit
-                    is ExpectedState.All -> texts += condition.toWorkflowExpectedState().screenTextContains
+                    is ExpectedState.All -> {
+                        val nested = condition.toWorkflowExpectedState()
+                        texts += nested.screenTextContains
+                        pkg = pkg ?: nested.packageName
+                        window = window ?: nested.windowTitle
+                    }
                 }
             }
-            WorkflowExpectedState(packageName = pkg, screenTextContains = texts.distinct())
+            WorkflowExpectedState(packageName = pkg, windowTitle = window, screenTextContains = texts.distinct())
         }
     }
 }

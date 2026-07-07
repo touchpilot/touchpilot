@@ -303,6 +303,49 @@ class WorkflowReplayEngineTest {
         assertTrue(warning.detail.contains("com.other"))
     }
 
+    @Test
+    fun blocksReplayWhenToolViolatesSkillScope() {
+        val workflow = WorkflowDefinition(
+            id = "scoped",
+            title = "Scoped",
+            skillScope = WorkflowSkillScope(allowedTools = listOf("observe_screen")),
+            steps = listOf(WorkflowStep(id = "tap", tool = "tap", args = mapOf("text" to "OK"))),
+        )
+
+        val result = lifecycleEngine(results = emptyList()).replay(workflow)
+
+        assertEquals(AgentStepStopReason.POLICY_BLOCKED, result.stopReason)
+        assertTrue(result.stopMessage.contains("skill scope"))
+    }
+
+    @Test
+    fun requiresApprovalWhenWorkflowStepPolicyHintIsSet() {
+        var approvalCalls = 0
+        val workflow = WorkflowDefinition(
+            id = "observe",
+            title = "Observe",
+            steps = listOf(
+                WorkflowStep(
+                    id = "observe",
+                    tool = "observe_screen",
+                    policy = WorkflowStepPolicy(requiresApproval = true),
+                )
+            ),
+        )
+
+        val result = WorkflowReplayEngine(
+            tools = FakeLoopTools(listOf(ToolResult(ok = true, message = "screen"))),
+            approvalProvider = ToolApprovalProvider {
+                approvalCalls += 1
+                true
+            },
+            policy = AllowAllPolicy,
+        ).replay(workflow)
+
+        assertEquals(1, approvalCalls)
+        assertEquals(AgentStepStopReason.COMPLETED, result.stopReason)
+    }
+
     private fun sampleWorkflow(verifyOnlyFirstStep: Boolean = false): WorkflowDefinition {
         val steps = mutableListOf(
             WorkflowStep(

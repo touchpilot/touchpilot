@@ -100,6 +100,35 @@ class WorkflowStateVerifierTest {
         assertTrue(outcome.passed)
     }
 
+    @Test
+    fun passesWhenWindowTitleMatches() {
+        val observation = FakeWorkflowObservation(
+            contexts = listOf(
+                ScreenContext(
+                    windowTitle = "Wi-Fi settings",
+                    nodes = emptyList(),
+                )
+            ),
+        )
+        val verifier = WorkflowStateVerifier(observation = observation, pollIntervalMs = 1L)
+
+        val outcome = verifier.verify(ExpectedState.WindowTitle("Wi-Fi"), timeoutMs = 500L)
+
+        assertTrue(outcome.passed)
+    }
+
+    @Test
+    fun failsWhenExactTextDoesNotMatch() {
+        val observation = FakeWorkflowObservation(
+            contexts = listOf(WorkflowStateVerifier.screenWithText("Network settings")),
+        )
+        val verifier = WorkflowStateVerifier(observation = observation, pollIntervalMs = 1L)
+
+        val outcome = verifier.verify(ExpectedState.TextPresent("Network", exact = true), timeoutMs = 250L)
+
+        assertFalse(outcome.passed)
+    }
+
     private class FakeWorkflowObservation(
         private val contexts: List<ScreenContext>,
         private val waitForTextResults: List<Boolean> = emptyList(),
