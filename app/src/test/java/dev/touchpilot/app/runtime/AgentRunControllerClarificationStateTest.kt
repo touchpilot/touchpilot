@@ -10,8 +10,10 @@ import dev.touchpilot.app.agent.AgentStepTimelineBuilder
 import dev.touchpilot.app.agent.ClarificationReason
 import dev.touchpilot.app.agent.LocalReasoningCore
 import dev.touchpilot.app.agent.NextStepCandidate
-import dev.touchpilot.app.ui.chat.ChatEvent
+import dev.touchpilot.app.workflow.WorkflowDefinition
+import dev.touchpilot.app.workflow.WorkflowStep
 import dev.touchpilot.app.workflow.WorkflowTraceStore
+import dev.touchpilot.app.ui.chat.ChatEvent
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -97,6 +99,41 @@ class AgentRunControllerClarificationStateTest {
         controller.startFromChat("Wi-Fi Settings")
         assertTrue(secondStarted.await(3, TimeUnit.SECONDS))
         waitForRunState(controller, AgentRunState.COMPLETED)
+    }
+
+    @Test
+    fun startWorkflowReplayRejectedWhileWaitingClarification() {
+        val callbackCalled = CountDownLatch(1)
+        val conversation = mutableListOf<ChatEvent>()
+        val controller = controller(
+            conversation = conversation,
+            reasoningCore = ClarificationReasoningCore(),
+        )
+
+        controller.startFromChat("tap Settings")
+        waitForRunState(controller, AgentRunState.WAITING_CLARIFICATION)
+
+        var finishedSuccess = true
+        var finishedMessage = ""
+        controller.startWorkflowReplay(
+            definition = WorkflowDefinition(
+                id = "wf-clarification",
+                title = "Replay me",
+                steps = listOf(
+                    WorkflowStep(id = "step-1", tool = "press_home", args = emptyMap()),
+                ),
+            ),
+            onFinished = { success, message, _ ->
+                finishedSuccess = success
+                finishedMessage = message
+                callbackCalled.countDown()
+            },
+        )
+
+        assertTrue(callbackCalled.await(2, TimeUnit.SECONDS))
+        assertEquals(false, finishedSuccess)
+        assertTrue(finishedMessage.contains("Wait for the current run"))
+        assertEquals(AgentRunState.WAITING_CLARIFICATION, controller.runState)
     }
 
     private fun waitForRunState(controller: AgentRunController, expected: AgentRunState) {

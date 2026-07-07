@@ -26,9 +26,9 @@ class AgentRunLifecycleTest {
     fun isAgentRunInProgressForRunningAndWaitingApprovalOnly() {
         assertTrue(isAgentRunInProgress(AgentRunState.RUNNING))
         assertTrue(isAgentRunInProgress(AgentRunState.WAITING_APPROVAL))
+        assertTrue(isAgentRunInProgress(AgentRunState.WAITING_CLARIFICATION))
         assertFalse(isAgentRunInProgress(AgentRunState.IDLE))
         assertFalse(isAgentRunInProgress(AgentRunState.COMPLETED))
-        assertFalse(isAgentRunInProgress(AgentRunState.WAITING_CLARIFICATION))
     }
 
     @Test

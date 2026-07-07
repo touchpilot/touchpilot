@@ -6,7 +6,9 @@ import dev.touchpilot.app.agent.AgentStepStopReason
 
 /** True while an agent or workflow replay thread is actively executing. */
 internal fun isAgentRunInProgress(state: AgentRunState): Boolean {
-    return state == AgentRunState.RUNNING || state == AgentRunState.WAITING_APPROVAL
+    return state == AgentRunState.RUNNING ||
+        state == AgentRunState.WAITING_APPROVAL ||
+        state == AgentRunState.WAITING_CLARIFICATION
 }
 
 internal fun resolveChatRunTerminalState(
