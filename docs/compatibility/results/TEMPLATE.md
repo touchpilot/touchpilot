@@ -32,6 +32,7 @@ each compatibility run.
 | A11y persistence | | |
 | Foreground notification | | |
 | Battery optimization | | |
+| Foreground-service persistence | | |
 | Debug trace export | | |
 
 ## Core tools

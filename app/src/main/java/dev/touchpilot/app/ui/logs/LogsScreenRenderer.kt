@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -23,6 +24,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import dev.touchpilot.app.R
 import dev.touchpilot.app.logging.DeveloperLogEntry
+import dev.touchpilot.app.logging.DebugTraceExporter
 import dev.touchpilot.app.logging.LogDetailSection
 import dev.touchpilot.app.agent.AgentRunDetailFormatter.formatTimestamp
 import dev.touchpilot.app.security.SensitiveTextRedactor
@@ -37,6 +39,7 @@ import dev.touchpilot.app.ui.secondaryButton
 import dev.touchpilot.app.ui.rounded
 import dev.touchpilot.app.ui.timelineCard
 import dev.touchpilot.app.ui.withMargins
+import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -44,20 +47,15 @@ import java.io.File
 class LogsScreenRenderer(
     private val activity: Activity,
     private val contentRoot: LinearLayout,
-    private val exportDebugTrace: () -> File,
+    private val exportBugReport: (DebugTraceExporter.BugReportRedactionLevel) -> File,
     private val listWorkflowTraces: () -> List<WorkflowTrace>,
     private val deleteWorkflowTrace: (String) -> Boolean,
     private val refreshLogsScreen: () -> Unit,
 ) {
     fun render(): LinearLayout {
         contentRoot.addView(
-            activity.primaryButton("Export Debug Trace") {
-                val file = exportDebugTrace()
-                Toast.makeText(
-                    activity,
-                    "Debug trace exported: ${file.name}",
-                    Toast.LENGTH_SHORT
-                ).show()
+            activity.primaryButton("Export Bug Report") {
+                showBugReportExportDialog()
             }.apply { id = R.id.export_debug_trace_button }
         )
         return LinearLayout(activity).apply {
@@ -65,6 +63,68 @@ class LogsScreenRenderer(
             orientation = LinearLayout.VERTICAL
             contentRoot.addView(this)
             renderLogRows(this)
+        }
+    }
+
+    private fun showBugReportExportDialog() {
+        val levels = DebugTraceExporter.BugReportRedactionLevel.values()
+        var selectedLevelIndex = levels.indexOf(DebugTraceExporter.BugReportRedactionLevel.Safe)
+
+        AlertDialog.Builder(activity)
+            .setTitle("Export bug report")
+            .setSingleChoiceItems(
+                levels.map { it.label }.toTypedArray(),
+                selectedLevelIndex
+            ) { _, which ->
+                selectedLevelIndex = which
+            }
+            .setPositiveButton("Export") { _, _ ->
+                val selectedLevel = levels[selectedLevelIndex]
+                runCatching {
+                    val file = exportBugReport(selectedLevel)
+                    showBugReportExportResult(file)
+                }.onFailure { error ->
+                    Toast.makeText(
+                        activity,
+                        "Failed to export bug report: ${error.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showBugReportExportResult(file: File) {
+        AlertDialog.Builder(activity)
+            .setTitle("Bug report exported")
+            .setMessage("Saved to: ${file.absolutePath}")
+            .setPositiveButton("Share") { _, _ ->
+                shareFile(file)
+            }
+            .setNegativeButton("Done", null)
+            .show()
+    }
+
+    private fun shareFile(file: File) {
+        runCatching {
+            val uri = FileProvider.getUriForFile(
+                activity,
+                "${activity.packageName}.fileprovider",
+                file
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            activity.startActivity(Intent.createChooser(shareIntent, "Share bug report"))
+        }.onFailure {
+            Toast.makeText(
+                activity,
+                "Unable to share bug report.",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
