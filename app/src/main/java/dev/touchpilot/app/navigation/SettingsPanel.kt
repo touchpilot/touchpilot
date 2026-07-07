@@ -1,6 +1,10 @@
 package dev.touchpilot.app.navigation
 
 enum class SettingsPanel(val label: String, val intro: String) {
+    COMPATIBILITY(
+        "Compatibility",
+        "Validate device readiness for real-device onboarding, checklist, and known limitations before first run."
+    ),
     SKILLS(
         "Skills",
         "Skills bundle the tools and prompts TouchPilot uses for a kind of task."

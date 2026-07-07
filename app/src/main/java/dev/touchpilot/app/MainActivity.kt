@@ -7,7 +7,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.provider.Settings
 import android.view.View
 import android.view.ViewTreeObserver
@@ -55,6 +57,8 @@ import dev.touchpilot.app.ui.welcomeDetail
 import dev.touchpilot.app.ui.workingDetail
 import dev.touchpilot.app.ui.chat.ActiveSkillHeader
 import dev.touchpilot.app.ui.chat.ChatEvent
+import dev.touchpilot.app.onboarding.DeviceCompatibilitySummary
+import dev.touchpilot.app.onboarding.CompatibilityOnboarding
 import dev.touchpilot.app.ui.chat.ChatScreenRenderer
 import dev.touchpilot.app.ui.logs.AgentRunDetailRenderer
 import dev.touchpilot.app.ui.logs.LogsScreenRenderer
@@ -95,6 +99,7 @@ class MainActivity : Activity() {
 
     private var lastFocusInputArgs: Map<String, String>? = null
     private var focusSelectorIndex: Int = 0
+    private var isCompatibilityGateDialogShowing: Boolean = false
     private val conversation = mutableListOf<ChatEvent>()
     private lateinit var demonstrationManager: dev.touchpilot.app.demonstration.DemonstrationSessionManager
     private var localSkillIds: Set<String> = emptySet()
@@ -255,6 +260,7 @@ class MainActivity : Activity() {
     private fun submitChatMessage() {
         val task = chatTaskInput.text.toString().trim()
         if (task.isEmpty()) return
+        if (!isDeviceReadyForRun()) return
         hideKeyboard(chatTaskInput)
         chatTaskInput.text.clear()
         agentRunController.startFromChat(task)
@@ -371,6 +377,7 @@ class MainActivity : Activity() {
      */
     private fun openSkillInChat(skillId: String) {
         val skill = skillRegistry.allSkills().firstOrNull { it.id == skillId } ?: return
+        if (!isDeviceReadyForRun()) return
         skillRegistry.setActiveSkill(skill.id)
         val starter = skill.examples.firstOrNull { it.isNotBlank() }.orEmpty()
         showSection(AppSection.CHAT)
@@ -436,6 +443,7 @@ class MainActivity : Activity() {
         definition: WorkflowDefinition,
         captureWorkflowTrace: Boolean = false,
     ) {
+        if (!isDeviceReadyForRun()) return
         agentRunController.startWorkflowReplay(
             definition = definition,
             captureWorkflowTrace = captureWorkflowTrace,
@@ -619,6 +627,9 @@ class MainActivity : Activity() {
             toolExecutionController = toolExecutionController(),
             recordMcpResult = mcpResultStore::recordMcpResult,
             mcpResult = mcpResultStore::forMcp,
+            openAppInfoSettings = ::openAppInfoSettings,
+            openBatteryOptimizationSettings = ::openBatteryOptimizationSettings,
+            compatibilitySummary = ::compatibilitySummary,
             refreshSettingsScreen = { showSection(AppSection.SETTINGS) },
             demonstrationRecordingEnabled = {
                 dev.touchpilot.app.demonstration.DemonstrationPreferences.isRecordingEnabled(preferences)
@@ -732,12 +743,103 @@ class MainActivity : Activity() {
         manager.hideSoftInputFromWindow(anchor.windowToken, 0)
     }
 
+    private fun compatibilitySummary(): DeviceCompatibilitySummary {
+        return CompatibilityOnboarding.buildSummary(this, AccessibilityBridge.isConnected())
+    }
+
+    private fun isDeviceReadyForRun(): Boolean {
+        val summary = compatibilitySummary()
+        if (summary.isReadyForRun) return true
+
+        showCompatibilityGateDialog(summary)
+        return false
+    }
+
+    private fun showCompatibilityGateDialog(summary: DeviceCompatibilitySummary) {
+        if (isCompatibilityGateDialogShowing) return
+        isCompatibilityGateDialogShowing = true
+
+        val requiredBlocks = summary.checks.filter { it.required && !it.passed }
+        val message = buildString {
+            appendLine("TouchPilot is not ready for automated runs yet.")
+            appendLine()
+            appendLine("Blocking checks:")
+            requiredBlocks.forEachIndexed { index, check ->
+                appendLine("${index + 1}. ${check.title}: ${check.details}")
+            }
+            appendLine()
+            append("Open Compatibility to complete onboarding.")
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Compatibility check failed")
+            .setMessage(message)
+            .setPositiveButton("Open compatibility") { _, _ ->
+                navigationController.openSettingsPanel(SettingsPanel.COMPATIBILITY)
+                showSection(AppSection.SETTINGS)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        dialog.setOnDismissListener {
+            isCompatibilityGateDialogShowing = false
+        }
+    }
+
     private fun openAccessibilitySettings() {
         startActivity(
             Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         )
+    }
+
+    private fun openAppInfoSettings() {
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure {
+            Toast.makeText(
+                this,
+                "Unable to open app details settings.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            Toast.makeText(
+                this,
+                "Battery optimization settings are not user-configurable on this Android version.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.fromParts("package", packageName, null)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching {
+            startActivity(intent)
+        }.onFailure {
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }.onFailure {
+                Toast.makeText(
+                    this,
+                    "Unable to open battery optimization settings.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     private fun openRunDetail(runId: String) {

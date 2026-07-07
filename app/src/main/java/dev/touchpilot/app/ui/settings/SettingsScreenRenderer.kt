@@ -41,6 +41,7 @@ import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
 import dev.touchpilot.app.navigation.SettingsPanel
 import dev.touchpilot.app.runtime.ToolExecutionController
 import dev.touchpilot.app.tools.ToolExecutionLog
+import dev.touchpilot.app.onboarding.DeviceCompatibilitySummary
 import dev.touchpilot.app.ui.dp
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
 import dev.touchpilot.app.ui.RuntimeIndicator
@@ -79,12 +80,15 @@ class SettingsScreenRenderer(
     private val openSkillDetail: (String) -> Unit,
     private val currentProviderMode: () -> AgentProviderMode,
     private val openAccessibilitySettings: () -> Unit,
+    private val openAppInfoSettings: () -> Unit,
+    private val openBatteryOptimizationSettings: () -> Unit,
     private val hideKeyboard: (View) -> Unit,
     private val bindKeyboardScrollSpacer: (View) -> Unit,
     private val getFocusSelectorIndex: () -> Int,
     private val setFocusSelectorIndex: (Int) -> Unit,
     private val getLastFocusInputArgs: () -> Map<String, String>?,
     private val setLastFocusInputArgs: (Map<String, String>?) -> Unit,
+    private val compatibilitySummary: () -> DeviceCompatibilitySummary,
     private val recordMcpResult: (String) -> Unit,
     private val mcpResult: () -> String,
     private val refreshSettingsScreen: () -> Unit,
@@ -140,6 +144,7 @@ class SettingsScreenRenderer(
         contentRoot.addView(settingsIntro(panel.intro))
         contentRoot.addView(settingsGoBackButton())
         when (panel) {
+            SettingsPanel.COMPATIBILITY -> renderCompatibilityPanel()
             SettingsPanel.SKILLS -> renderSkillsPanel()
             SettingsPanel.TOOLS -> renderToolsPanel()
             SettingsPanel.HELP -> renderHelpPanel()
@@ -918,6 +923,7 @@ class SettingsScreenRenderer(
                     SettingsPanel.CLOUD -> R.id.settings_panel_cloud_button
                     SettingsPanel.RUNTIME -> R.id.settings_panel_runtime_button
                     SettingsPanel.RECORDING -> R.id.settings_panel_recording_button
+                    SettingsPanel.COMPATIBILITY -> R.id.settings_panel_compatibility_button
                 }
             }
             val content = LinearLayout(activity).apply {
@@ -944,6 +950,71 @@ class SettingsScreenRenderer(
             container.addView(row.withMargins(top = 4, bottom = 6))
         }
         return container.withMargins(bottom = 12)
+    }
+
+    private fun renderCompatibilityPanel() {
+        val summary = compatibilitySummary()
+        val ready = if (summary.isReadyForRun) "ready" else "not ready"
+
+        contentRoot.addView(
+            activity.summaryCard(
+                title = "Real-device onboarding",
+                value = summary.deviceLabel,
+                chipText = ready,
+                chipAccent = summary.isReadyForRun,
+            )
+        )
+
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Required checks",
+                body = summary.checks.joinToString("\n\n") { check ->
+                    "${check.title}: ${check.status}\n${check.details}${if (check.required && !check.passed) "\nAction required." else ""}"
+                }
+            )
+        )
+
+        if (!summary.isReadyForRun) {
+            contentRoot.addView(activity.formLabel("Required setup actions"))
+            val actions = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+
+            actions.addView(activity.primaryButton("Open Accessibility Settings") { openAccessibilitySettings() })
+            actions.addView(activity.secondaryButton("Open app details") { openAppInfoSettings() })
+            actions.addView(
+                activity.secondaryButton("Battery optimization settings") {
+                    openBatteryOptimizationSettings()
+                }
+            )
+
+            contentRoot.addView(actions)
+        }
+
+        contentRoot.addView(activity.formLabel("Real-device beta checklist"))
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Compatibility validation",
+                body = buildString {
+                    appendLine("1) Install app and launch on physical device.")
+                    appendLine("2) Enable TouchPilot accessibility service.")
+                    appendLine("3) Confirm accessibility works in Settings and touch operations.")
+                    appendLine("4) Disable battery optimization if automation drops in background.")
+                    appendLine("5) Export debug trace after failures for local review.")
+                }
+            )
+        )
+
+        contentRoot.addView(activity.formLabel("Known limitations"))
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Known limitations",
+                body = buildString {
+                    appendLine("- OEM-specific Settings screens can differ by skin and may show different options.")
+                    appendLine("- Accessibility trees may be sparse in custom-drawn or WebView-heavy apps.")
+                    appendLine("- Background tasks can be killed aggressively on some vendor ROMs.")
+                    appendLine("- Use local logs and device-specific notes to report compatibility gaps.")
+                }
+            )
+        )
     }
 
     private fun skillSelectRow(
