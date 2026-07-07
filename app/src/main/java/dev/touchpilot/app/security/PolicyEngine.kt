@@ -27,6 +27,24 @@ import dev.touchpilot.app.tools.ToolRisk
  */
 class PolicyEngine {
     fun evaluate(request: ToolPolicyRequest): PolicyEvaluation {
+        if (!AndroidToolPermissionStore.isToolAllowed(request.tool.name)) {
+            val label = AndroidToolPermissionStore.displayLabel(request.tool.name)
+            return PolicyEvaluation(
+                decision = PolicyDecisionKind.DENY,
+                rules = listOf(
+                    PolicyRule(
+                        id = "android-tool-revoked",
+                        subject = PolicySubject.TOOL,
+                        decision = PolicyDecisionKind.DENY,
+                        reason = "Android tool revoked in Settings",
+                        workflowClass = PolicyWorkflowClass.GENERAL,
+                        riskBand = PolicyRiskBand.MEDIUM,
+                    )
+                ),
+                userMessage = "$label was revoked in Settings. Re-enable it under Settings → Permissions.",
+            )
+        }
+
         val rules = rulesFor(request)
         if (request.tool.risk == ToolRisk.LOW) {
             return PolicyEvaluation(

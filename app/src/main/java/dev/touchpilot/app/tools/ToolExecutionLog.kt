@@ -5,6 +5,8 @@ import dev.touchpilot.app.logging.DeveloperLogEntry
 import dev.touchpilot.app.logging.DeveloperLogStore
 import dev.touchpilot.app.security.ExternalCapabilityAuditRecord
 import dev.touchpilot.app.security.ExternalCapabilityKind
+import dev.touchpilot.app.security.PermissionCategory
+import dev.touchpilot.app.security.PermissionChangeKind
 import dev.touchpilot.app.security.SensitiveTextRedactor
 
 data class ToolLogEntry(
@@ -130,6 +132,32 @@ object ToolExecutionLog {
                     }
                     appendLine("message=$redactedMessage")
                 }.trim()
+            )
+        )
+    }
+
+    @Synchronized
+    fun recordPermissionChange(
+        category: PermissionCategory,
+        change: PermissionChangeKind,
+        targetLabel: String,
+        actor: String = "User",
+        details: String = "",
+    ) {
+        val timestampMillis = System.currentTimeMillis()
+        val redactedTarget = SensitiveTextRedactor.redact(targetLabel)
+        val redactedDetails = SensitiveTextRedactor.redact(details)
+        store?.insert(
+            DeveloperLogEntry(
+                timestampMillis = timestampMillis,
+                type = "permission",
+                actor = actor,
+                name = change.auditName,
+                status = "ok",
+                source = category.auditSource,
+                result = "${change.auditName}: $redactedTarget",
+                target = redactedTarget,
+                details = redactedDetails.ifBlank { "category=${category.name}" },
             )
         )
     }

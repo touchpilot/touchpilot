@@ -5,6 +5,10 @@ enum class SettingsPanel(val label: String, val intro: String) {
         "Compatibility",
         "Validate device readiness for real-device onboarding, checklist, and known limitations before first run."
     ),
+    PERMISSIONS(
+        "Permissions",
+        "Review Android tool, skill, and extension permissions separately. Revoke any grant and inspect the audit log."
+    ),
     SKILLS(
         "Skills",
         "Skills bundle the tools and prompts TouchPilot uses for a kind of task."

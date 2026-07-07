@@ -45,6 +45,11 @@ import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.demonstration.export.DemonstrationWorkflowConverter
 import dev.touchpilot.app.runtime.ToolExecutionCallbacks
 import dev.touchpilot.app.runtime.ToolExecutionController
+import dev.touchpilot.app.security.AndroidToolPermissionStore
+import dev.touchpilot.app.security.ExternalCapabilityPermissionStore
+import dev.touchpilot.app.security.PermissionCategory
+import dev.touchpilot.app.security.PermissionChangeKind
+import dev.touchpilot.app.security.PermissionOverview
 import dev.touchpilot.app.security.ToolApprovalProvider
 import dev.touchpilot.app.runtime.AgentRunController
 import dev.touchpilot.app.demonstration.formatting.DemonstrationSummaryFormatter
@@ -82,6 +87,7 @@ class MainActivity : Activity() {
     private lateinit var skillStore: SkillStore
     private lateinit var skillFileStore: SkillFileStore
     private lateinit var skillRegistry: SkillRegistry
+    private lateinit var androidToolPermissionStore: AndroidToolPermissionStore
     private lateinit var toolExecutor: AndroidToolExecutor
     private lateinit var debugTraceExporter: DebugTraceExporter
     private lateinit var localModelRuntime: LiteRtCommandModelRuntime
@@ -110,6 +116,10 @@ class MainActivity : Activity() {
 
         preferences = getSharedPreferences("touchpilot", MODE_PRIVATE)
         ToolExecutionLog.configure(this)
+        androidToolPermissionStore = AndroidToolPermissionStore(
+            readJson = { preferences.getString("android_tool_revocations", "").orEmpty() },
+            writeJson = { preferences.edit().putString("android_tool_revocations", it).apply() },
+        )
         workflowLibrary = WorkflowLibrary(
             rootDir = File(filesDir, "workflows"),
             seedDefinitions = WorkflowSeedLoader.load(this)
@@ -614,7 +624,7 @@ class MainActivity : Activity() {
             openSettingsPanel = navigationController::openSettingsPanel,
             closeSettingsPanel = navigationController::closeSettingsPanel,
             isSkillEnabled = skillRegistry::isEnabled,
-            setSkillEnabled = skillRegistry::setEnabled,
+            setSkillEnabled = ::setSkillEnabledWithAudit,
             selectedSkillId = { skillRegistry.activeSkill()?.id },
             commitSelectedSkill = ::commitSelectedSkill,
             openSkillDetail = ::openSkillDetail,
@@ -632,7 +642,10 @@ class MainActivity : Activity() {
             openAppInfoSettings = ::openAppInfoSettings,
             openBatteryOptimizationSettings = ::openBatteryOptimizationSettings,
             compatibilitySummary = ::compatibilitySummary,
-            refreshSettingsScreen = { showSection(AppSection.SETTINGS) },
+            refreshSettingsScreen = {
+                refreshStatus()
+                showSection(AppSection.SETTINGS)
+            },
             demonstrationRecordingEnabled = {
                 dev.touchpilot.app.demonstration.DemonstrationPreferences.isRecordingEnabled(preferences)
             },
@@ -716,12 +729,37 @@ class MainActivity : Activity() {
 
     private fun refreshStatus() {
         if (::statusView.isInitialized) {
-            statusView.text = if (AccessibilityBridge.isConnected()) {
-                "Accessibility service: connected"
-            } else {
-                "Accessibility service: not connected"
-            }
+            val skillStore = SharedPreferencesSkillStore(preferences)
+            val summary = PermissionOverview.buildSummary(
+                accessibilityConnected = AccessibilityBridge.isConnected(),
+                skills = if (::skillRegistry.isInitialized) skillRegistry.allSkills() else emptyList(),
+                disabledSkillIds = skillStore.disabledSkillIds(),
+                extensionGrants = ExternalCapabilityPermissionStore(
+                    readJson = { preferences.getString("external_capability_permissions", "").orEmpty() },
+                    writeJson = { preferences.edit().putString("external_capability_permissions", it).apply() },
+                ).allGrants(),
+                revokedToolCount = if (::androidToolPermissionStore.isInitialized) {
+                    androidToolPermissionStore.revokedTools().size
+                } else {
+                    0
+                },
+            )
+            statusView.text = PermissionOverview.hostStatusLine(summary)
             statusView.setTextColor(if (AccessibilityBridge.isConnected()) Theme.Accent else Theme.MutedText)
+        }
+    }
+
+    private fun setSkillEnabledWithAudit(skillId: String, enabled: Boolean) {
+        val skill = skillRegistry.allSkills().firstOrNull { it.id == skillId }
+        val wasEnabled = skillRegistry.isEnabled(skillId)
+        skillRegistry.setEnabled(skillId, enabled)
+        if (skill != null && wasEnabled != enabled) {
+            ToolExecutionLog.recordPermissionChange(
+                category = PermissionCategory.SKILL,
+                change = if (enabled) PermissionChangeKind.ENABLE else PermissionChangeKind.DISABLE,
+                targetLabel = skill.title,
+                details = "skill_id=${skill.id}",
+            )
         }
     }
 

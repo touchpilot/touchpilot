@@ -156,6 +156,24 @@ class PolicyEngineTest {
     private fun tool(name: String, risk: ToolRisk = ToolRisk.MEDIUM) =
         ToolSpec(name = name, description = "test", risk = risk, arguments = emptyMap())
 
+    @Test
+    fun revokedAndroidToolIsDeniedImmediately() {
+        val store = AndroidToolPermissionStore(
+            readJson = { "[\"tap\"]" },
+            writeJson = {},
+        )
+        try {
+            val decision = decide("tap", args = mapOf("text" to "Settings"))
+            assertIs<PolicyDecision.Deny>(decision)
+            assertTrue(decision.userMessage.contains("revoked", ignoreCase = true))
+        } finally {
+            AndroidToolPermissionStore(
+                readJson = { "" },
+                writeJson = {},
+            )
+        }
+    }
+
     private fun decide(
         toolName: String,
         risk: ToolRisk = ToolRisk.MEDIUM,
