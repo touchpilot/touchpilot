@@ -236,9 +236,9 @@ class AndroidToolExecutor(
             }
             "wait_for_ui" -> {
                 val text = args["text"].orEmpty()
-                val timeout = args["timeout_ms"]?.toLongOrNull() ?: 5_000L
+                val timeout = args["timeout_ms"]?.toLongOrNull() ?: WaitForUi.DefaultTimeoutMs
                 val ok = AccessibilityBridge.waitForText(text, timeout)
-                record(name, "text=\"$text\", timeout_ms=$timeout", ok, "waitForText")
+                record(name, WaitForUi.logArgs(text, timeout), ok, "waitForText")
                 ToolResult(ok, "waitForText")
             }
             "wait_for_idle" -> {
