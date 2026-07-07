@@ -120,6 +120,7 @@ maintainer or third-party author builds against (issue #389):
 
 - [Contracts](docs/CONTRACTS.md) — audit checklist, version registry, and
   changelog since Milestone 14
+- [Safety Model](docs/SAFETY_MODEL.md) — policy boundary, approval behavior, redaction scope, and verification checks
 - [Tool Spec](docs/TOOL_SPEC.md), [Skills](docs/SKILLS.md),
   [Workflows](docs/WORKFLOWS.md), [Policy](docs/POLICY.md) — per-contract
   schema docs
