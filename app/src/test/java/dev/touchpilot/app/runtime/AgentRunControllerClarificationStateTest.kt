@@ -11,6 +11,8 @@ import dev.touchpilot.app.agent.ClarificationReason
 import dev.touchpilot.app.agent.LocalReasoningCore
 import dev.touchpilot.app.agent.NextStepCandidate
 import dev.touchpilot.app.ui.chat.ChatEvent
+import dev.touchpilot.app.workflow.WorkflowDefinition
+import dev.touchpilot.app.workflow.WorkflowStep
 import dev.touchpilot.app.workflow.WorkflowTraceStore
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -97,6 +99,42 @@ class AgentRunControllerClarificationStateTest {
         controller.startFromChat("Wi-Fi Settings")
         assertTrue(secondStarted.await(3, TimeUnit.SECONDS))
         waitForRunState(controller, AgentRunState.COMPLETED)
+    }
+
+    @Test
+    fun startWorkflowReplayRejectsWhileWaitingClarification() {
+        val conversation = mutableListOf<ChatEvent>()
+        val controller = controller(
+            conversation = conversation,
+            reasoningCore = ClarificationReasoningCore(),
+        )
+
+        controller.startFromChat("tap Settings")
+        waitForRunState(controller, AgentRunState.WAITING_CLARIFICATION)
+
+        var finished = false
+        var finishedMessage = ""
+        controller.startWorkflowReplay(
+            definition = WorkflowDefinition(
+                id = "wf-1",
+                title = "Replay me",
+                steps = listOf(
+                    WorkflowStep(id = "step-1", tool = "press_home", args = emptyMap()),
+                ),
+            ),
+            onFinished = { _, message, _ ->
+                finished = true
+                finishedMessage = message
+            },
+        )
+
+        assertTrue(finished)
+        assertTrue(finishedMessage.contains("Wait for the current run"))
+        assertEquals(AgentRunState.WAITING_CLARIFICATION, controller.runState)
+        assertEquals(
+            "Run already in progress.",
+            conversation.filterIsInstance<ChatEvent.Agent>().last().text
+        )
     }
 
     private fun waitForRunState(controller: AgentRunController, expected: AgentRunState) {
