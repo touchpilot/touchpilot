@@ -425,7 +425,9 @@ class ChatScreenRenderer(
         )
 
         val state = agentRunState()
-        val canCancel = state == AgentRunState.RUNNING || state == AgentRunState.WAITING_APPROVAL
+        val canCancel = state == AgentRunState.RUNNING ||
+            state == AgentRunState.WAITING_APPROVAL ||
+            state == AgentRunState.WAITING_CLARIFICATION
         if (canCancel) {
             content.addView(
                 MaterialButton(activity).apply {

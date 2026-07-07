@@ -201,15 +201,18 @@ class AgentRunController(
                     stopReason = stopReason,
                     errorMessage = record.errorMessage,
                 )
-                if (cancellationSignal.get()) {
-                    setRunState(AgentRunState.CANCELLED)
-                } else if (runOutcome.isFailure ||
-                    (record.result?.events?.any { it is AgentEvent.ToolFailed || it is AgentEvent.PolicyBlocked } == true)
-                ) {
-                    setRunState(AgentRunState.FAILED)
+                val runFailed = chatRunFailed(
+                    runOutcomeFailed = runOutcome.isFailure,
+                    resultEvents = record.result?.events,
+                )
+                val terminalState = resolveChatRunTerminalState(
+                    cancelled = cancellationSignal.get(),
+                    runFailed = runFailed,
+                    stopReason = stopReason,
+                )
+                setRunState(terminalState)
+                if (terminalState == AgentRunState.FAILED) {
                     rejectPendingApprovals()
-                } else {
-                    setRunState(AgentRunState.COMPLETED)
                 }
                 refreshStepTimeline(stepTimeline, steps, true)
                 finishAgentChatRun(
@@ -334,15 +337,13 @@ class AgentRunController(
                 }
                 val result = runOutcome.getOrNull()
                 val completedSuccessfully = result?.stopReason == AgentStepStopReason.COMPLETED
-                if (cancellationSignal.get()) {
-                    setRunState(AgentRunState.CANCELLED)
-                } else if (completedSuccessfully) {
-                    setRunState(AgentRunState.COMPLETED)
-                } else if (runOutcome.isFailure) {
-                    setRunState(AgentRunState.FAILED)
-                } else {
-                    setRunState(AgentRunState.FAILED)
-                }
+                setRunState(
+                    resolveWorkflowReplayTerminalState(
+                        cancelled = cancellationSignal.get(),
+                        runFailed = runOutcome.isFailure,
+                        stopReason = result?.stopReason,
+                    )
+                )
                 refreshStepTimeline(stepTimeline, steps, true)
                 finishAgentChatRun(
                     record = record,
@@ -364,6 +365,7 @@ class AgentRunController(
     fun cancelRun() {
         cancellationSignal.set(true)
         demonstrationManager?.cancelRun()
+        pendingClarification = null
         setRunState(AgentRunState.CANCELLED)
         rejectPendingApprovals()
         conversation += ChatEvent.Agent("Run cancelled.", "Stopped by user request.")

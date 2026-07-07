@@ -2,6 +2,7 @@ package dev.touchpilot.app.runtime
 
 import dev.touchpilot.app.agent.AgentEventListener
 import dev.touchpilot.app.agent.AgentProviderMode
+import dev.touchpilot.app.agent.AgentEvent
 import dev.touchpilot.app.agent.AgentRunResult
 import dev.touchpilot.app.agent.AgentRunState
 import dev.touchpilot.app.agent.AgentStepStopReason
@@ -28,6 +29,69 @@ class AgentRunLifecycleTest {
         assertFalse(isAgentRunInProgress(AgentRunState.IDLE))
         assertFalse(isAgentRunInProgress(AgentRunState.COMPLETED))
         assertFalse(isAgentRunInProgress(AgentRunState.WAITING_CLARIFICATION))
+    }
+
+    @Test
+    fun resolveChatRunTerminalStateUsesWaitingClarification() {
+        assertEquals(
+            AgentRunState.WAITING_CLARIFICATION,
+            resolveChatRunTerminalState(
+                cancelled = false,
+                runFailed = false,
+                stopReason = AgentStepStopReason.CLARIFICATION_NEEDED,
+            )
+        )
+    }
+
+    @Test
+    fun resolveChatRunTerminalStatePrefersCancelledAndFailed() {
+        assertEquals(
+            AgentRunState.CANCELLED,
+            resolveChatRunTerminalState(
+                cancelled = true,
+                runFailed = true,
+                stopReason = AgentStepStopReason.CLARIFICATION_NEEDED,
+            )
+        )
+        assertEquals(
+            AgentRunState.FAILED,
+            resolveChatRunTerminalState(
+                cancelled = false,
+                runFailed = true,
+                stopReason = AgentStepStopReason.CLARIFICATION_NEEDED,
+            )
+        )
+    }
+
+    @Test
+    fun resolveWorkflowReplayTerminalStateUsesWaitingClarification() {
+        assertEquals(
+            AgentRunState.WAITING_CLARIFICATION,
+            resolveWorkflowReplayTerminalState(
+                cancelled = false,
+                runFailed = false,
+                stopReason = AgentStepStopReason.CLARIFICATION_NEEDED,
+            )
+        )
+        assertEquals(
+            AgentRunState.COMPLETED,
+            resolveWorkflowReplayTerminalState(
+                cancelled = false,
+                runFailed = false,
+                stopReason = AgentStepStopReason.COMPLETED,
+            )
+        )
+    }
+
+    @Test
+    fun chatRunFailedDetectsToolAndPolicyFailures() {
+        assertTrue(
+            chatRunFailed(
+                runOutcomeFailed = false,
+                resultEvents = listOf(AgentEvent.ToolFailed(tool = "tap", message = "failed")),
+            )
+        )
+        assertFalse(chatRunFailed(runOutcomeFailed = false, resultEvents = emptyList()))
     }
 }
 
