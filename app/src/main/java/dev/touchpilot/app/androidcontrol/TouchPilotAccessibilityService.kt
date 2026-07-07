@@ -198,6 +198,59 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return doubleTap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
     }
 
+    /**
+     * Dispatch a drag-and-drop: press and hold at (startX, startY) for [holdMs]
+     * so the surface enters drag mode, then travel to (endX, endY) over [moveMs]
+     * and release.
+     *
+     * Implemented as a single *continued* gesture — a dwell stroke with
+     * `willContinue = true` followed by a move stroke created via
+     * [GestureDescription.StrokeDescription.continueStroke] — so the contact
+     * point is never lifted between pickup and travel. A plain [swipe] lifts and
+     * re-plants too quickly to pick up reorderable list rows or draggable
+     * widgets, which is why drag needs its own gesture rather than reusing swipe.
+     */
+    fun drag(startX: Int, startY: Int, endX: Int, endY: Int, holdMs: Long, moveMs: Long): Boolean {
+        val hold = holdMs.coerceIn(MinDragHoldMs, MaxDragHoldMs)
+        val move = moveMs.coerceIn(MinSwipeDurationMs, MaxSwipeDurationMs)
+
+        val dwellPath = Path().apply { moveTo(startX.toFloat(), startY.toFloat()) }
+        val movePath = Path().apply {
+            moveTo(startX.toFloat(), startY.toFloat())
+            lineTo(endX.toFloat(), endY.toFloat())
+        }
+
+        val pickup = GestureDescription.StrokeDescription(dwellPath, 0L, hold, true)
+        val travel = pickup.continueStroke(movePath, hold, move, false)
+        val gesture = GestureDescription.Builder()
+            .addStroke(pickup)
+            .addStroke(travel)
+            .build()
+
+        val completed = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    completed.set(true)
+                    latch.countDown()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    completed.set(false)
+                    latch.countDown()
+                }
+            },
+            null
+        )
+
+        if (!dispatched) return false
+        latch.await(hold + move + GestureCallbackTimeoutMs, TimeUnit.MILLISECONDS)
+        return completed.get()
+    }
+
     fun longPressByNodeId(nodeId: String): Boolean {
         return useActiveRoot { root ->
             root.useNodeById(nodeId) { node ->
@@ -667,6 +720,12 @@ class TouchPilotAccessibilityService : AccessibilityService() {
          * as a double-tap rather than two separate taps.
          */
         const val DoubleTapGapMs = 120L
+
+        /** Lower bound on a drag pickup dwell so the gesture stays a valid stroke. */
+        const val MinDragHoldMs = 50L
+
+        /** Upper bound on a drag pickup dwell so a runaway value cannot stall dispatch. */
+        const val MaxDragHoldMs = 3_000L
 
         /** Extra time beyond the gesture duration to wait for the result callback. */
         const val GestureCallbackTimeoutMs = 1_000L

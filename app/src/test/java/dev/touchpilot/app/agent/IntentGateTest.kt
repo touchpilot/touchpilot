@@ -19,6 +19,27 @@ class IntentGateTest {
     }
 
     @Test
+    fun classifiesPressBackAsExactPressBack() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("press back"))
+        assertEquals("press_back", command.tool)
+        assertEquals(emptyMap(), command.args)
+    }
+
+    @Test
+    fun classifiesPressHomeAsExactPressHome() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("press home"))
+        assertEquals("press_home", command.tool)
+        assertEquals(emptyMap(), command.args)
+    }
+
+    @Test
+    fun pressTargetOtherThanBackOrHomeRemainsTap() {
+        val command = assertIs<IntentDecision.ExactCommand>(gate.classify("press OK"))
+        assertEquals("tap", command.tool)
+        assertEquals("ok", command.args["text"])
+    }
+
+    @Test
     fun classifiesGoHomeAsExactPressHome() {
         val command = assertIs<IntentDecision.ExactCommand>(gate.classify("go home"))
         assertEquals("press_home", command.tool)

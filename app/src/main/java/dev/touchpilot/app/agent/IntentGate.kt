@@ -146,6 +146,22 @@ class IntentGate : IntentClassifier {
                     reason = "long press phrase"
                 )
             }
+        // "press back/home" must route to system navigation before TapPattern,
+        // which also accepts "press <target>" and would misread them as tap(text=…).
+        if (PressBackPattern.containsMatchIn(normalized)) {
+            return IntentDecision.ExactCommand(
+                tool = "press_back",
+                args = emptyMap(),
+                reason = "press back phrase"
+            )
+        }
+        if (PressHomePattern.containsMatchIn(normalized)) {
+            return IntentDecision.ExactCommand(
+                tool = "press_home",
+                args = emptyMap(),
+                reason = "press home phrase"
+            )
+        }
         TapPattern.find(normalized)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
             ?.let { text ->
                 return IntentDecision.ExactCommand(
@@ -436,6 +452,8 @@ class IntentGate : IntentClassifier {
         val OpenAppPattern: Regex = Regex("(?:open|launch)\\s+([\\w .-]+)")
         val LongPressPattern: Regex = Regex("(?:long[- ]press|long tap|press and hold)\\s+([\\w .-]+)")
         val TapPattern: Regex = Regex("(?:tap|press)\\s+([\\w .-]+)")
+        val PressBackPattern: Regex = Regex("\\bpress\\s+back\\b")
+        val PressHomePattern: Regex = Regex("\\bpress\\s+home\\b")
 
         // Word-boundary anchors keep bare navigation routes from triggering on
         // accidental substring hits like "feedback", "homemade", or "scrollbar".

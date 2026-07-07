@@ -19,6 +19,9 @@ import dev.touchpilot.app.security.ToolSource
 import dev.touchpilot.app.screen.NodeBounds
 import dev.touchpilot.app.screen.ScreenContext
 import dev.touchpilot.app.tools.targets.ClearTextTarget
+import dev.touchpilot.app.tools.targets.DragGesture
+import dev.touchpilot.app.tools.targets.DragRequest
+import dev.touchpilot.app.tools.targets.DragTarget
 import dev.touchpilot.app.tools.targets.ScrollResolution
 import dev.touchpilot.app.tools.targets.ScrollResolver
 import dev.touchpilot.app.tools.targets.ScrollTarget
@@ -74,8 +77,12 @@ class AndroidToolExecutor(
                 return ToolResult(false, validationError)
             }
 
+            // Policy and approval run once upstream for agent, workflow, and skill
+            // sources (BoundedLocalAgentLoop, WorkflowReplayEngine). Re-evaluating
+            // here with no approvalProvider would deny tools the user already approved.
+            // DIRECT_DEBUG keeps the embedded gate for debug-panel and harness calls.
             val spec = AndroidToolCatalog.find(name)
-            if (spec != null) {
+            if (spec != null && source == ToolSource.DIRECT_DEBUG) {
                 when (val decision = policy.evaluate(
                     ToolPolicyRequest(
                         tool = spec,
@@ -222,6 +229,9 @@ class AndroidToolExecutor(
             "swipe" -> {
                 executeSwipe(args)
             }
+            "drag_and_drop" -> {
+                executeDragAndDrop(args)
+            }
             "press_back" -> {
                 val ok = AccessibilityBridge.pressBack()
                 record(name, "", ok, "pressBack")
@@ -239,9 +249,9 @@ class AndroidToolExecutor(
             }
             "wait_for_ui" -> {
                 val text = args["text"].orEmpty()
-                val timeout = args["timeout_ms"]?.toLongOrNull() ?: 5_000L
+                val timeout = args["timeout_ms"]?.toLongOrNull() ?: WaitForUi.DefaultTimeoutMs
                 val ok = AccessibilityBridge.waitForText(text, timeout)
-                record(name, "text=\"$text\", timeout_ms=$timeout", ok, "waitForText")
+                record(name, WaitForUi.logArgs(text, timeout), ok, "waitForText")
                 ToolResult(ok, "waitForText")
             }
             "wait_for_idle" -> {
@@ -252,6 +262,9 @@ class AndroidToolExecutor(
             }
             "wait_for_element" -> {
                 executeWaitForElement(args)
+            }
+            "wait_for_element_gone" -> {
+                executeWaitForElementGone(args)
             }
             "focus_input" -> {
                 val text = args["text"].orEmpty()
@@ -407,6 +420,32 @@ class AndroidToolExecutor(
 
         val result = WaitForElement.timeoutResult(args, timeout)
         record("wait_for_element", logArgs, false, result.message)
+        return result
+    }
+
+    private fun executeWaitForElementGone(args: Map<String, String>): ToolResult {
+        val query = WaitForElement.queryFromArgs(args)
+        val timeout = WaitForElement.timeoutMs(args)
+        val logArgs = WaitForElement.logArgs(args, timeout)
+        val deadline = System.currentTimeMillis() + timeout
+        var latest = AccessibilityBridge.observeScreenContext()
+        var lastMatchCount = 0
+
+        while (System.currentTimeMillis() <= deadline) {
+            val matches = findElementMatcher.match(latest, query)
+            lastMatchCount = matches.size
+            if (matches.isEmpty()) {
+                record("wait_for_element_gone", logArgs, true, "waitForElementGone")
+                return WaitForElementGone.goneResult(args)
+            }
+            val remainingMs = deadline - System.currentTimeMillis()
+            if (remainingMs <= 0L) break
+            sleeper(minOf(150L, remainingMs))
+            latest = AccessibilityBridge.observeScreenContext()
+        }
+
+        val result = WaitForElementGone.timeoutResult(args, timeout, lastMatchCount)
+        record("wait_for_element_gone", logArgs, false, result.message)
         return result
     }
 
@@ -875,6 +914,148 @@ class AndroidToolExecutor(
                 "screen_changed" to verification.changed.toString(),
             )
         )
+    }
+
+    private fun executeDragAndDrop(args: Map<String, String>): ToolResult {
+        val before = AccessibilityBridge.observeScreenContext()
+
+        // Coordinate mode: explicit start/end points.
+        val explicit = DragTarget.explicitCoordinates(args)
+        if (explicit != null) {
+            val window = AccessibilityBridge.activeWindowBounds()?.toTargetBounds()
+            if (window != null && !window.isEmpty && !explicit.within(window)) {
+                val message = "Drag coordinates (${explicit.startX},${explicit.startY})->" +
+                    "(${explicit.endX},${explicit.endY}) are outside the screen bounds ${window.toBoundsArg()}"
+                record("drag_and_drop", dragLogArgs("coordinates", explicit), false, message)
+                return ToolResult(false, message, mapOf("screen_bounds" to window.toBoundsArg()))
+            }
+            return dispatchDrag(explicit, before, "coordinates")
+        }
+
+        // Selector mode: resolve the source and destination element centers.
+        val source = when (
+            val resolved = resolveDragEndpoint(before, DragTarget.sourceSelector(args), "source")
+        ) {
+            is DragEndpoint.Resolved -> resolved.bounds
+            is DragEndpoint.Failure -> return resolved.result
+        }
+        val destination = when (
+            val resolved = resolveDragEndpoint(before, DragTarget.destinationSelector(args), "destination")
+        ) {
+            is DragEndpoint.Resolved -> resolved.bounds
+            is DragEndpoint.Failure -> return resolved.result
+        }
+
+        val request = DragGesture.between(
+            source = source,
+            destination = destination,
+            holdMs = DragTarget.holdOrDefault(args),
+            moveMs = DragTarget.durationOrDefault(args),
+        )
+        if (request.isZeroLength) {
+            val message = "Drag source and destination resolve to the same point"
+            record("drag_and_drop", dragLogArgs("selectors", request), false, message)
+            return ToolResult(false, message)
+        }
+        return dispatchDrag(request, before, "selectors")
+    }
+
+    private fun resolveDragEndpoint(
+        context: dev.touchpilot.app.screen.ScreenContext,
+        selector: TargetSelector,
+        role: String,
+    ): DragEndpoint {
+        return when (val resolution = targetResolver.resolve(context, selector)) {
+            is TargetResolutionResult.Resolved -> {
+                val bounds = resolution.candidate.node.bounds.toTargetBounds()
+                if (bounds.isEmpty) {
+                    val message = "Resolved drag $role has no usable bounds"
+                    record("drag_and_drop", "target=${role}_no_bounds", false, message)
+                    DragEndpoint.Failure(
+                        ToolResult(
+                            ok = false,
+                            message = message,
+                            data = mapOf("target" to resolution.candidate.selector.toRedactedJson())
+                        )
+                    )
+                } else {
+                    DragEndpoint.Resolved(bounds)
+                }
+            }
+            is TargetResolutionResult.Ambiguous -> {
+                val message = "Ambiguous drag $role: ${resolution.reason}"
+                record("drag_and_drop", "target=${role}_ambiguous", false, message)
+                DragEndpoint.Failure(
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = ClarificationFromToolResult.dataFromCandidateLabels(
+                            resolution.candidates.displayLabels()
+                        )
+                    )
+                )
+            }
+            is TargetResolutionResult.NotFound -> {
+                val message = "Drag $role not found: ${resolution.reason}"
+                record("drag_and_drop", "target=${role}_not_found", false, message)
+                DragEndpoint.Failure(
+                    ToolResult(
+                        ok = false,
+                        message = message,
+                        data = mapOf("debug_context" to resolution.debugContext)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun dispatchDrag(
+        request: DragRequest,
+        beforeContext: dev.touchpilot.app.screen.ScreenContext,
+        label: String,
+    ): ToolResult {
+        val attempted = AccessibilityBridge.drag(
+            request.startX,
+            request.startY,
+            request.endX,
+            request.endY,
+            request.holdMs,
+            request.moveMs,
+        )
+        val verification = verifyScreenChanged(
+            beforeContext = beforeContext,
+            scrollAttempted = attempted,
+            idleTimeoutMs = retryPolicy.configFor("drag_and_drop").idleTimeoutMs,
+        )
+        val message = when {
+            !attempted -> "Unable to perform drag_and_drop"
+            !verification.changed -> "Drag performed but screen did not change"
+            else -> "drag_and_drop"
+        }
+        val ok = attempted && verification.changed
+        record("drag_and_drop", dragLogArgs(label, request), ok, message)
+        return ToolResult(
+            ok = ok,
+            message = message,
+            data = mapOf(
+                "mode" to label,
+                "start" to "${request.startX},${request.startY}",
+                "end" to "${request.endX},${request.endY}",
+                "hold_ms" to request.holdMs.toString(),
+                "duration_ms" to request.moveMs.toString(),
+                "screen_changed" to verification.changed.toString(),
+            )
+        )
+    }
+
+    private fun dragLogArgs(label: String, request: DragRequest): String {
+        return "mode=\"$label\", start=${request.startX},${request.startY}, " +
+            "end=${request.endX},${request.endY}, hold_ms=${request.holdMs}, duration_ms=${request.moveMs}"
+    }
+
+    private sealed class DragEndpoint {
+        data class Resolved(val bounds: TargetBounds) : DragEndpoint()
+        data class Failure(val result: ToolResult) : DragEndpoint()
     }
 
     private fun swipeLogArgs(label: String, request: SwipeRequest?): String {

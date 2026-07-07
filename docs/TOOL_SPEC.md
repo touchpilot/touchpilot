@@ -39,6 +39,9 @@ Tools are the only way an agent may affect the Android device.
 - `swipe`: swipe a gesture surface (pager, carousel, drawer, map) by direction
   or between explicit coordinates — distinct from `scroll`, which drives a
   scrollable container's accessibility scroll action.
+- `drag_and_drop`: press and hold a source element, then drag it onto a
+  destination and release — for reordering list rows, moving home-screen
+  widgets/icons, and drag-to-target surfaces a tap or swipe cannot pick up.
 - `press_back`: send Android back.
 - `press_home`: return to launcher.
 - `recent_apps`: open the recents/overview screen (app switcher) to switch
@@ -52,11 +55,11 @@ Tools are the only way an agent may affect the Android device.
 - `clear_text`: clear the focused or resolved editable input field.
 - `dismiss_keyboard`: hide the soft keyboard if it is visible.
 
-The app implements `observe_screen`, `observe_screen_context`, `open_app`,
-`open_settings_panel`, `tap`, `long_press`, `double_tap`, `type_text`, `scroll`, `swipe`, `press_back`,
-`press_home`, `recent_apps`, `wait_for_ui`, `wait_for_idle`, `wait_for_app`,
-`wait_for_element`, `focus_input`, `clear_text`, and `dismiss_keyboard` from
-the Android Tools screen and the agent command-provider loop.
+`open_settings_panel`, `tap`, `long_press`, `double_tap`, `type_text`, `scroll`, `swipe`,
+`drag_and_drop`, `press_back`, `press_home`, `recent_apps`, `wait_for_ui`,
+`wait_for_idle`, `wait_for_app`, `wait_for_element`, `focus_input`, `clear_text`,
+and `dismiss_keyboard` from the Android Tools screen and the agent command-provider
+loop.
 
 `recent_apps` takes no arguments. It dispatches the
 `GLOBAL_ACTION_RECENTS` accessibility global action — the same mechanism as
@@ -83,6 +86,24 @@ is given. In **coordinate mode** the caller passes explicit `start_x`,
 drag gesture rather than an accessibility scroll action, and fails explicitly on
 an invalid direction, an incomplete/out-of-range coordinate set, or a missing or
 ambiguous container.
+
+`drag_and_drop` has the same two input modes as `swipe`. In **selector mode**
+(the primary path) the caller passes a source selector (`source_text`,
+`source_node_id`, `source_bounds`, `source_view_id`, or
+`source_content_description`) and a destination selector (the `destination_*`
+equivalents); each side resolves through the shared selector resolver and the
+gesture travels between the two resolved element centers. In **coordinate mode**
+the caller passes explicit `start_x`, `start_y`, `end_x`, `end_y`. Both modes
+accept an optional `hold_ms` (pickup dwell, default 550 ms, clamped 300–3,000 ms)
+and `duration_ms` (travel time). Unlike `swipe`, the gesture is a single
+*continued* stroke — a dwell at the source with `willContinue = true` followed by
+a move stroke — so the contact point is never lifted between pickup and travel;
+that dwell is what makes reorderable rows and draggable widgets register the
+pickup. It is MEDIUM risk, retries like other navigation actions, and its
+verifier passes only when the screen content changed. `drag_and_drop` fails
+safely (never guessing) when either endpoint is ambiguous or not found, when the
+two endpoints resolve to the same point, when coordinates and selectors are
+mixed, or when explicit coordinates fall outside the active window.
 
 `open_settings_panel` accepts `panel` and only supports the explicit allowlist
 `wifi`, `bluetooth`, `accessibility`, `app_info`, `notifications`, and

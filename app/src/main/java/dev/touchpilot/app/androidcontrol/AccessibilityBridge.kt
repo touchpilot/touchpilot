@@ -66,6 +66,10 @@ object AccessibilityBridge {
         return service?.doubleTapByBounds(bounds) ?: false
     }
 
+    fun drag(startX: Int, startY: Int, endX: Int, endY: Int, holdMs: Long, moveMs: Long): Boolean {
+        return service?.drag(startX, startY, endX, endY, holdMs, moveMs) ?: false
+    }
+
     fun longPressByNodeId(nodeId: String): Boolean {
         if (nodeId.isBlank()) return false
         return service?.longPressByNodeId(nodeId) ?: false

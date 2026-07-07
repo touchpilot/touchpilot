@@ -30,6 +30,7 @@ class ToolVerifier(
             "scroll" -> verifyScroll(result, before, after)
             "scroll_to_element" -> verifyScrollToElement(args, after)
             "swipe" -> verifySwipe(result, before, after)
+            "drag_and_drop" -> verifyDragAndDrop(result, before, after)
             "press_back" -> verifyChangedOrFocused(before, after, "press_back")
             "press_home" -> verifyHome(after)
             "recent_apps" -> verifyChangedOrFocused(before, after, "recent_apps")
@@ -42,6 +43,7 @@ class ToolVerifier(
                 )
             )
             "wait_for_element" -> verifyWaitForElement(args, after)
+            "wait_for_element_gone" -> verifyWaitForElementGone(args, after)
             "wait_for_app" -> ToolVerificationResult.Passed(
                 reason = "foreground app matched requested target",
                 data = mapOf(
@@ -239,6 +241,26 @@ class ToolVerifier(
         }
     }
 
+    private fun verifyDragAndDrop(
+        result: ToolResult,
+        before: ScreenContext,
+        after: ScreenContext,
+    ): ToolVerificationResult {
+        val resultChanged = result.data["screen_changed"]?.toBooleanStrictOrNull()
+        val changed = resultChanged ?: !sameSnapshot(before, after)
+        return if (changed) {
+            ToolVerificationResult.Passed(
+                reason = "drag_and_drop changed visible screen content",
+                data = mapOf("screen_changed" to "true")
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "drag_and_drop reported success but screen content did not change",
+                data = mapOf("screen_changed" to "false")
+            )
+        }
+    }
+
     private fun verifyHome(after: ScreenContext): ToolVerificationResult {
         val packageName = after.packageName.orEmpty().lowercase()
         val appLabel = after.appLabel.orEmpty().lowercase()
@@ -293,6 +315,28 @@ class ToolVerifier(
             ToolVerificationResult.Failed(
                 reason = "no element matched the query after the wait",
                 data = mapOf("match_mode" to query.match.wireName)
+            )
+        }
+    }
+
+    private fun verifyWaitForElementGone(
+        args: Map<String, String>,
+        after: ScreenContext,
+    ): ToolVerificationResult {
+        val query = WaitForElement.queryFromArgs(args)
+        val matches = findElementMatcher.match(after, query)
+        return if (matches.isEmpty()) {
+            ToolVerificationResult.Passed(
+                reason = "no matching element is present after the wait",
+                data = mapOf("match_mode" to query.match.wireName)
+            )
+        } else {
+            ToolVerificationResult.Failed(
+                reason = "a matching element is still present after the wait",
+                data = mapOf(
+                    "count" to matches.size.toString(),
+                    "match_mode" to query.match.wireName,
+                )
             )
         }
     }

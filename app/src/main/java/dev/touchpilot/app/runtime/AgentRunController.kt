@@ -26,7 +26,6 @@ import dev.touchpilot.app.workflow.WorkflowDefinition
 import dev.touchpilot.app.workflow.WorkflowTrace
 import dev.touchpilot.app.workflow.WorkflowTraceStore
 import dev.touchpilot.app.workflow.WorkflowTraceSummarizer
-import dev.touchpilot.app.ui.chat.ApprovalState
 import dev.touchpilot.app.ui.chat.ChatEvent
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -364,6 +363,7 @@ class AgentRunController(
         val approved = AtomicBoolean(false)
 
         runOnUiThread {
+            setRunState(AgentRunState.WAITING_APPROVAL)
             val prompt = ChatEvent.ApprovalPrompt(
                 request = request,
                 onDecision = { decision ->
@@ -375,7 +375,13 @@ class AgentRunController(
             showChat()
         }
 
-        return latch.await(APPROVAL_TIMEOUT_MS, TimeUnit.MILLISECONDS) && approved.get()
+        val approvedByUser = latch.await(APPROVAL_TIMEOUT_MS, TimeUnit.MILLISECONDS) && approved.get()
+        runOnUiThread {
+            if (!cancellationSignal.get() && runState == AgentRunState.WAITING_APPROVAL) {
+                setRunState(AgentRunState.RUNNING)
+            }
+        }
+        return approvedByUser
     }
 
     fun findRun(runId: String): AgentRunRecord? {
@@ -404,6 +410,11 @@ class AgentRunController(
         )
         refreshExecutionLog()
         refreshStatus()
+
+        if (result?.stopReason == AgentStepStopReason.USER_CANCELLED && cancellationSignal.get()) {
+            showChat()
+            return
+        }
 
         when {
             result?.stopReason == AgentStepStopReason.CLARIFICATION_NEEDED -> {
@@ -572,11 +583,7 @@ class AgentRunController(
     }
 
     private fun rejectPendingApprovals() {
-        conversation.forEach { event ->
-            if (event is ChatEvent.ApprovalPrompt && event.state == ApprovalState.PENDING) {
-                event.state = ApprovalState.REJECTED
-            }
-        }
+        rejectPendingApprovalPrompts(conversation)
     }
 
     private fun removeWorkingIndicator(workingIndex: Int) {

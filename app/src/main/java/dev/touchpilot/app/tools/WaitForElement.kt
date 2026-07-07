@@ -30,15 +30,22 @@ object WaitForElement {
 
     private val FilterArgs = listOf(TextArg, ContentDescriptionArg, NodeIdArg, ClassNameArg)
 
-    fun validate(args: Map<String, String>): String? {
+    fun validate(args: Map<String, String>): String? = validateQuery(args, "wait_for_element")
+
+    /**
+     * Shared filter + match-mode validation for `wait_for_element` and its
+     * variants (e.g. `wait_for_element_gone`). [toolName] names the tool in the
+     * returned error message so each variant reports against itself.
+     */
+    fun validateQuery(args: Map<String, String>, toolName: String): String? {
         val filters = FilterArgs.filter { args[it].isNullOrBlank().not() }
         if (filters.isEmpty()) {
-            return "wait_for_element requires at least one filter: " +
+            return "$toolName requires at least one filter: " +
                 "text, content_description, node_id, or class_name"
         }
         val match = args[MatchArg]
         if (!match.isNullOrBlank() && MatchMode.fromWire(match) == null) {
-            return "wait_for_element match must be one of: exact, contains, semantic"
+            return "$toolName match must be one of: exact, contains, semantic"
         }
         return null
     }

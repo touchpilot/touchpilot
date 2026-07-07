@@ -142,5 +142,8 @@ Run the instrumentation smoke test on a connected device or emulator:
   --tests 'dev.touchpilot.app.compatibility.DeviceCompatibilitySmokeLiveTest'
 ```
 
-## Community
-https://discord.gg/TvXwsNbx
+## Gittensor & SN74
+TouchPilot is part of the Gittensor and SN74 community. This project has been integrated into the Gittensor (SN74) ecosystem. Community feedback, testing, and contributions are encouraged and appreciated.
+
+Join the community discussion on Discord:
+https://discord.gg/Tvp5NNYTQ

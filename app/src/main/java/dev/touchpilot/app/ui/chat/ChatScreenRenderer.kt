@@ -40,6 +40,8 @@ class ChatScreenRenderer(
     private val agentRunState: () -> AgentRunState,
     private val runtimeIndicator: () -> RuntimeIndicator,
     private val skillTitle: () -> String,
+    private val activeSkill: () -> ActiveSkillHeader?,
+    private val clearActiveSkill: () -> Unit,
     private val cancelAgentRun: () -> Unit,
     private val openRunDetail: (String) -> Unit,
     private val openSkillDetail: (String) -> Unit,
@@ -50,6 +52,7 @@ class ChatScreenRenderer(
 ) {
     fun render() {
         contentRoot.addView(runStatePill())
+        activeSkill()?.let { contentRoot.addView(activeSkillBanner(it)) }
         if (demonstrationRecordingEnabled() && (isDemonstrationRecording() || agentRunState() == AgentRunState.RUNNING)) {
             contentRoot.addView(demonstrationRecordingBanner())
         }
@@ -445,6 +448,76 @@ class ChatScreenRenderer(
             )
         }
 
+        card.addView(content)
+        return card.withMargins(top = 8, bottom = 8)
+    }
+
+    private fun activeSkillBanner(header: ActiveSkillHeader): View {
+        val card = MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = Theme.Accent
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16, 12, 16, 12)
+        }
+        val column = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        column.addView(
+            TextView(activity).apply {
+                text = "Active skill"
+                textSize = 10.5f
+                typeface = Typeface.DEFAULT_BOLD
+                isAllCaps = true
+                letterSpacing = 0.06f
+                setTextColor(Theme.MutedText)
+            }
+        )
+        column.addView(
+            TextView(activity).apply {
+                text = header.title
+                textSize = 13.5f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 2, 0, 0)
+            }
+        )
+        content.addView(column)
+        content.addView(
+            activity.statusChip(header.riskLabel, accent = header.riskAccent),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = 12 }
+        )
+        content.addView(
+            MaterialButton(activity).apply {
+                text = "Clear"
+                textSize = 11f
+                isAllCaps = false
+                minHeight = 32
+                minWidth = 56
+                insetTop = 0
+                insetBottom = 0
+                setTextColor(Theme.MutedText)
+                backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+                strokeColor = ColorStateList.valueOf(Theme.StrokeDark)
+                strokeWidth = 1
+                cornerRadius = 6
+                setPadding(8, 4, 8, 4)
+                setOnClickListener { clearActiveSkill() }
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = 12 }
+        )
         card.addView(content)
         return card.withMargins(top = 8, bottom = 8)
     }
