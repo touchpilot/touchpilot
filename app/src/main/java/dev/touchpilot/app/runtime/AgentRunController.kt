@@ -47,6 +47,7 @@ class AgentRunController(
 ) {
     private var pendingClarification: PendingClarification? = null
     private var cancellationSignal: AtomicBoolean = AtomicBoolean(false)
+    private val agentRunInFlight = AtomicBoolean(false)
     private val mutableRunHistory = mutableListOf<AgentRunRecord>()
     var runState: AgentRunState = AgentRunState.IDLE
         private set
@@ -67,7 +68,7 @@ class AgentRunController(
 
     fun startFromChat(task: String) {
         val pending = pendingClarification
-        if (pending == null && isAgentRunInProgress(runState)) {
+        if (pending == null && isRunStartBlocked(runState, agentRunInFlight.get())) {
             rejectOverlappingRunStart()
             return
         }
@@ -129,7 +130,9 @@ class AgentRunController(
             providerMode = currentProviderMode().name.lowercase(),
         )
 
+        agentRunInFlight.set(true)
         Thread {
+            try {
             val timelineBuilder = AgentStepTimelineBuilder()
             var skillCardAdded = false
             val runOutcome = runCatching {
@@ -221,6 +224,9 @@ class AgentRunController(
                     demoCompletion = demoCompletion,
                 )
             }
+            } finally {
+                agentRunInFlight.set(false)
+            }
         }.start()
 
         if (demoStarted != null) {
@@ -240,7 +246,7 @@ class AgentRunController(
         captureWorkflowTrace: Boolean = false,
         onFinished: ((success: Boolean, message: String, result: AgentRunResult?) -> Unit)? = null,
     ) {
-        if (isAgentRunInProgress(runState)) {
+        if (isRunStartBlocked(runState, agentRunInFlight.get())) {
             val message = overlappingRunStartMessage()
             onFinished?.invoke(false, message, null)
             rejectOverlappingRunStart()
@@ -278,7 +284,9 @@ class AgentRunController(
             context = AccessibilityBridge.observeScreenContext()
         )
 
+        agentRunInFlight.set(true)
         Thread {
+            try {
             val timelineBuilder = AgentStepTimelineBuilder()
             val runOutcome = runCatching {
                 reasoningCore.replayWorkflow(
@@ -357,6 +365,9 @@ class AgentRunController(
                     result?.stopMessage ?: record.errorMessage.orEmpty(),
                     result,
                 )
+            }
+            } finally {
+                agentRunInFlight.set(false)
             }
         }.start()
     }

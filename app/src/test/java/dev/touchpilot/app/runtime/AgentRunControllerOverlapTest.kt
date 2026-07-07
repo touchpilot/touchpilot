@@ -29,6 +29,13 @@ class AgentRunLifecycleTest {
         assertFalse(isAgentRunInProgress(AgentRunState.COMPLETED))
         assertFalse(isAgentRunInProgress(AgentRunState.WAITING_CLARIFICATION))
     }
+
+    @Test
+    fun isRunStartBlockedWhileThreadInFlight() {
+        assertTrue(isRunStartBlocked(AgentRunState.CANCELLED, runInFlight = true))
+        assertTrue(isRunStartBlocked(AgentRunState.COMPLETED, runInFlight = true))
+        assertFalse(isRunStartBlocked(AgentRunState.COMPLETED, runInFlight = false))
+    }
 }
 
 class AgentRunControllerOverlapTest {
@@ -104,6 +111,50 @@ class AgentRunControllerOverlapTest {
 
         releaseRun.countDown()
         waitForRunToFinish(controller)
+    }
+
+    @Test
+    fun startFromChatRejectsRestartWhileCancelledRunStillInFlight() {
+        val runStarted = CountDownLatch(1)
+        val releaseRun = CountDownLatch(1)
+        val conversation = mutableListOf<ChatEvent>()
+        val controller = controller(
+            conversation = conversation,
+            reasoningCore = BlockingReasoningCore(
+                onRunStarted = { runStarted.countDown() },
+                release = releaseRun,
+            ),
+        )
+
+        controller.startFromChat("first task")
+        assertTrue(runStarted.await(2, TimeUnit.SECONDS))
+        controller.cancelRun()
+        assertEquals(AgentRunState.CANCELLED, controller.runState)
+
+        val userEventsBefore = conversation.count { it is ChatEvent.User }
+        controller.startFromChat("second task")
+        assertEquals(userEventsBefore, conversation.count { it is ChatEvent.User })
+
+        releaseRun.countDown()
+        waitForRunDrain(controller)
+
+        controller.startFromChat("third task")
+        assertEquals(userEventsBefore + 1, conversation.count { it is ChatEvent.User })
+        releaseRun.countDown()
+        waitForRunDrain(controller)
+    }
+
+    private fun waitForRunDrain(controller: AgentRunController) {
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(50L)
+            if (controller.runState != AgentRunState.RUNNING &&
+                controller.runState != AgentRunState.WAITING_APPROVAL
+            ) {
+                return
+            }
+        }
+        error("Timed out waiting for run to drain; state=${controller.runState}")
     }
 
     private fun waitForRunToFinish(controller: AgentRunController) {

@@ -6,3 +6,8 @@ import dev.touchpilot.app.agent.AgentRunState
 internal fun isAgentRunInProgress(state: AgentRunState): Boolean {
     return state == AgentRunState.RUNNING || state == AgentRunState.WAITING_APPROVAL
 }
+
+/** True when a new chat or workflow run must not be started yet. */
+internal fun isRunStartBlocked(state: AgentRunState, runInFlight: Boolean): Boolean {
+    return runInFlight || isAgentRunInProgress(state)
+}
