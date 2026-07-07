@@ -74,8 +74,12 @@ class AndroidToolExecutor(
                 return ToolResult(false, validationError)
             }
 
+            // Policy and approval run once upstream for agent, workflow, and skill
+            // sources (BoundedLocalAgentLoop, WorkflowReplayEngine). Re-evaluating
+            // here with no approvalProvider would deny tools the user already approved.
+            // DIRECT_DEBUG keeps the embedded gate for debug-panel and harness calls.
             val spec = AndroidToolCatalog.find(name)
-            if (spec != null) {
+            if (spec != null && source == ToolSource.DIRECT_DEBUG) {
                 when (val decision = policy.evaluate(
                     ToolPolicyRequest(
                         tool = spec,
