@@ -92,6 +92,20 @@ object AndroidToolCatalog {
             requiredArguments = emptySet()
         ),
         ToolSpec(
+            name = "double_tap",
+            description = "Double-tap a visible UI target resolved from text, node_id, bounds, or view_id. " +
+                "Use for double-tap-to-zoom (images, maps, browser), double-tap-to-like, or word " +
+                "selection. Fails safely when the target is ambiguous or cannot be found.",
+            risk = ToolRisk.MEDIUM,
+            arguments = mapOf(
+                "text" to "Visible text or content description to double-tap.",
+                "node_id" to "Stable node_id from observe_screen.",
+                "bounds" to "Bounds from observe_screen as left,top,right,bottom.",
+                "view_id" to "Resource ID of the view (e.g., dev.example.app:id/photo)."
+            ),
+            requiredArguments = emptySet()
+        ),
+        ToolSpec(
             name = "type_text",
             description = "Type text into the focused input field, or into a resolved visible input target.",
             risk = ToolRisk.MEDIUM,
@@ -357,6 +371,21 @@ object AndroidToolCatalog {
                 .filter { args[it].isNullOrBlank().not() }
             if (selectors.size != 1) {
                 return "long_press requires exactly one selector: text, node_id, bounds, or view_id"
+            }
+            val malformedBounds = args["bounds"]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { dev.touchpilot.app.tools.targets.TargetBounds.parse(it) == null }
+                ?: false
+            if (malformedBounds) {
+                return "bounds must be left,top,right,bottom"
+            }
+        }
+
+        if (name == "double_tap") {
+            val selectors = listOf("text", "node_id", "bounds", "view_id")
+                .filter { args[it].isNullOrBlank().not() }
+            if (selectors.size != 1) {
+                return "double_tap requires exactly one selector: text, node_id, bounds, or view_id"
             }
             val malformedBounds = args["bounds"]
                 ?.takeIf { it.isNotBlank() }

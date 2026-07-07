@@ -25,6 +25,7 @@ class ToolVerifier(
             "open_app" -> verifyOpenApp(args, after)
             "tap" -> verifyChangedOrFocused(before, after, "tap")
             "long_press" -> verifyChangedOrFocused(before, after, "long_press")
+            "double_tap" -> verifyChangedOrFocused(before, after, "double_tap")
             "type_text" -> verifyTypeText(args, after)
             "scroll" -> verifyScroll(result, before, after)
             "scroll_to_element" -> verifyScrollToElement(args, after)

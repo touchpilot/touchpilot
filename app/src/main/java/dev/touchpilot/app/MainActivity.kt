@@ -395,7 +395,7 @@ class MainActivity : Activity() {
     }
 
     private fun runSkill(skillId: String) {
-        runSkillFromProduct(skillId)
+        openSkillInChat(skillId)
     }
 
     private fun openWorkflowDetail(workflowId: String) {

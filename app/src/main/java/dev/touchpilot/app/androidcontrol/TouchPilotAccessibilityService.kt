@@ -180,6 +180,25 @@ class TouchPilotAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Double-tap a node's center. Unlike [tapByNodeId] this never uses the
+     * accessibility `ACTION_CLICK` — there is no double-click accessibility
+     * action — so it always dispatches the real two-tap gesture at the node
+     * center, which is what surfaces such as image/map zoom, "double-tap to
+     * like", and word selection listen for.
+     */
+    fun doubleTapByNodeId(nodeId: String): Boolean {
+        return useActiveRoot { root ->
+            root.useNodeById(nodeId) { node -> doubleTapNodeCenter(node) } ?: false
+        } ?: false
+    }
+
+    fun doubleTapByBounds(boundsText: String): Boolean {
+        val bounds = parseBounds(boundsText) ?: return false
+        if (bounds.isEmpty) return false
+        return doubleTap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
+    /**
      * Dispatch a drag-and-drop: press and hold at (startX, startY) for [holdMs]
      * so the surface enters drag mode, then travel to (endX, endY) over [moveMs]
      * and release.
@@ -589,8 +608,54 @@ class TouchPilotAccessibilityService : AccessibilityService() {
         return longPress(bounds.centerX().toFloat(), bounds.centerY().toFloat())
     }
 
+    private fun doubleTapNodeCenter(node: AccessibilityNodeInfo): Boolean {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return false
+        return doubleTap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
     private fun tap(x: Float, y: Float): Boolean {
         return dispatchPressGesture(x = x, y = y, durationMs = 60L, timeoutMs = 1_000L)
+    }
+
+    /**
+     * Dispatch a double-tap at (x, y): two brief taps at the same point,
+     * separated by a gap that keeps the pair inside the platform double-tap
+     * timeout so surfaces recognize it as a double-tap rather than two
+     * independent taps. Both taps are strokes in a single [GestureDescription],
+     * the second offset by its start time.
+     */
+    private fun doubleTap(x: Float, y: Float): Boolean {
+        val firstPath = Path().apply { moveTo(x, y) }
+        val secondPath = Path().apply { moveTo(x, y) }
+        val secondStart = DoubleTapTapMs + DoubleTapGapMs
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(firstPath, 0L, DoubleTapTapMs))
+            .addStroke(GestureDescription.StrokeDescription(secondPath, secondStart, DoubleTapTapMs))
+            .build()
+        val completed = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    completed.set(true)
+                    latch.countDown()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    completed.set(false)
+                    latch.countDown()
+                }
+            },
+            null
+        )
+
+        if (!dispatched) return false
+        latch.await(secondStart + DoubleTapTapMs + GestureCallbackTimeoutMs, TimeUnit.MILLISECONDS)
+        return completed.get()
     }
 
     private fun longPress(x: Float, y: Float): Boolean {
@@ -645,6 +710,16 @@ class TouchPilotAccessibilityService : AccessibilityService() {
 
         /** Upper bound so a runaway duration cannot hold the gesture indefinitely. */
         const val MaxSwipeDurationMs = 5_000L
+
+        /** Duration of each individual tap within a double-tap. */
+        const val DoubleTapTapMs = 50L
+
+        /**
+         * Gap between the two taps of a double-tap. Kept short so the pair
+         * lands inside the platform double-tap timeout (~300 ms) and registers
+         * as a double-tap rather than two separate taps.
+         */
+        const val DoubleTapGapMs = 120L
 
         /** Lower bound on a drag pickup dwell so the gesture stays a valid stroke. */
         const val MinDragHoldMs = 50L

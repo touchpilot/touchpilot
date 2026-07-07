@@ -90,6 +90,7 @@ class AndroidToolRetryPolicy(
                 "open_settings_panel" to action,
                 "tap" to action,
                 "long_press" to action,
+                "double_tap" to action,
                 "type_text" to action,
                 "scroll" to action,
                 // Single attempt: scroll_to_element already runs its own bounded
