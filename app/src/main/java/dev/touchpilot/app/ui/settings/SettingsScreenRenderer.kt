@@ -388,25 +388,17 @@ class SettingsScreenRenderer(
         contentRoot.addView(activity.formLabel("Recording mode"))
         contentRoot.addView(
             skillSelectRow(
-                title = "Record demonstrations",
-                subtitle = "Capture tool calls and screen state for each agent action",
-                badge = if (enabled) "on" else null,
+                title = "Demonstration mode",
+                subtitle = if (enabled) {
+                    "Demonstration capture is live for this run session. You can stop at any time."
+                } else {
+                    "Enable capture before running an agent task."
+                },
+                badge = if (enabled) "recording" else "off",
                 enabled = true,
                 selected = enabled,
-                onSelect = { onDemonstrationRecordingToggled(true) },
-                onToggleEnabled = null,
-                onViewDetails = null,
-            )
-        )
-        contentRoot.addView(
-            skillSelectRow(
-                title = "Do not record",
-                subtitle = "Run agents without capturing demonstration data",
-                badge = if (!enabled) "active" else null,
-                enabled = true,
-                selected = !enabled,
-                onSelect = { onDemonstrationRecordingToggled(false) },
-                onToggleEnabled = null,
+                onSelect = null,
+                onToggleEnabled = { onDemonstrationRecordingToggled(!enabled) },
                 onViewDetails = null,
             )
         )
