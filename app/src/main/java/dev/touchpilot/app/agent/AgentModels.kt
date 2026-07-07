@@ -16,6 +16,32 @@ enum class AgentRunState {
     CANCELLED
 }
 
+enum class HostSessionMode {
+    CHAT_TASK,
+    WORKFLOW_REPLAY,
+}
+
+enum class HostSessionState {
+    ACTIVE,
+    PAUSED,
+    CANCELLED,
+    COMPLETED,
+    FAILED,
+    BLOCKED,
+}
+
+data class HostSessionSummary(
+    val sessionId: String,
+    val mode: HostSessionMode,
+    val scope: String,
+    val state: HostSessionState,
+    val startedAtMillis: Long,
+    val resumableTask: String? = null,
+)
+
+val HostSessionSummary.isResumable: Boolean
+    get() = resumableTask?.isNotBlank() == true && state == HostSessionState.PAUSED
+
 data class AgentCommand(
     val tool: String?,
     val args: Map<String, String>,

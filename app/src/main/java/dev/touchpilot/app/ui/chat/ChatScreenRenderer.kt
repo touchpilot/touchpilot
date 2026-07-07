@@ -14,6 +14,8 @@ import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import dev.touchpilot.app.R
+import dev.touchpilot.app.agent.HostSessionState
+import dev.touchpilot.app.agent.HostSessionSummary
 import dev.touchpilot.app.agent.AgentRunCompletionStatus
 import dev.touchpilot.app.agent.AgentRunCompletionSummary
 import dev.touchpilot.app.agent.AgentRunState
@@ -43,6 +45,9 @@ class ChatScreenRenderer(
     private val activeSkill: () -> ActiveSkillHeader?,
     private val clearActiveSkill: () -> Unit,
     private val cancelAgentRun: () -> Unit,
+    private val pauseHostRun: () -> Unit,
+    private val resumeHostSession: () -> Unit,
+    private val hostSession: () -> HostSessionSummary?,
     private val openRunDetail: (String) -> Unit,
     private val openSkillDetail: (String) -> Unit,
     private val openWorkflowEditor: (String) -> Unit,
@@ -389,15 +394,20 @@ class ChatScreenRenderer(
     }
 
     private fun runStatePill(): View {
-        val (label, color) = when (agentRunState()) {
-            AgentRunState.IDLE -> "Idle" to Theme.MutedText
-            AgentRunState.RUNNING -> "Running" to Theme.Accent
-            AgentRunState.WAITING_APPROVAL -> "Waiting for approval" to Color.rgb(255, 193, 7)
-            AgentRunState.WAITING_CLARIFICATION -> "Waiting for clarification" to Color.rgb(255, 193, 7)
-            AgentRunState.COMPLETED -> "Completed" to Theme.Accent
-            AgentRunState.FAILED -> "Failed" to Color.rgb(239, 68, 68)
-            AgentRunState.BLOCKED -> "Blocked" to Color.rgb(239, 68, 68)
-            AgentRunState.CANCELLED -> "Cancelled" to Theme.MutedText
+        val activeSession = hostSession()
+        val (label, color) = if (activeSession?.state == HostSessionState.PAUSED) {
+            "Session paused" to Color.rgb(255, 193, 7)
+        } else {
+            when (agentRunState()) {
+                AgentRunState.IDLE -> "Idle" to Theme.MutedText
+                AgentRunState.RUNNING -> "Running" to Theme.Accent
+                AgentRunState.WAITING_APPROVAL -> "Waiting for approval" to Color.rgb(255, 193, 7)
+                AgentRunState.WAITING_CLARIFICATION -> "Waiting for clarification" to Color.rgb(255, 193, 7)
+                AgentRunState.COMPLETED -> "Completed" to Theme.Accent
+                AgentRunState.FAILED -> "Failed" to Color.rgb(239, 68, 68)
+                AgentRunState.BLOCKED -> "Blocked" to Color.rgb(239, 68, 68)
+                AgentRunState.CANCELLED -> "Cancelled" to Theme.MutedText
+            }
         }
 
         val card = MaterialCardView(activity).apply {
@@ -425,33 +435,50 @@ class ChatScreenRenderer(
         )
 
         val state = agentRunState()
+        val canPause = activeSession?.state == HostSessionState.ACTIVE &&
+            activeSession.resumableTask?.isNotBlank() == true &&
+            (state == AgentRunState.RUNNING ||
+                state == AgentRunState.WAITING_APPROVAL ||
+                state == AgentRunState.WAITING_CLARIFICATION)
+        val canResume = activeSession?.state == HostSessionState.PAUSED
         val canCancel = state == AgentRunState.RUNNING ||
             state == AgentRunState.WAITING_APPROVAL ||
             state == AgentRunState.WAITING_CLARIFICATION
+
+        if (canPause) {
+            content.addView(actionButton("Pause", Color.rgb(255, 193, 7), pauseHostRun))
+        }
+
+        if (canResume) {
+            content.addView(actionButton("Resume", Theme.Accent, resumeHostSession))
+        }
+
         if (canCancel) {
-            content.addView(
-                MaterialButton(activity).apply {
-                    text = "Stop"
-                    textSize = 11f
-                    typeface = Typeface.DEFAULT_BOLD
-                    isAllCaps = false
-                    minHeight = 32
-                    minWidth = 60
-                    insetTop = 0
-                    insetBottom = 0
-                    setTextColor(Color.rgb(239, 68, 68))
-                    backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-                    strokeColor = ColorStateList.valueOf(Color.rgb(239, 68, 68))
-                    strokeWidth = 1
-                    cornerRadius = 6
-                    setPadding(8, 4, 8, 4)
-                    setOnClickListener { cancelAgentRun() }
-                }
-            )
+            content.addView(actionButton("Stop", Color.rgb(239, 68, 68), cancelAgentRun))
         }
 
         card.addView(content)
         return card.withMargins(top = 8, bottom = 8)
+    }
+
+    private fun actionButton(label: String, color: Int, onClick: () -> Unit): MaterialButton {
+        return MaterialButton(activity).apply {
+            text = label
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            minHeight = 32
+            minWidth = 60
+            insetTop = 0
+            insetBottom = 0
+            setTextColor(color)
+            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            strokeColor = ColorStateList.valueOf(color)
+            strokeWidth = 1
+            cornerRadius = 6
+            setPadding(8, 4, 8, 4)
+            setOnClickListener { onClick() }
+        }
     }
 
     private fun activeSkillBanner(header: ActiveSkillHeader): View {
