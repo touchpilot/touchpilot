@@ -1,0 +1,17 @@
+{
+  "pack_id": "touchpilot-skill-pack",
+  "pack_version": "1.0.0",
+  "schema_version": 1,
+  "skills": [
+    "app-launch",
+    "browser",
+    "clipboard",
+    "device-help",
+    "launcher",
+    "media-volume",
+    "messages",
+    "settings",
+    "share",
+    "wifi"
+  ]
+}

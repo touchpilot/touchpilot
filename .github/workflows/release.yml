@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for changelog title and artifact name)"
+        required: true
+        type: string
+      create_github_release:
+        description: "Create/update a GitHub release after build"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  build-signed-release:
+    name: Build signed release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Prepare release signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.TOUCHPILOT_RELEASE_KEYSTORE_B64 }}
+          KEYSTORE_PATH: ${{ github.workspace }}/release-key.jks
+        run: |
+          if [ -z "${KEYSTORE_B64}" ]; then
+            echo "::error::Missing TOUCHPILOT_RELEASE_KEYSTORE_B64 secret"
+            exit 1
+          fi
+          echo "${KEYSTORE_B64}" | base64 -d > "${KEYSTORE_PATH}"
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Validate release version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION_NAME="$(awk -F'[\" ]' '/versionName =/ {print $3}' app/build.gradle.kts | tr -d '\"')"
+          MODEL_VERSION="$(jq -r '.version' app/src/main/assets/models/command_router/manifest.json)"
+          MODEL_CONTRACT="$(jq -r '.contract_version' app/src/main/assets/models/command_router/manifest.json)"
+          WORKFLOW_SCHEMA="$(jq -r '.schema_version' app/src/main/assets/workflows/manifest.json)"
+          SKILL_PACK="$(jq -r '.pack_version' app/src/main/assets/skills/manifest.json)"
+
+          if [ -z "${APP_VERSION_NAME}" ] || [ -z "${MODEL_VERSION}" ] || [ -z "${MODEL_CONTRACT}" ] || [ -z "${WORKFLOW_SCHEMA}" ] || [ -z "${SKILL_PACK}" ]; then
+            echo "::error::One or more release manifest fields are missing"
+            exit 1
+          fi
+
+          echo "App version name: ${APP_VERSION_NAME}"
+          echo "Model manifest version: ${MODEL_VERSION} (${MODEL_CONTRACT})"
+          echo "Workflow schema version: ${WORKFLOW_SCHEMA}"
+          echo "Skill pack version: ${SKILL_PACK}"
+
+      - name: Build signed release APK
+        env:
+          TOUCHPILOT_KEYSTORE_PATH: ${{ github.workspace }}/release-key.jks
+          TOUCHPILOT_KEYSTORE_PASSWORD: ${{ secrets.TOUCHPILOT_RELEASE_KEYSTORE_PASSWORD }}
+          TOUCHPILOT_KEY_ALIAS: ${{ secrets.TOUCHPILOT_RELEASE_KEY_ALIAS }}
+          TOUCHPILOT_KEY_PASSWORD: ${{ secrets.TOUCHPILOT_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease
+
+      - name: Collect release artifacts
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/release/app-release.apk release-artifacts/
+          sha256sum release-artifacts/app-release.apk | tee release-artifacts/app-release.apk.sha256
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: touchpilot-release-apk
+          path: release-artifacts
