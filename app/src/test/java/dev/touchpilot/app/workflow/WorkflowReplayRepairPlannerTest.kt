@@ -108,6 +108,26 @@ class WorkflowReplayRepairPlannerTest {
     }
 
     @Test
+    fun reObserveBeforeRetryPrependsObserveStep() {
+        val workflow = WorkflowDefinition(
+            id = "open-settings",
+            title = "Open Settings",
+            steps = listOf(
+                WorkflowStep(id = "open-app", tool = "open_app", args = mapOf("target" to "Settings")),
+                WorkflowStep(id = "tap-toggle", tool = "tap", args = mapOf("text" to "Toggle")),
+            ),
+        )
+
+        val repaired = WorkflowReplayRepairPlanner.reObserveBeforeRetry(workflow, failedStepIndex = 2)
+
+        assertNotNull(repaired)
+        assertEquals(2, repaired.steps.size)
+        assertEquals("observe_screen_context", repaired.steps.first().tool)
+        assertEquals("tap-toggle", repaired.steps[1].id)
+        assertTrue(repaired.description.contains("re-observe"))
+    }
+
+    @Test
     fun repairDoesNotMutateOriginalWorkflow() {
         val workflow = WorkflowDefinition(
             id = "open-settings",

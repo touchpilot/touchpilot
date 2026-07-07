@@ -71,6 +71,7 @@ import dev.touchpilot.app.ui.workflows.WorkflowEditorRenderer
 import dev.touchpilot.app.workflow.WorkflowDefinition
 import dev.touchpilot.app.workflow.WorkflowLibraryEntry
 import dev.touchpilot.app.workflow.WorkflowLibrary
+import dev.touchpilot.app.workflow.WorkflowReplayDiffSummary
 import dev.touchpilot.app.workflow.WorkflowReplayRepairPlanner
 import dev.touchpilot.app.workflow.WorkflowSeedLoader
 import dev.touchpilot.app.workflow.WorkflowRunStatus
@@ -479,44 +480,75 @@ class MainActivity : Activity() {
     ) {
         val message = buildString {
             append(result.stopMessage.ifBlank { "Workflow replay stopped before completion." })
+            WorkflowReplayDiffSummary.verificationDiff(result)?.let { diff ->
+                appendLine()
+                appendLine()
+                appendLine(diff.trim())
+            }
             appendLine()
             appendLine()
-            append("You can retry the failed step, skip it, or abort.")
+            append("Choose a repair action: retry the failed step, re-observe and retry, skip it, or abort.")
             appendLine()
             append("Failed step: $failedStepIndex")
         }
         AlertDialog.Builder(this)
             .setTitle("Repair replay")
             .setMessage(message)
-            .setPositiveButton("Retry step") { _, _ ->
-                val retried = WorkflowReplayRepairPlanner.retryFailedStep(
-                    workflow = definition,
-                    failedStepIndex = failedStepIndex,
+            .setItems(
+                arrayOf(
+                    "Retry step",
+                    "Re-observe & retry",
+                    "Skip failed step",
+                    "Abort replay",
                 )
-                if (retried == null) {
-                    android.widget.Toast.makeText(
-                        this,
-                        "Unable to build a workflow for retrying from that step.",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                    return@setPositiveButton
+            ) { _, which ->
+                when (which) {
+                    0 -> {
+                        val retried = WorkflowReplayRepairPlanner.retryFailedStep(
+                            workflow = definition,
+                            failedStepIndex = failedStepIndex,
+                        )
+                        if (retried == null) {
+                            android.widget.Toast.makeText(
+                                this,
+                                "Unable to build a workflow for retrying from that step.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@setItems
+                        }
+                        replayWorkflow(retried, captureWorkflowTrace = true)
+                    }
+                    1 -> {
+                        val retried = WorkflowReplayRepairPlanner.reObserveBeforeRetry(
+                            workflow = definition,
+                            failedStepIndex = failedStepIndex,
+                        )
+                        if (retried == null) {
+                            android.widget.Toast.makeText(
+                                this,
+                                "Unable to build a re-observe retry workflow for that step.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@setItems
+                        }
+                        replayWorkflow(retried, captureWorkflowTrace = true)
+                    }
+                    2 -> {
+                        val repaired = WorkflowReplayRepairPlanner.skipFailedStep(definition, failedStepIndex)
+                        if (repaired == null) {
+                            android.widget.Toast.makeText(
+                                this,
+                                "Skipping that step would leave no replayable workflow.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@setItems
+                        }
+                        workflowLibrary.save(repaired)
+                        replayWorkflow(repaired, captureWorkflowTrace = true)
+                    }
+                    else -> Unit
                 }
-                replayWorkflow(retried, captureWorkflowTrace = true)
             }
-            .setNeutralButton("Skip failed step") { _, _ ->
-                val repaired = WorkflowReplayRepairPlanner.skipFailedStep(definition, failedStepIndex)
-                if (repaired == null) {
-                    android.widget.Toast.makeText(
-                        this,
-                        "Skipping that step would leave no replayable workflow.",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                    return@setNeutralButton
-                }
-                workflowLibrary.save(repaired)
-                replayWorkflow(repaired, captureWorkflowTrace = true)
-            }
-            .setNegativeButton("Abort replay", null)
             .show()
     }
 

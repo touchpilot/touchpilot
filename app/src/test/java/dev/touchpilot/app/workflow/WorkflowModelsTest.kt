@@ -3,6 +3,8 @@ package dev.touchpilot.app.workflow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.json.JSONObject
 
 class WorkflowModelsTest {
@@ -72,6 +74,19 @@ class WorkflowModelsTest {
             ),
             state,
         )
+    }
+
+    @Test
+    fun convertsWindowTitleFromWorkflowExpectedState() {
+        val state = WorkflowExpectedState(
+            packageName = "com.android.settings",
+            windowTitle = "Wi-Fi",
+            screenTextContains = listOf("Network"),
+        )
+
+        val expected = assertNotNull(state.toExpectedState()) as ExpectedState.All
+        assertEquals(3, expected.conditions.size)
+        assertTrue(expected.conditions.any { it is ExpectedState.WindowTitle })
     }
 
     @Test

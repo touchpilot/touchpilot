@@ -23,7 +23,7 @@ class WorkflowStateVerifier(
             WorkflowStep.MIN_TIMEOUT_MS,
             WorkflowStep.MAX_TIMEOUT_MS,
         )
-        if (expected is ExpectedState.TextPresent) {
+        if (expected is ExpectedState.TextPresent && !expected.exact) {
             val found = observation.waitForText(expected.text, clampedTimeout)
             val observed = observation.observeScreenContext()
             return if (found) {
@@ -67,7 +67,9 @@ class WorkflowStateVerifier(
 
     private fun matches(expected: ExpectedState, context: ScreenContext): Boolean {
         return when (expected) {
-            is ExpectedState.TextPresent -> containsText(context, expected.text)
+            is ExpectedState.TextPresent -> containsText(context, expected.text, expected.exact)
+            is ExpectedState.WindowTitle ->
+                context.windowTitle?.contains(expected.title, ignoreCase = true) == true
             is ExpectedState.KeyboardVisible -> observation.isKeyboardVisible() == expected.visible
             is ExpectedState.ForegroundPackage ->
                 context.packageName.equals(expected.packageName, ignoreCase = true)
@@ -77,10 +79,17 @@ class WorkflowStateVerifier(
         }
     }
 
-    private fun containsText(context: ScreenContext, text: String): Boolean {
+    private fun containsText(context: ScreenContext, text: String, exact: Boolean): Boolean {
         return context.nodes.any { node ->
-            node.text.raw.contains(text, ignoreCase = true) ||
-                node.contentDescription?.raw?.contains(text, ignoreCase = true) == true
+            val textValue = node.text.raw
+            val contentValue = node.contentDescription?.raw
+            if (exact) {
+                textValue.equals(text, ignoreCase = true) ||
+                    contentValue?.equals(text, ignoreCase = true) == true
+            } else {
+                textValue.contains(text, ignoreCase = true) ||
+                    contentValue?.contains(text, ignoreCase = true) == true
+            }
         }
     }
 
