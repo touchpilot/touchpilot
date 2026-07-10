@@ -16,6 +16,7 @@ import dev.touchpilot.app.agent.AgentRunDisplayStep
 import dev.touchpilot.app.agent.AgentRunRecord
 import dev.touchpilot.app.agent.AgentRunStepSeverity
 import dev.touchpilot.app.agent.AgentRunStepStatus
+import dev.touchpilot.app.agent.StructuredTraceFormatter
 import dev.touchpilot.app.agent.severity
 import dev.touchpilot.app.security.SensitiveTextRedactor
 import dev.touchpilot.app.ui.TouchPilotTheme as Theme
@@ -111,6 +112,8 @@ class AgentRunDetailRenderer(
             }
         }
 
+        renderStructuredTrace(StructuredTraceFormatter.build(record))
+
         val steps = AgentRunDetailFormatter.formatSteps(record)
         contentRoot.addView(
             TextView(activity).apply {
@@ -144,6 +147,89 @@ class AgentRunDetailRenderer(
             candidate = candidate,
             onSave = saveSkillCandidate,
         ).show()
+    }
+
+    private fun renderStructuredTrace(trace: StructuredTraceFormatter.StructuredTrace) {
+        if (trace.sections.all { it.count == 0 }) return
+        contentRoot.addView(
+            TextView(activity).apply {
+                text = "Structured trace"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 12, 0, 4)
+            }
+        )
+        contentRoot.addView(
+            activity.timelineCard(
+                title = "Overview",
+                body = trace.summary
+            )
+        )
+        trace.sections.filter { it.count > 0 }.forEach { section ->
+            contentRoot.addView(
+                TextView(activity).apply {
+                    text = "${section.group.label} (${section.count})"
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.WHITE)
+                    setPadding(0, 10, 0, 2)
+                }
+            )
+            section.entries.forEach { entry ->
+                contentRoot.addView(structuredTraceEntryCard(entry))
+            }
+        }
+    }
+
+    private fun structuredTraceEntryCard(entry: StructuredTraceFormatter.TraceEntry): View {
+        val card = MaterialCardView(activity).apply {
+            setCardBackgroundColor(Theme.Card)
+            strokeColor = stepStatusColor(entry.status)
+            strokeWidth = 2
+            radius = 8f
+            cardElevation = 0f
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 14, 18, 14)
+        }
+        val header = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(
+            TextView(activity).apply {
+                text = entry.stepLabel
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        header.addView(activity.statusChip(entry.status.label, accent = entry.status != AgentRunStepStatus.INFO))
+        content.addView(header)
+        content.addView(
+            TextView(activity).apply {
+                text = entry.title
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                setPadding(0, 8, 0, 0)
+            }
+        )
+        if (entry.detail.isNotBlank()) {
+            content.addView(
+                TextView(activity).apply {
+                    text = entry.detail
+                    textSize = 12.5f
+                    setTextColor(Theme.BodyText)
+                    setPadding(0, 8, 0, 0)
+                }
+            )
+        }
+        card.addView(content)
+        return card.withMargins(top = 6, bottom = 6)
     }
 
     private fun runDetailStepCard(step: AgentRunDisplayStep): View {
